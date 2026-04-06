@@ -100,7 +100,7 @@ class ActionsCog(commands.Cog):
             embed = disnake.Embed(title="Idle Village", color=disnake.Color.green())
 
             # Player Stats
-            max_weight = max(100, p_str + p_end)
+            max_weight = p_str + p_end
             embed.add_field(name="Player Status", value=f"**Status:** {p_status.title()}\n**Weight:** {p_weight}/{max_weight}\n**Stats:** STR {p_str} | AGI {p_agi} | PER {p_per} | KNO {p_kno} | END {p_end}", inline=False)
 
             # Village Stats
