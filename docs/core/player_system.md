@@ -13,6 +13,7 @@
 | discord_id | TEXT (Unique) | |
 | village_id | INTEGER (FK) | 關聯至 villages.id |
 | satiety_deadline | TIMESTAMP | 飽食度歸零的預計時間點 |
+| last_message_time | TIMESTAMP | 用於追蹤玩家活躍度 (7 天內發言) |
 | current_weight | INTEGER | 當前負重 |
 | status | TEXT | idle, moving, working, exploring |
 | location_status | TEXT | at_village, at_node, en_route |

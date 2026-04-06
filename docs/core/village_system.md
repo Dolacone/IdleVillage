@@ -3,7 +3,7 @@
 定義村莊與 Discord 伺服器的綁定關係.
 
 ### 1. 伺服器初始化 (Guild Initialization)
-- 觸發事件: 當 Bot 加入新伺服器 (on_guild_join).
+- 觸發事件: 透過指令 `/idlevillage-initial` 手動初始化 (僅限特定管理員使用).
 - 初始邏輯:
   - 建立對應的 villages 紀錄.
   - 初始糧食: 100.
