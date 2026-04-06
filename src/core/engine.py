@@ -1,4 +1,5 @@
 import asyncio
+import math
 from datetime import datetime, timedelta
 import disnake
 from disnake.ext import tasks
@@ -6,6 +7,76 @@ from src.database.schema import get_connection
 
 class Engine:
     """Core game engine handling settlements and triggers."""
+
+    @staticmethod
+    def _parse_timestamp(value: str):
+        if not value:
+            return None
+        normalized = value.replace("Z", "")
+        if normalized.endswith("+00:00"):
+            normalized = normalized[:-6]
+        return datetime.fromisoformat(normalized).replace(tzinfo=None)
+
+    @staticmethod
+    def _resolve_action_type(status: str, current_action_type: str, location_status: str):
+        if status == "idle":
+            return "idle"
+        if status == "moving" and location_status == "at_village":
+            return "returning"
+        if current_action_type == "build":
+            return "build"
+        if current_action_type == "explore" or status == "exploring":
+            return "explore"
+        if current_action_type == "gather":
+            return "gather_material"
+        if status == "moving":
+            return "moving"
+        return status or "idle"
+
+    @staticmethod
+    def _building_level_from_xp(xp: int):
+        level = 0
+        total_required = 0
+        next_required = 1000
+        current_xp = xp or 0
+
+        while current_xp >= total_required + next_required:
+            total_required += next_required
+            level += 1
+            next_required *= 2
+
+        return level
+
+    @staticmethod
+    async def _try_refill_satiety(db, village_id: int, satiety_deadline: datetime, now: datetime):
+        if satiety_deadline is None or village_id is None:
+            return satiety_deadline
+
+        remaining_hours = (satiety_deadline - now).total_seconds() / 3600.0
+
+        async with db.execute(
+            "SELECT food, food_efficiency_xp FROM villages WHERE id = ?",
+            (village_id,),
+        ) as cursor:
+            village = await cursor.fetchone()
+
+        if not village:
+            return satiety_deadline
+
+        village_food, food_efficiency_xp = village
+        food_efficiency_level = Engine._building_level_from_xp(food_efficiency_xp)
+        food_efficiency = 1.0 + (food_efficiency_level * 0.2)
+
+        missing_hours = max(0.0, 100.0 - remaining_hours)
+        food_cost = math.ceil(missing_hours / food_efficiency)
+        if food_cost <= 0 or village_food < food_cost:
+            return satiety_deadline
+
+        await db.execute(
+            "UPDATE villages SET food = food - ? WHERE id = ?",
+            (food_cost, village_id),
+        )
+        return now + timedelta(hours=100)
 
     @staticmethod
     async def settle_village(village_id: int, db=None):
@@ -28,9 +99,7 @@ class Engine:
 
             now = datetime.utcnow()
             try:
-                if last_tick_time_str.endswith('Z'):
-                    last_tick_time_str = last_tick_time_str[:-1]
-                last_tick = datetime.fromisoformat(last_tick_time_str).replace(tzinfo=None)
+                last_tick = Engine._parse_timestamp(last_tick_time_str)
             except (ValueError, TypeError):
                 last_tick = now
 
@@ -93,22 +162,18 @@ class Engine:
 
             # Parse last_update_time
             try:
-                # Replace 'Z' or +00:00 to keep it naive if it was stored with timezone,
-                # but SQLite defaults to naive YYYY-MM-DD HH:MM:SS
-                if last_update_time_str.endswith('Z'):
-                    last_update_time_str = last_update_time_str[:-1]
-                last_update = datetime.fromisoformat(last_update_time_str).replace(tzinfo=None)
+                last_update = Engine._parse_timestamp(last_update_time_str) or now
             except (ValueError, TypeError):
                 last_update = now
 
             # Determine target time
             target_time = now
+            completion_time = None
             if completion_time_str:
                 try:
-                    if completion_time_str.endswith('Z'):
-                        completion_time_str = completion_time_str[:-1]
-                    comp_time = datetime.fromisoformat(completion_time_str).replace(tzinfo=None)
-                    target_time = min(now, comp_time)
+                    completion_time = Engine._parse_timestamp(completion_time_str)
+                    if completion_time is not None:
+                        target_time = min(now, completion_time)
                 except (ValueError, TypeError):
                     pass
 
@@ -124,21 +189,25 @@ class Engine:
             p_str, p_agi, p_per, p_kno, p_end = stats if stats else (50, 50, 50, 50, 50)
 
             # Handle satiety updates based on status
-            new_satiety_deadline = satiety_deadline_str
-            if status == 'idle' and satiety_deadline_str:
+            satiety_deadline = None
+            new_satiety_deadline = None
+            if satiety_deadline_str:
                 try:
-                    if satiety_deadline_str.endswith('Z'):
-                        satiety_deadline_str = satiety_deadline_str[:-1]
-                    curr_deadline = datetime.fromisoformat(satiety_deadline_str).replace(tzinfo=None)
-                    new_deadline = curr_deadline + timedelta(seconds=delta)
-                    new_satiety_deadline = new_deadline.isoformat()
+                    satiety_deadline = Engine._parse_timestamp(satiety_deadline_str)
+                    new_satiety_deadline = satiety_deadline
                 except (ValueError, TypeError):
                     pass
+
+            if status == 'idle' and new_satiety_deadline is not None:
+                new_satiety_deadline = new_satiety_deadline + timedelta(seconds=delta)
 
             # Settlement Effects
             new_status = status
             new_location = location_status
-            log_category = "knowledge" # default fallback
+            new_action_type = current_action_type
+            new_completion_time = completion_time_str
+            new_weight = current_weight
+            state_changed = False
 
             hours = delta / 3600.0
 
@@ -149,26 +218,61 @@ class Engine:
 
                 if food_yield > 0:
                     await db.execute('UPDATE villages SET food = food + ? WHERE id = ?', (food_yield, village_id))
-                log_category = "knowledge" # "觀察 + 知識" via docs (mapped simply to knowledge for foundational)
+
+                if new_satiety_deadline is not None:
+                    new_satiety_deadline = await Engine._try_refill_satiety(
+                        db,
+                        village_id,
+                        new_satiety_deadline,
+                        target_time,
+                    )
 
             # Check if action completed
-            if completion_time_str and target_time >= datetime.fromisoformat(completion_time_str.replace('Z', '')).replace(tzinfo=None):
+            if completion_time is not None and target_time >= completion_time:
                 new_status = 'idle'
-                new_location = 'at_village' # Simplified auto-return for foundational
+                new_location = 'at_village'
+                new_action_type = None
+                new_completion_time = None
+                new_weight = 0
+                state_changed = True
 
-            # Log action
-            if delta > 0:
+                if new_satiety_deadline is not None:
+                    new_satiety_deadline = await Engine._try_refill_satiety(
+                        db,
+                        village_id,
+                        new_satiety_deadline,
+                        target_time,
+                    )
+
+            # Log the finished action segment only when state changes.
+            if delta > 0 and state_changed:
                 await db.execute('''
-                    INSERT INTO player_actions_log (player_id, stat_category, start_time, end_time)
+                    INSERT INTO player_actions_log (player_id, action_type, start_time, end_time)
                     VALUES (?, ?, ?, ?)
-                ''', (player_id, log_category, last_update.isoformat(), target_time.isoformat()))
+                ''', (
+                    player_id,
+                    Engine._resolve_action_type(status, current_action_type, location_status),
+                    last_update.isoformat(),
+                    target_time.isoformat(),
+                ))
+
+            deadline_value = new_satiety_deadline.isoformat() if new_satiety_deadline is not None else None
 
             # Update last_update_time, deadline, and status
             await db.execute('''
                 UPDATE players
-                SET last_update_time = ?, satiety_deadline = ?, status = ?, location_status = ?
+                SET last_update_time = ?, satiety_deadline = ?, status = ?, location_status = ?, current_action_type = ?, completion_time = ?, current_weight = ?
                 WHERE id = ?
-            ''', (target_time.isoformat(), new_satiety_deadline, new_status, new_location, player_id))
+            ''', (
+                target_time.isoformat(),
+                deadline_value,
+                new_status,
+                new_location,
+                new_action_type,
+                new_completion_time,
+                new_weight,
+                player_id,
+            ))
             await db.commit()
         finally:
             if close_db:

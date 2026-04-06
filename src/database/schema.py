@@ -76,16 +76,31 @@ async def init_db():
             )
         ''')
 
+        async with db.execute("PRAGMA table_info(player_actions_log)") as cursor:
+            action_log_columns = await cursor.fetchall()
+            needs_action_log_migration = bool(action_log_columns) and not any(column[1] == "action_type" for column in action_log_columns)
+
+        if needs_action_log_migration:
+            await db.execute("ALTER TABLE player_actions_log RENAME TO player_actions_log_old")
+
         await db.execute('''
             CREATE TABLE IF NOT EXISTS player_actions_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 player_id INTEGER,
-                stat_category TEXT,
+                action_type TEXT,
                 start_time TIMESTAMP,
                 end_time TIMESTAMP,
                 FOREIGN KEY (player_id) REFERENCES players(id)
             )
         ''')
+
+        if needs_action_log_migration:
+            await db.execute('''
+                INSERT INTO player_actions_log (id, player_id, action_type, start_time, end_time)
+                SELECT id, player_id, stat_category, start_time, end_time
+                FROM player_actions_log_old
+            ''')
+            await db.execute("DROP TABLE player_actions_log_old")
 
         await db.execute('''
             CREATE TABLE IF NOT EXISTS resource_nodes (

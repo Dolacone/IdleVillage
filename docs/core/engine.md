@@ -30,11 +30,12 @@
    - 飽食度處理: 
      - 若為 Active 狀態: satiety_deadline 保持不變 (剩餘時間減少).
      - 若為 Idle 狀態: 將 satiety_deadline 加上 Delta (剩餘時間不變).
+     - 若玩家在村莊中進入 Idle 狀態, 或由 Idle 狀態準備離開開始新行動, 需檢查是否觸發村莊自動補給.
 4. 資料更新:
    - 更新村莊資源庫存與建築 XP.
    - 更新玩家 satiety_deadline 與 weight.
    - 將 last_update_time 設為 TargetTime.
-   - 寫入一筆 player_actions_log (start=前次更新, end=TargetTime).
+   - 若本次結算造成玩家狀態切換, 寫入一筆 player_actions_log (action_type=剛結束的狀態, start=前次更新, end=TargetTime).
 5. 狀態轉移: 
    - 若 Now >= completion_time, 根據完成原因 (完成工作, 負重已滿, 或 Now >= satiety_deadline) 啟動回程或重啟邏輯.
    - 若是因為 Now >= satiety_deadline 觸發, 玩家強制轉為移動回村狀態.

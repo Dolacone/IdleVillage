@@ -23,7 +23,7 @@
 - Completion Timestamp (完成時間點):
   - 定義: 根據飽食度, 負重或節點儲量計算出的當前行動極限時間.
 - 150h Sliding Window (150 小時滑動窗口):
-  - 定義: 素質計算邏輯. 僅抓取 player_actions_log 中最近累計滿 150 小時的紀錄來動態決定素質.
+  - 定義: 素質計算邏輯. 僅抓取 player_actions_log 中最近累計滿 150 小時的區段紀錄來動態決定素質.
 
 ### 3. 資源與建築 (Resources and Buildings)
 
