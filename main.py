@@ -15,6 +15,12 @@ class IdleVillageBot(commands.InteractionBot):
     async def on_ready(self):
         print("Initializing database schemas...")
         await init_db()
+
+        from src.core.engine import Engine
+        if not Engine.start_watcher_loop.is_running():
+            Engine.start_watcher_loop.start()
+            print("Watcher loop started.")
+
         print(f"Logged in as {self.user} (ID: {self.user.id})")
         print("------")
 

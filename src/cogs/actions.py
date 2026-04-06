@@ -2,6 +2,7 @@ import disnake
 from disnake.ext import commands
 import datetime
 from src.database.schema import get_connection
+from src.core.engine import Engine
 
 class ActionDropdown(disnake.ui.Select):
     def __init__(self):
@@ -39,33 +40,50 @@ class ActionsCog(commands.Cog):
         discord_id_str = str(inter.author.id)
 
         async with await get_connection() as db:
-            # 1. Fetch Village
-            async with db.execute('SELECT id, food, wood, stone, food_efficiency_xp, storage_capacity_xp, resource_yield_xp FROM villages WHERE guild_id = ?', (guild_id_str,)) as cursor:
-                village = await cursor.fetchone()
+            # Fetch minimal village id first to run settlements
+            async with db.execute('SELECT id FROM villages WHERE guild_id = ?', (guild_id_str,)) as cursor:
+                village_min = await cursor.fetchone()
 
-            if not village:
+            if not village_min:
                 await inter.response.send_message("Village not initialized for this server. Ask an admin to run `/idlevillage-initial`.", ephemeral=True)
                 return
 
-            village_id, v_food, v_wood, v_stone, v_food_xp, v_storage_xp, v_yield_xp = village
+            village_id = village_min[0]
+
+            # Run village hybrid decay
+            await Engine.settle_village(village_id, db)
 
             # 2. Fetch Player (create if not exists)
-            async with db.execute('SELECT id, current_weight, status FROM players WHERE discord_id = ?', (discord_id_str,)) as cursor:
+            async with db.execute('SELECT id, current_weight, status FROM players WHERE discord_id = ? AND village_id = ?', (discord_id_str, village_id)) as cursor:
                 player = await cursor.fetchone()
 
             if not player:
                 # Initialize new player
-                deadline = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=100)
+                deadline = datetime.datetime.utcnow() + datetime.timedelta(hours=100)
                 await db.execute('''
                     INSERT INTO players (discord_id, village_id, satiety_deadline)
                     VALUES (?, ?, ?)
                 ''', (discord_id_str, village_id, deadline.isoformat()))
                 await db.commit()
                 # Fetch again
-                async with db.execute('SELECT id, current_weight, status FROM players WHERE discord_id = ?', (discord_id_str,)) as cursor:
+                async with db.execute('SELECT id, current_weight, status FROM players WHERE discord_id = ? AND village_id = ?', (discord_id_str, village_id)) as cursor:
                     player = await cursor.fetchone()
 
+            p_id = player[0]
+
+            # Run settlement logic to make sure states are up-to-date
+            await Engine.settle_player(p_id, db)
+
+            # Re-fetch states after settlement to prevent stale data
+            async with db.execute('SELECT id, current_weight, status FROM players WHERE id = ?', (p_id,)) as cursor:
+                player = await cursor.fetchone()
+
             p_id, p_weight, p_status = player
+
+            async with db.execute('SELECT food, wood, stone, food_efficiency_xp, storage_capacity_xp, resource_yield_xp FROM villages WHERE id = ?', (village_id,)) as cursor:
+                village_full = await cursor.fetchone()
+
+            v_food, v_wood, v_stone, v_food_xp, v_storage_xp, v_yield_xp = village_full
 
             # 3. Fetch Player Stats (create if not exists)
             async with db.execute('SELECT strength, agility, perception, knowledge, endurance FROM player_stats WHERE player_id = ?', (p_id,)) as cursor:
@@ -82,7 +100,7 @@ class ActionsCog(commands.Cog):
             embed = disnake.Embed(title="Idle Village", color=disnake.Color.green())
 
             # Player Stats
-            max_weight = p_str + p_end + 100 # simplified calculation based on docs
+            max_weight = max(100, p_str + p_end)
             embed.add_field(name="Player Status", value=f"**Status:** {p_status.title()}\n**Weight:** {p_weight}/{max_weight}\n**Stats:** STR {p_str} | AGI {p_agi} | PER {p_per} | KNO {p_kno} | END {p_end}", inline=False)
 
             # Village Stats

@@ -4,7 +4,7 @@
 
 ### 1. 伺服器綁定 (Guild Binding)
 - 一個 Discord 伺服器 (Guild ID) 對應一個唯一的村莊資料實例.
-- 當 Bot 偵測到新伺服器時, 自動執行初始化.
+- 需透過指令 `/idlevillage-initial` 進行初始化綁定.
 
 ### 2. 共用倉庫基礎邏輯 (Repository Logic)
 - 資源入庫: 玩家抵達村莊時, 將身上的資源 (Wood, Stone, Food) 累加至村莊表, 並歸零個人負重.

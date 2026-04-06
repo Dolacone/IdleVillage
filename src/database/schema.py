@@ -26,7 +26,7 @@ async def init_db():
         await db.execute('''
             CREATE TABLE IF NOT EXISTS players (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                discord_id TEXT UNIQUE NOT NULL,
+                discord_id TEXT NOT NULL,
                 village_id INTEGER,
                 satiety_deadline TIMESTAMP,
                 last_message_time TIMESTAMP,
@@ -38,7 +38,8 @@ async def init_db():
                 auto_restart INTEGER DEFAULT 0,
                 last_update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 completion_time TIMESTAMP,
-                FOREIGN KEY (village_id) REFERENCES villages(id)
+                FOREIGN KEY (village_id) REFERENCES villages(id),
+                UNIQUE(discord_id, village_id)
             )
         ''')
 

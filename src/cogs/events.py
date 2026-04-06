@@ -12,18 +12,25 @@ class EventsCog(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message: disnake.Message):
         """Track user message activity to keep 'last_message_time' updated."""
-        if message.author.bot:
+        if message.author.bot or not message.guild:
             return
 
+        guild_id_str = str(message.guild.id)
+
         async with await get_connection() as db:
-            # Update last_message_time if player exists in the database
-            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-            await db.execute('''
-                UPDATE players
-                SET last_message_time = ?
-                WHERE discord_id = ?
-            ''', (now, str(message.author.id)))
-            await db.commit()
+            # Find village first
+            async with db.execute('SELECT id FROM villages WHERE guild_id = ?', (guild_id_str,)) as cursor:
+                village = await cursor.fetchone()
+
+            if village:
+                village_id = village[0]
+                now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                await db.execute('''
+                    UPDATE players
+                    SET last_message_time = ?
+                    WHERE discord_id = ? AND village_id = ?
+                ''', (now, str(message.author.id), village_id))
+                await db.commit()
 
     @disnake.slash_command(name="idlevillage-initial", description="Initialize the village for this server (Owner only)")
     async def idlevillage_initial(self, inter: disnake.ApplicationCommandInteraction):
