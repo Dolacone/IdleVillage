@@ -79,13 +79,13 @@ class Engine:
             close_db = True
 
         try:
-            async with db.execute('SELECT satiety_deadline, last_update_time, completion_time, status FROM players WHERE id = ?', (player_id,)) as cursor:
+            async with db.execute('SELECT satiety_deadline, last_update_time, completion_time, status, village_id, location_status, current_action_type, current_weight FROM players WHERE id = ?', (player_id,)) as cursor:
                 player = await cursor.fetchone()
 
             if not player:
                 return
 
-            satiety_deadline_str, last_update_time_str, completion_time_str, status = player
+            satiety_deadline_str, last_update_time_str, completion_time_str, status, village_id, location_status, current_action_type, current_weight = player
 
             # Using UTC naive datetimes to align with SQLite's CURRENT_TIMESTAMP
             # and to allow simple subtraction against existing records.
@@ -117,6 +117,12 @@ class Engine:
             if delta < 0:
                 delta = 0
 
+            # Get stat modifiers logic (efficiency) - simplified for foundational
+            async with db.execute('SELECT strength, agility, perception, knowledge, endurance FROM player_stats WHERE player_id = ?', (player_id,)) as cursor:
+                stats = await cursor.fetchone()
+
+            p_str, p_agi, p_per, p_kno, p_end = stats if stats else (50, 50, 50, 50, 50)
+
             # Handle satiety updates based on status
             new_satiety_deadline = satiety_deadline_str
             if status == 'idle' and satiety_deadline_str:
@@ -129,12 +135,40 @@ class Engine:
                 except (ValueError, TypeError):
                     pass
 
-            # Update last_update_time and deadline
+            # Settlement Effects
+            new_status = status
+            new_location = location_status
+            log_category = "knowledge" # default fallback
+
+            hours = delta / 3600.0
+
+            if status == 'idle' and location_status == 'at_village':
+                # Idle Gathering
+                efficiency = (p_per + p_kno) / 2.0 / 100.0
+                food_yield = int(hours * 10 * efficiency * 0.5)
+
+                if food_yield > 0:
+                    await db.execute('UPDATE villages SET food = food + ? WHERE id = ?', (food_yield, village_id))
+                log_category = "knowledge" # "觀察 + 知識" via docs (mapped simply to knowledge for foundational)
+
+            # Check if action completed
+            if completion_time_str and target_time >= datetime.fromisoformat(completion_time_str.replace('Z', '')).replace(tzinfo=None):
+                new_status = 'idle'
+                new_location = 'at_village' # Simplified auto-return for foundational
+
+            # Log action
+            if delta > 0:
+                await db.execute('''
+                    INSERT INTO player_actions_log (player_id, stat_category, start_time, end_time)
+                    VALUES (?, ?, ?, ?)
+                ''', (player_id, log_category, last_update.isoformat(), target_time.isoformat()))
+
+            # Update last_update_time, deadline, and status
             await db.execute('''
                 UPDATE players
-                SET last_update_time = ?, satiety_deadline = ?
+                SET last_update_time = ?, satiety_deadline = ?, status = ?, location_status = ?
                 WHERE id = ?
-            ''', (target_time.isoformat(), new_satiety_deadline, player_id))
+            ''', (target_time.isoformat(), new_satiety_deadline, new_status, new_location, player_id))
             await db.commit()
         finally:
             if close_db:

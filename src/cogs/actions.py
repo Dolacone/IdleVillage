@@ -4,20 +4,61 @@ import datetime
 from src.database.schema import get_connection
 from src.core.engine import Engine
 
+class ActionSubmitButton(disnake.ui.Button):
+    def __init__(self, action: str, target: str):
+        super().__init__(label="Submit", style=disnake.ButtonStyle.green)
+        self.action = action
+        self.target = target
+
+    async def callback(self, inter: disnake.MessageInteraction):
+        # For the foundational phase, just acknowledge the logic intent
+        await inter.response.edit_message(content=f"Action '{self.action}' with target '{self.target}' submitted! (Logic execution coming soon)", view=None)
+
+
+class SubMenuDropdown(disnake.ui.Select):
+    def __init__(self, action: str):
+        self.action = action
+        options = []
+        if action == "gather":
+            options = [disnake.SelectOption(label="Node 1 (Food)", value="node_1")]
+        elif action == "build":
+            options = [disnake.SelectOption(label="Food Efficiency", value="food_eff"), disnake.SelectOption(label="Storage", value="storage")]
+        elif action == "explore":
+            options = [disnake.SelectOption(label="1 Hour", value="1h"), disnake.SelectOption(label="4 Hours", value="4h")]
+        elif action == "cancel":
+            options = [disnake.SelectOption(label="Confirm Cancel", value="confirm")]
+
+        super().__init__(placeholder=f"Select target for {action}...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, inter: disnake.MessageInteraction):
+        target = self.values[0]
+        # Keep original dropdowns, and add or update the submit button
+        view = self.view
+        view.clear_items()
+        view.add_item(ActionDropdown(default_value=self.action))
+        view.add_item(SubMenuDropdown(action=self.action)) # Add self back
+        view.add_item(ActionSubmitButton(action=self.action, target=target))
+        await inter.response.edit_message(view=view)
+
+
 class ActionDropdown(disnake.ui.Select):
-    def __init__(self):
+    def __init__(self, default_value: str = None):
         options = [
-            disnake.SelectOption(label="Gather", description="Gather resources in the wild", value="gather"),
-            disnake.SelectOption(label="Build", description="Contribute to village buildings", value="build"),
-            disnake.SelectOption(label="Explore", description="Search for new resource nodes", value="explore"),
-            disnake.SelectOption(label="Cancel", description="Cancel current action and return to village", value="cancel")
+            disnake.SelectOption(label="Gather", description="Gather resources in the wild", value="gather", default=(default_value=="gather")),
+            disnake.SelectOption(label="Build", description="Contribute to village buildings", value="build", default=(default_value=="build")),
+            disnake.SelectOption(label="Explore", description="Search for new resource nodes", value="explore", default=(default_value=="explore")),
+            disnake.SelectOption(label="Cancel", description="Cancel current action and return to village", value="cancel", default=(default_value=="cancel"))
         ]
         super().__init__(placeholder="Choose an action category...", min_values=1, max_values=1, options=options)
 
     async def callback(self, inter: disnake.MessageInteraction):
-        # Update original message to acknowledge interaction and show next step
         action = self.values[0]
-        await inter.response.edit_message(content=f"You selected: {action}. (Sub-menus coming soon!)", embed=None, view=None)
+        # Dynamically add the submenu based on selection
+        view = self.view
+        view.clear_items()
+        view.add_item(ActionDropdown(default_value=action))
+        view.add_item(SubMenuDropdown(action=action))
+        await inter.response.edit_message(view=view)
 
 
 class VillageView(disnake.ui.View):

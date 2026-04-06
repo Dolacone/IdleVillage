@@ -23,6 +23,18 @@ async def init_db():
             )
         ''')
 
+        # Check if players table needs migration
+        async with db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='players'") as cursor:
+            row = await cursor.fetchone()
+            needs_migration = False
+            if row:
+                sql = row[0]
+                if 'UNIQUE(discord_id, village_id)' not in sql:
+                    needs_migration = True
+
+        if needs_migration:
+            await db.execute("ALTER TABLE players RENAME TO players_old")
+
         await db.execute('''
             CREATE TABLE IF NOT EXISTS players (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,6 +54,14 @@ async def init_db():
                 UNIQUE(discord_id, village_id)
             )
         ''')
+
+        if needs_migration:
+            await db.execute('''
+                INSERT INTO players (id, discord_id, village_id, satiety_deadline, last_message_time, current_weight, status, location_status, current_action_type, target_node_id, auto_restart, last_update_time, completion_time)
+                SELECT id, discord_id, village_id, satiety_deadline, last_message_time, current_weight, status, location_status, current_action_type, target_node_id, auto_restart, last_update_time, completion_time
+                FROM players_old
+            ''')
+            await db.execute("DROP TABLE players_old")
 
         await db.execute('''
             CREATE TABLE IF NOT EXISTS player_stats (
