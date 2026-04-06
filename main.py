@@ -2,6 +2,7 @@ import os
 import disnake
 from disnake.ext import commands
 from dotenv import load_dotenv
+from src.database.schema import init_db
 
 load_dotenv()
 
@@ -12,24 +13,34 @@ class IdleVillageBot(commands.InteractionBot):
         super().__init__(intents=intents)
 
     async def on_ready(self):
+        print("Initializing database schemas...")
+        await init_db()
+
+        from src.core.engine import Engine
+        if not Engine.start_watcher_loop.is_running():
+            Engine.start_watcher_loop.start()
+            print("Watcher loop started.")
+
         print(f"Logged in as {self.user} (ID: {self.user.id})")
         print("------")
 
 def main():
     bot = IdleVillageBot()
-    
+
     # 建立目錄確保路徑存在
     os.makedirs("src/cogs", exist_ok=True)
     os.makedirs("src/database", exist_ok=True)
     os.makedirs("src/core", exist_ok=True)
     os.makedirs("data", exist_ok=True)
-    
+
     # 載入 Cogs
     # 注意：這裡假設 src.cogs.general 已經存在
     initial_extensions = [
         "src.cogs.general",
+        "src.cogs.events",
+        "src.cogs.actions",
     ]
-    
+
     for extension in initial_extensions:
         try:
             bot.load_extension(extension)

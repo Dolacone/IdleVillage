@@ -4,12 +4,14 @@
 
 ### 1. 150h 滑動窗口素質 (150h Sliding Window)
 - 計算: 基礎 50 點 + 過去 150 小時行動紀錄 (1 小時 = 2 點).
-- 行動分配權重 (每小時):
-  - 移動 (Travel): 耐力 +1, 敏捷 +1.
-  - 探索 (Explore): 觀察 +1, 敏捷 +1.
-  - 採集 (木材/石材): 力量 +1, 耐力 +1.
-  - 採集 (糧食/閒置): 觀察 +1, 知識 +1.
-  - 建設 (Build): 知識 +1, 力量 +1.
+- 紀錄方式: `player_actions_log` 僅在玩家狀態切換時寫入一筆完整區段紀錄, 記錄該行動的 `action_type`, `start_time`, `end_time`. 尚未結束的當前狀態不會提前寫入.
+- 行動分配權重 (每小時, 由 action_type 對應):
+  - `idle`: 觀察 +1, 知識 +1.
+  - `moving` / `returning`: 耐力 +1, 敏捷 +1.
+  - `explore`: 觀察 +1, 敏捷 +1.
+  - `gather_material`: 力量 +1, 耐力 +1.
+  - `gather_food`: 觀察 +1, 知識 +1.
+  - `build`: 知識 +1, 力量 +1.
 
 ### 2. 素質加成公式 (Modifers)
 - 效率係數: (StatA + StatB) / 2 / 100.
@@ -22,9 +24,10 @@
 - 飽食度 (Satiety Deadline): 存儲為 TIMESTAMP。
   - 定義: 玩家飽食度歸零的預計時間點。
   - 容量: 最大 100 小時 (即 Now + 360,000 秒)。
-  - 消耗: 除了 Idle 以外的所有行動, 該時間點保持不變 (隨時間接近而消耗)。
-  - 閒置 (Idle): 玩家處於 Idle 狀態時, 系統會隨時間同步推移該時間點, 使剩餘時間不變。
-- 負重 (Weight): 力量 + 耐力. (資源數量採 1x 整數儲存, 初始低標為 100).
+  - 消耗: 僅當玩家不處於 `idle` 狀態時才會消耗. 此時該時間點保持不變, 並隨時間接近而減少剩餘值。
+  - 閒置 (Idle): 玩家處於 `idle` 狀態時, 系統會隨時間同步推移該時間點, 使剩餘時間不變。
+  - 補給: 玩家在村莊中進入 `idle` 狀態時, 或由 `idle` 狀態準備出發前, 會使用村莊糧食嘗試自動補滿至 100 小時。
+- 負重 (Weight): 力量 + 耐力. (資源數量採 1x 整數儲存).
 
 ### 4. 緩存表定義 (Table: player_stats)
 為了優化 150h 滑動窗口的計算成本, 系統會維護此緩存表, 僅在玩家行動改變或結算時更新.
@@ -44,7 +47,7 @@
 | :--- | :--- | :--- |
 | id | INTEGER (PK) | |
 | player_id | INTEGER (FK) | |
-| stat_category | TEXT | strength, agility, perception, knowledge, endurance |
+| action_type | TEXT | idle, moving, returning, explore, gather_food, gather_material, build |
 | start_time | TIMESTAMP | |
 | end_time | TIMESTAMP | |
 
