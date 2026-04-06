@@ -7,7 +7,10 @@ class General(commands.Cog):
 
     @commands.slash_command(description="Ping the bot")
     async def ping(self, inter: disnake.ApplicationCommandInteraction):
-        await inter.response.send_message(f"Pong! Latency: {round(self.bot.latency * 1000)}ms")
+        await inter.response.send_message(
+            f"Pong! Latency: {round(self.bot.latency * 1000)}ms",
+            ephemeral=True,
+        )
 
 def setup(bot: commands.Bot):
     bot.add_cog(General(bot))

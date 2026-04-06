@@ -151,7 +151,7 @@ class ActionsCog(commands.Cog):
             embed.add_field(name="Current Progress", value="Idle (Sub-menus will display progress)", inline=False)
 
             view = VillageView()
-            await inter.response.send_message(embed=embed, view=view)
+            await inter.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
 def setup(bot: commands.Bot):

@@ -4,6 +4,7 @@
 
 ### 1. 介面結構 (Embed Content)
 當玩家執行 /idlevillage 時, 系統會回傳一個包含以下資訊的 Embed:
+- 此訊息應僅對指令呼叫者可見 (ephemeral), 避免在公共頻道產生訊息洗版.
 
 - 個人狀態 (Player Stats):
   - 飽食度, 當前負重/最大負重.

@@ -4,6 +4,7 @@
 
 ### 1. 伺服器初始化 (Guild Initialization)
 - 觸發事件: 透過指令 `/idlevillage-initial` 手動初始化 (僅限特定管理員使用).
+- 回應模式: 初始化結果應僅對指令呼叫者可見 (ephemeral), 避免在公共頻道產生訊息洗版.
 - 初始邏輯:
   - 建立對應的 villages 紀錄.
   - 初始糧食: 100.

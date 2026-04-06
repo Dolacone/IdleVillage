@@ -60,7 +60,10 @@ class EventsCog(commands.Cog):
             ''', (guild_id_str,))
             await db.commit()
 
-        await inter.response.send_message("Village successfully initialized for this server!")
+        await inter.response.send_message(
+            "Village successfully initialized for this server!",
+            ephemeral=True,
+        )
 
 def setup(bot: commands.Bot):
     bot.add_cog(EventsCog(bot))
