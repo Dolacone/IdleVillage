@@ -120,12 +120,14 @@ async def init_db():
         await db.commit()
 
 
-async def get_connection():
-    """Returns a new active aiosqlite connection.
-    Must be used with an async context manager:
-    async with await get_connection() as db:
+def get_connection():
+    """Returns a new aiosqlite connection/context manager.
+    Use either:
+    async with get_connection() as db:
+    or:
+    db = await get_connection()
     """
-    return await aiosqlite.connect(DB_PATH)
+    return aiosqlite.connect(DB_PATH)
 
 if __name__ == "__main__":
     asyncio.run(init_db())

@@ -17,7 +17,7 @@ class EventsCog(commands.Cog):
 
         guild_id_str = str(message.guild.id)
 
-        async with await get_connection() as db:
+        async with get_connection() as db:
             # Find village first
             async with db.execute('SELECT id FROM villages WHERE guild_id = ?', (guild_id_str,)) as cursor:
                 village = await cursor.fetchone()
@@ -32,7 +32,7 @@ class EventsCog(commands.Cog):
                 ''', (now, str(message.author.id), village_id))
                 await db.commit()
 
-    @disnake.slash_command(name="idlevillage-initial", description="Initialize the village for this server (Owner only)")
+    @commands.slash_command(name="idlevillage-initial", description="Initialize the village for this server (Owner only)")
     async def idlevillage_initial(self, inter: disnake.ApplicationCommandInteraction):
         """Initializes the village for the guild. Restricted to specific user ID."""
         if inter.author.id != ALLOWED_OWNER_ID:
@@ -45,7 +45,7 @@ class EventsCog(commands.Cog):
 
         guild_id_str = str(inter.guild.id)
 
-        async with await get_connection() as db:
+        async with get_connection() as db:
             # Check if village already exists
             async with db.execute('SELECT id FROM villages WHERE guild_id = ?', (guild_id_str,)) as cursor:
                 existing = await cursor.fetchone()

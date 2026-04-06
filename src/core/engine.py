@@ -284,7 +284,7 @@ class Engine:
         Background task to process delayed settlements for players
         whose completion_time has passed, and actively apply village decay.
         """
-        async with await get_connection() as db:
+        async with get_connection() as db:
             now = datetime.utcnow().isoformat()
 
             # Settle expired players

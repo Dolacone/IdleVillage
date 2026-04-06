@@ -71,7 +71,7 @@ class ActionsCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @disnake.slash_command(name="idlevillage", description="Open the Idle Village interface")
+    @commands.slash_command(name="idlevillage", description="Open the Idle Village interface")
     async def idlevillage(self, inter: disnake.ApplicationCommandInteraction):
         if not inter.guild:
             await inter.response.send_message("This command must be run in a server.", ephemeral=True)
@@ -80,7 +80,7 @@ class ActionsCog(commands.Cog):
         guild_id_str = str(inter.guild.id)
         discord_id_str = str(inter.author.id)
 
-        async with await get_connection() as db:
+        async with get_connection() as db:
             # Fetch minimal village id first to run settlements
             async with db.execute('SELECT id FROM villages WHERE guild_id = ?', (guild_id_str,)) as cursor:
                 village_min = await cursor.fetchone()
