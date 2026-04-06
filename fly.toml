@@ -1,0 +1,19 @@
+# fly.toml app configuration file generated for dola-discord on 2024-10-26T19:48:34+08:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'idle-village'
+primary_region = 'nrt'
+
+[build]
+
+[[vm]]
+  memory_mb = 256
+  cpu_kind = 'shared'
+  cpus = 1
+
+[mounts]
+  source = "idle_village"
+  destination = "/app/data"
+
