@@ -7,9 +7,12 @@
 
 ## Database Standards
 - Use `aiosqlite` for asynchronous connections.
+- Prefer `async with get_connection() as db` for scoped database access. Do NOT use `async with await get_connection()`, as this can double-start the underlying `aiosqlite` worker thread.
 - Table names should be plural (e.g., `players`, `actions_history`).
 - Markdown SSOT: The database schema is defined in `docs/**/*.md`. AI agents MUST parse these documents to determine table structures and initial values. Do NOT maintain a separate `schema.sql`.
 - Database file location: `data/village.db` (MUST be git-ignored).
+- Player identity is village-scoped. Treat `(discord_id, village_id)` as the stable uniqueness key rather than assuming a global player row per Discord user.
+- `player_actions_log` is transition-based: record completed action segments using `action_type`, `start_time`, and `end_time`. Do not default to hourly stat-category rows unless the docs are explicitly changed.
 
 ## Commit Standards
 - Use Conventional Commits for all changes:
@@ -21,13 +24,17 @@
 
 ## Command Standards
 - Implement all Slash Commands within Cog classes located in `src/cogs/`.
+- Prefer `@commands.slash_command` for slash command registration inside Cogs.
 - The main `/action` menu logic should reside in `src/cogs/actions.py`.
 - Use `disnake`'s UI components (Select menus, Buttons) for complex interactions.
+- Command responses should default to caller-only (`ephemeral=True`) unless the design docs explicitly call for a public message.
+- Guild setup is manual via `/idlevillage-initial`; do not assume automatic initialization on guild join unless the docs are updated.
 
 ## Core Logic & Engine
 - The hourly settlement engine resides in `src/core/engine.py`.
 - Before modifying any gameplay values or formulas, refer to the balance settings in `docs/plan_v1.md`.
 - Ensure all automated tasks (loops) are managed via `disnake.ext.tasks`.
+- Satiety should only drain while the player is not `idle`. Refill checks should happen at village idle boundaries according to the current design docs.
 
 ## Project Structure
 - `src/cogs/`: Command implementations.
