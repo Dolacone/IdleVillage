@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta
 from unittest.mock import patch
-import unittest
 
 from support import DatabaseTestCase
 from core.engine import Engine
@@ -64,7 +63,7 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
         player_id = await self.create_player(
             village_id,
             status="exploring",
-            last_update_time=now - timedelta(hours=1),
+            last_update_time=now - timedelta(hours=2),
             completion_time=now,
         )
 
@@ -78,14 +77,13 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
         )
         self.assertEqual(nodes, [("stone", 2, 140, 2000)])
 
-    @unittest.expectedFailure
     async def test_resources_exploring_budget_consumes_weighted_time_costs(self):
         village_id = await self.create_village()
         now = datetime.utcnow()
         player_id = await self.create_player(
             village_id,
             status="exploring",
-            last_update_time=now - timedelta(hours=120),
+            last_update_time=now - timedelta(hours=2),
             completion_time=now,
         )
 

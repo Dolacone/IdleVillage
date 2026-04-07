@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-import unittest
 
 from support import DatabaseTestCase
 from core.engine import Engine
@@ -83,7 +82,6 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         self.assertEqual(node[0], 98)
         self.assertEqual(log[0], "gathering_food")
 
-    @unittest.expectedFailure
     async def test_resources_gathering_requires_a_real_node(self):
         village_id = await self.create_village(food=3)
         player_id = await self.create_player(village_id)

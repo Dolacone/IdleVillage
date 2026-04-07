@@ -266,33 +266,35 @@ class Engine:
                     efficiency = (p_agi + p_per) / 2.0 / 100.0
                     budget_minutes = hours * 60 * efficiency
 
-                    # We process budget in 30m chunks
-                    chunks = int(budget_minutes // 30)
-                    for _ in range(chunks):
+                    # Each exploration outcome consumes the documented time budget.
+                    while budget_minutes >= 30:
                         roll = random.random()
                         if roll < 0.40:
-                            pass # Miss
+                            budget_minutes -= 30
+                            continue
+
+                        if roll < 0.75:
+                            n_lvl, n_stock, cost = 1, 1000, 30
+                        elif roll < 0.90:
+                            n_lvl, n_stock, cost = 2, 2000, 60
+                        elif roll < 0.97:
+                            n_lvl, n_stock, cost = 3, 4000, 120
                         else:
-                            # Found a node
-                            if roll < 0.75: # 35% chance (0.4 to 0.75)
-                                n_lvl, n_stock = 1, 1000
-                            elif roll < 0.90: # 15% chance
-                                n_lvl, n_stock = 2, 2000
-                            elif roll < 0.97: # 7% chance
-                                n_lvl, n_stock = 3, 4000
-                            else: # 3% chance
-                                n_lvl, n_stock = 4, 8000
+                            n_lvl, n_stock, cost = 4, 8000, 240
 
-                            n_type = random.choice(['food', 'wood', 'stone'])
-                            n_qual = random.randint(75 + (n_lvl - 1) * 25, 125 + (n_lvl - 1) * 25)
-                            expiry = now + timedelta(hours=48)
+                        if budget_minutes < cost:
+                            break
 
-                            await db.execute('''
-                                INSERT INTO resource_nodes (village_id, type, level, quality, remaining_amount, expiry_time)
-                                VALUES (?, ?, ?, ?, ?, ?)
-                            ''', (village_id, n_type, n_lvl, n_qual, n_stock, expiry.isoformat()))
-                            # We only find one node per hour cycle to simplify, or allow multiple.
-                            # As per docs, multiple could be found if efficiency is extremely high, but normally one.
+                        budget_minutes -= cost
+
+                        n_type = random.choice(['food', 'wood', 'stone'])
+                        n_qual = random.randint(75 + (n_lvl - 1) * 25, 125 + (n_lvl - 1) * 25)
+                        expiry = now + timedelta(hours=48)
+
+                        await db.execute('''
+                            INSERT INTO resource_nodes (village_id, type, level, quality, remaining_amount, expiry_time)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        ''', (village_id, n_type, n_lvl, n_qual, n_stock, expiry.isoformat()))
 
                 # Apply storage capacity limits
                 new_food = min(storage_capacity, v_food + food_gained)
@@ -312,15 +314,17 @@ class Engine:
 
             if last_msg_row:
                 last_msg = Engine._parse_timestamp(last_msg_row[0])
-                if last_msg and (now - last_msg).total_days() >= 7 and (now - target_time).total_days() >= 7:
+                if last_msg and (now - last_msg).days >= 7 and (now - target_time).days >= 7:
                     new_status = 'missing'
                     new_target = None
 
-            if interrupted:
+            if interrupted and new_status != 'missing':
                 new_status = 'idle'
                 new_target = None
 
-            if not interrupted and not is_ui_refresh and status != 'missing' and status != 'idle' and completion_time is not None and target_time >= completion_time:
+            if new_status == 'missing':
+                new_completion = None
+            elif not interrupted and not is_ui_refresh and status != 'missing' and status != 'idle' and completion_time is not None and target_time >= completion_time:
                 # Only auto-restart if the action actually completed its cycle.
                 restarted = await Engine.start_action(player_id, status, target_id, db)
                 if restarted:
@@ -333,7 +337,7 @@ class Engine:
                 new_completion = completion_time_str
 
             # Update the state if interrupted, completed & not restarted, or idle tracking, or UI refresh keeping completion
-            if interrupted or new_status == 'idle' or (completion_time is None and status == 'idle') or is_ui_refresh:
+            if interrupted or new_status in ('idle', 'missing') or (completion_time is None and status == 'idle') or is_ui_refresh:
                 await db.execute('''
                     UPDATE players
                     SET status = ?, target_id = ?, last_update_time = ?, completion_time = ?
@@ -387,8 +391,10 @@ class Engine:
             if v_food < food_cost or v_wood < wood_cost or v_stone < stone_cost:
                 return False
 
-            # Additional checks for nodes
-            if action == 'gathering' and target_id:
+            # Additional checks for targets
+            if action == 'gathering':
+                if not target_id:
+                    return False
                 async with db.execute('SELECT remaining_amount, expiry_time FROM resource_nodes WHERE id = ?', (target_id,)) as cursor:
                     node = await cursor.fetchone()
                 if not node:
@@ -399,6 +405,9 @@ class Engine:
                 n_exp = Engine._parse_timestamp(n_exp_str)
                 if n_exp and datetime.utcnow() >= n_exp:
                     return False
+
+            if action == 'building' and not target_id:
+                return False
 
             # Deduct costs
             if food_cost > 0 or wood_cost > 0 or stone_cost > 0:

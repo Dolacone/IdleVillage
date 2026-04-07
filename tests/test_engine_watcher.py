@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-import unittest
 
 from support import DatabaseTestCase
 from core.engine import Engine
@@ -38,7 +37,6 @@ class EngineWatcherBehaviorTests(DatabaseTestCase):
         self.assertEqual(village[0], 7)
         self.assertEqual(logs, [("idle",)])
 
-    @unittest.expectedFailure
     async def test_player_system_inactive_players_become_missing_after_7_days(self):
         village_id = await self.create_village()
         now = datetime.utcnow()
