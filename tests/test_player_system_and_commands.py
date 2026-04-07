@@ -39,7 +39,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         await cog.idlevillage_initial.callback(cog, inter)
 
         village = await self.fetchone("SELECT food, wood, stone FROM villages WHERE guild_id = ?", ("guild-77",))
-        self.assertEqual(village, (0, 0, 0))
+        self.assertEqual(village, (100, 0, 0))
         self.assertEqual(inter.response.calls[-1]["ephemeral"], True)
 
     async def test_village_binding_rejects_reuse_on_existing_server(self):

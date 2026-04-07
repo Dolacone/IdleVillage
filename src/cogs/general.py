@@ -37,11 +37,11 @@ class General(commands.Cog):
 
             await db.execute('''
                 INSERT INTO villages (guild_id, food, wood, stone, food_efficiency_xp, storage_capacity_xp, resource_yield_xp)
-                VALUES (?, 0, 0, 0, 0, 0, 0)
+                VALUES (?, 100, 0, 0, 0, 0, 0)
             ''', (guild_id_str,))
             await db.commit()
 
-        await inter.response.send_message("Village successfully initialized for this server with 0 resources and Lv 0 buildings.", ephemeral=True)
+        await inter.response.send_message("Village successfully initialized for this server with 100 food, 0 wood, 0 stone, and Lv 0 buildings.", ephemeral=True)
 
 
 def setup(bot: commands.Bot):

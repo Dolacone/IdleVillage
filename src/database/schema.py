@@ -13,7 +13,7 @@ async def init_db():
             CREATE TABLE IF NOT EXISTS villages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 guild_id TEXT UNIQUE NOT NULL,
-                food INTEGER DEFAULT 0,
+                food INTEGER DEFAULT 100,
                 wood INTEGER DEFAULT 0,
                 stone INTEGER DEFAULT 0,
                 food_efficiency_xp INTEGER DEFAULT 0,
