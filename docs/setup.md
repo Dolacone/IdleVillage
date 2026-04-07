@@ -36,4 +36,4 @@
 - 啟動 Bot: `python src/main.py`
 
 ## Changelog
-- **2026.04.06.00**: Updated setup instructions for the flat `src/` runtime layout and `.env.example` flow. See [2026.04.06.00.md](./changelogs/2026.04.06.00.md)
+- 2026.04.06.00: Updated setup instructions for the flat `src/` runtime layout and `.env.example` flow. See [2026.04.06.00.md](./changelogs/2026.04.06.00.md)

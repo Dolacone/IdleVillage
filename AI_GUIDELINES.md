@@ -4,12 +4,13 @@
 1. Async First: All database I/O and network requests MUST use `async/await`.
 2. Stateless Logic: Bot logic should rely on database state rather than in-memory variables to ensure resilience across restarts.
 3. Dynamic Stats: All attribute calculations must be handled through a unified service (e.g., `src/core/stats.py`) that aggregates data from the last 150 action records.
+4. Plain Text Formatting: Never use Markdown emphasis syntax in documents or responses. Do not use double-asterisk bold markers or single-asterisk italic markers. Use plain text, headings, lists, or backticks instead.
 
 ## Database Standards
 - Use `aiosqlite` for asynchronous connections.
 - Prefer `async with get_connection() as db` for scoped database access. Do NOT use `async with await get_connection()`, as this can double-start the underlying `aiosqlite` worker thread.
 - Table names should be plural (e.g., `players`, `actions_history`).
-- Markdown SSOT: The database schema is defined in `docs/**/*.md`. AI agents MUST parse these documents to determine table structures and initial values. Do NOT maintain a separate `schema.sql`.
+- Markdown SSOT: The database schema is defined in Markdown files under `docs/`. AI agents MUST parse these documents to determine table structures and initial values. Do NOT maintain a separate `schema.sql`.
 - Database file location: `data/village.db` (MUST be git-ignored).
 - Player identity is village-scoped. Treat `(discord_id, village_id)` as the stable uniqueness key rather than assuming a global player row per Discord user.
 - `player_actions_log` is transition-based: record completed action segments using `action_type`, `start_time`, and `end_time`. Do not default to hourly stat-category rows unless the docs are explicitly changed.
