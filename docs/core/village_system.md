@@ -23,3 +23,5 @@
 | storage_capacity_xp | INTEGER | |
 | resource_yield_xp | INTEGER | |
 | last_tick_time | TIMESTAMP | |
+
+- 2026.04.07.00: Updated to reflect 1-hour lease model and stats recalculation logic. See [2026.04.07.00.md](../../changelogs/2026.04.07.00.md)

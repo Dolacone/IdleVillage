@@ -1,5 +1,6 @@
 import asyncio
 import math
+import random
 from datetime import datetime, timedelta
 import disnake
 from disnake.ext import tasks
@@ -18,22 +19,6 @@ class Engine:
         return datetime.fromisoformat(normalized).replace(tzinfo=None)
 
     @staticmethod
-    def _resolve_action_type(status: str, current_action_type: str, location_status: str):
-        if status == "idle":
-            return "idle"
-        if status == "moving" and location_status == "at_village":
-            return "returning"
-        if current_action_type == "build":
-            return "build"
-        if current_action_type == "explore" or status == "exploring":
-            return "explore"
-        if current_action_type == "gather":
-            return "gather_material"
-        if status == "moving":
-            return "moving"
-        return status or "idle"
-
-    @staticmethod
     def _building_level_from_xp(xp: int):
         level = 0
         total_required = 0
@@ -46,37 +31,6 @@ class Engine:
             next_required *= 2
 
         return level
-
-    @staticmethod
-    async def _try_refill_satiety(db, village_id: int, satiety_deadline: datetime, now: datetime):
-        if satiety_deadline is None or village_id is None:
-            return satiety_deadline
-
-        remaining_hours = (satiety_deadline - now).total_seconds() / 3600.0
-
-        async with db.execute(
-            "SELECT food, food_efficiency_xp FROM villages WHERE id = ?",
-            (village_id,),
-        ) as cursor:
-            village = await cursor.fetchone()
-
-        if not village:
-            return satiety_deadline
-
-        village_food, food_efficiency_xp = village
-        food_efficiency_level = Engine._building_level_from_xp(food_efficiency_xp)
-        food_efficiency = 1.0 + (food_efficiency_level * 0.2)
-
-        missing_hours = max(0.0, 100.0 - remaining_hours)
-        food_cost = math.ceil(missing_hours / food_efficiency)
-        if food_cost <= 0 or village_food < food_cost:
-            return satiety_deadline
-
-        await db.execute(
-            "UPDATE villages SET food = food - ? WHERE id = ?",
-            (food_cost, village_id),
-        )
-        return now + timedelta(hours=100)
 
     @staticmethod
     async def settle_village(village_id: int, db=None):
@@ -104,16 +58,11 @@ class Engine:
                 last_tick = now
 
             delta = (now - last_tick).total_seconds()
-            if delta < 3600:
-                # Minimum decay threshold, or just do fractional if we want, but typically we want integer XP decay
-                # The docs say: (Delta/3600) * (10 + active_players)
-                pass
-
             hours = delta / 3600.0
 
-            # Count active players (has sent a message in the last 7 days)
+            # Count active players (has sent a message in the last 7 days or has non-missing status)
             active_threshold = (now - timedelta(days=7)).isoformat()
-            async with db.execute('SELECT count(*) FROM players WHERE village_id = ? AND last_message_time >= ?', (village_id, active_threshold)) as cursor:
+            async with db.execute("SELECT count(*) FROM players WHERE village_id = ? AND (last_message_time >= ? OR status != 'missing')", (village_id, active_threshold)) as cursor:
                 active_count_row = await cursor.fetchone()
                 active_count = active_count_row[0] if active_count_row else 0
 
@@ -136,11 +85,75 @@ class Engine:
                 await db.close()
 
     @staticmethod
-    async def settle_player(player_id: int, db=None):
+    async def recalculate_player_stats(player_id: int, db):
+        """Recalculates player stats based on the last 150 hours of action logs."""
+        now = datetime.utcnow()
+        window_start = now - timedelta(hours=150)
+
+        async with db.execute(
+            'SELECT action_type, start_time, end_time FROM player_actions_log WHERE player_id = ? AND end_time >= ?',
+            (player_id, window_start.isoformat())
+        ) as cursor:
+            logs = await cursor.fetchall()
+
+        p_str, p_agi, p_per, p_kno, p_end = 50.0, 50.0, 50.0, 50.0, 50.0
+
+        for log in logs:
+            action_type, start_str, end_str = log
+            try:
+                start = Engine._parse_timestamp(start_str)
+                end = Engine._parse_timestamp(end_str)
+                if start < window_start:
+                    start = window_start
+                duration_hours = (end - start).total_seconds() / 3600.0
+                if duration_hours <= 0:
+                    continue
+
+                # 2 points per hour, distributed based on action
+                if action_type == 'idle':
+                    p_per += 1.0 * duration_hours
+                    p_kno += 1.0 * duration_hours
+                elif action_type == 'gathering_food':
+                    p_per += 1.0 * duration_hours
+                    p_kno += 1.0 * duration_hours
+                elif action_type in ('gathering_wood', 'gathering_stone'):
+                    p_str += 1.0 * duration_hours
+                    p_end += 1.0 * duration_hours
+                elif action_type == 'exploring':
+                    p_agi += 1.0 * duration_hours
+                    p_per += 1.0 * duration_hours
+                elif action_type == 'building':
+                    p_kno += 1.0 * duration_hours
+                    p_end += 1.0 * duration_hours
+            except (ValueError, TypeError):
+                pass
+
+        # Integer truncation for final stats
+        final_str = int(p_str)
+        final_agi = int(p_agi)
+        final_per = int(p_per)
+        final_kno = int(p_kno)
+        final_end = int(p_end)
+
+        await db.execute('''
+            INSERT INTO player_stats (player_id, strength, agility, perception, knowledge, endurance, last_calc_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(player_id) DO UPDATE SET
+                strength=excluded.strength,
+                agility=excluded.agility,
+                perception=excluded.perception,
+                knowledge=excluded.knowledge,
+                endurance=excluded.endurance,
+                last_calc_time=excluded.last_calc_time
+        ''', (player_id, final_str, final_agi, final_per, final_kno, final_end, now.isoformat()))
+
+        return final_str, final_agi, final_per, final_kno, final_end
+
+    @staticmethod
+    async def settle_player(player_id: int, db=None, interrupted=False, is_ui_refresh=False):
         """
-        Executes the standard settlement process for a player.
-        Calculates output, handles satiety, and updates the database.
-        Accepts an existing db connection, otherwise creates one.
+        Executes the settlement process for a player's current action.
+        This represents the end of a 1-hour cycle (or an interruption).
         """
         close_db = False
         if db is None:
@@ -148,25 +161,21 @@ class Engine:
             close_db = True
 
         try:
-            async with db.execute('SELECT satiety_deadline, last_update_time, completion_time, status, village_id, location_status, current_action_type, current_weight FROM players WHERE id = ?', (player_id,)) as cursor:
+            async with db.execute('SELECT last_update_time, completion_time, status, target_id, village_id FROM players WHERE id = ?', (player_id,)) as cursor:
                 player = await cursor.fetchone()
 
             if not player:
                 return
 
-            satiety_deadline_str, last_update_time_str, completion_time_str, status, village_id, location_status, current_action_type, current_weight = player
+            last_update_time_str, completion_time_str, status, target_id, village_id = player
 
-            # Using UTC naive datetimes to align with SQLite's CURRENT_TIMESTAMP
-            # and to allow simple subtraction against existing records.
             now = datetime.utcnow()
 
-            # Parse last_update_time
             try:
                 last_update = Engine._parse_timestamp(last_update_time_str) or now
             except (ValueError, TypeError):
                 last_update = now
 
-            # Determine target time
             target_time = now
             completion_time = None
             if completion_time_str:
@@ -177,103 +186,242 @@ class Engine:
                 except (ValueError, TypeError):
                     pass
 
-            # Calculate Delta
+            # Recalculate stats based on 150h window
+            p_str, p_agi, p_per, p_kno, p_end = await Engine.recalculate_player_stats(player_id, db)
+
             delta = (target_time - last_update).total_seconds()
             if delta < 0:
                 delta = 0
 
-            # Get stat modifiers logic (efficiency) - simplified for foundational
-            async with db.execute('SELECT strength, agility, perception, knowledge, endurance FROM player_stats WHERE player_id = ?', (player_id,)) as cursor:
-                stats = await cursor.fetchone()
-
-            p_str, p_agi, p_per, p_kno, p_end = stats if stats else (50, 50, 50, 50, 50)
-
-            # Handle satiety updates based on status
-            satiety_deadline = None
-            new_satiety_deadline = None
-            if satiety_deadline_str:
-                try:
-                    satiety_deadline = Engine._parse_timestamp(satiety_deadline_str)
-                    new_satiety_deadline = satiety_deadline
-                except (ValueError, TypeError):
-                    pass
-
-            if status == 'idle' and new_satiety_deadline is not None:
-                new_satiety_deadline = new_satiety_deadline + timedelta(seconds=delta)
-
-            # Settlement Effects
-            new_status = status
-            new_location = location_status
-            new_action_type = current_action_type
-            new_completion_time = completion_time_str
-            new_weight = current_weight
-            state_changed = False
-
             hours = delta / 3600.0
 
-            if status == 'idle' and location_status == 'at_village':
-                # Idle Gathering
-                efficiency = (p_per + p_kno) / 2.0 / 100.0
-                food_yield = int(hours * 10 * efficiency * 0.5)
+            # Log the action
+            action_type_log = status
+            if status == 'gathering':
+                # We need to know what we were gathering to log it properly
+                if target_id:
+                    async with db.execute('SELECT type FROM resource_nodes WHERE id = ?', (target_id,)) as cursor:
+                        node = await cursor.fetchone()
+                        if node:
+                            action_type_log = f"gathering_{node[0]}"
 
-                if food_yield > 0:
-                    await db.execute('UPDATE villages SET food = food + ? WHERE id = ?', (food_yield, village_id))
-
-                if new_satiety_deadline is not None:
-                    new_satiety_deadline = await Engine._try_refill_satiety(
-                        db,
-                        village_id,
-                        new_satiety_deadline,
-                        target_time,
-                    )
-
-            # Check if action completed
-            if completion_time is not None and target_time >= completion_time:
-                new_status = 'idle'
-                new_location = 'at_village'
-                new_action_type = None
-                new_completion_time = None
-                new_weight = 0
-                state_changed = True
-
-                if new_satiety_deadline is not None:
-                    new_satiety_deadline = await Engine._try_refill_satiety(
-                        db,
-                        village_id,
-                        new_satiety_deadline,
-                        target_time,
-                    )
-
-            # Log the finished action segment only when state changes.
-            if delta > 0 and state_changed:
+            if delta > 0 and status != 'missing':
                 await db.execute('''
                     INSERT INTO player_actions_log (player_id, action_type, start_time, end_time)
                     VALUES (?, ?, ?, ?)
-                ''', (
-                    player_id,
-                    Engine._resolve_action_type(status, current_action_type, location_status),
-                    last_update.isoformat(),
-                    target_time.isoformat(),
-                ))
+                ''', (player_id, action_type_log, last_update.isoformat(), target_time.isoformat()))
 
-            deadline_value = new_satiety_deadline.isoformat() if new_satiety_deadline is not None else None
+            # Settlement logic
+            async with db.execute('SELECT food, wood, stone, storage_capacity_xp, resource_yield_xp FROM villages WHERE id = ?', (village_id,)) as cursor:
+                village_row = await cursor.fetchone()
 
-            # Update last_update_time, deadline, and status
+            if village_row:
+                v_food, v_wood, v_stone, v_storage_xp, v_yield_xp = village_row
+                storage_capacity = 1000 * (2 ** Engine._building_level_from_xp(v_storage_xp))
+                yield_mult = 1.0 + (Engine._building_level_from_xp(v_yield_xp) * 0.1)
+
+                food_gained, wood_gained, stone_gained = 0, 0, 0
+
+                if status == 'idle':
+                    efficiency = (p_per + p_kno) / 2.0 / 100.0
+                    food_gained = int(hours * 10 * efficiency * 0.5 * yield_mult)
+
+                elif status == 'gathering' and target_id:
+                    async with db.execute('SELECT type, remaining_amount, quality FROM resource_nodes WHERE id = ?', (target_id,)) as cursor:
+                        node = await cursor.fetchone()
+
+                    if node:
+                        n_type, n_rem, n_qual = node
+                        if n_type == 'food':
+                            efficiency = (p_per + p_kno) / 2.0 / 100.0
+                        else:
+                            efficiency = (p_str + p_end) / 2.0 / 100.0
+
+                        # If completed normally, or partial
+                        amount_gathered = int(hours * 10 * efficiency * (n_qual / 100.0) * yield_mult)
+                        actual_gathered = min(amount_gathered, n_rem)
+
+                        if actual_gathered > 0:
+                            await db.execute('UPDATE resource_nodes SET remaining_amount = remaining_amount - ? WHERE id = ?', (actual_gathered, target_id))
+                            if n_type == 'food':
+                                food_gained = actual_gathered
+                            elif n_type == 'wood':
+                                wood_gained = actual_gathered
+                            elif n_type == 'stone':
+                                stone_gained = actual_gathered
+
+                elif status == 'building' and target_id:
+                    efficiency = (p_kno + p_end) / 2.0 / 100.0
+                    xp_gained = int(hours * 50 * efficiency)
+
+                    if xp_gained > 0:
+                        if target_id == 1:
+                            await db.execute('UPDATE villages SET food_efficiency_xp = food_efficiency_xp + ? WHERE id = ?', (xp_gained, village_id))
+                        elif target_id == 2:
+                            await db.execute('UPDATE villages SET storage_capacity_xp = storage_capacity_xp + ? WHERE id = ?', (xp_gained, village_id))
+                        elif target_id == 3:
+                            await db.execute('UPDATE villages SET resource_yield_xp = resource_yield_xp + ? WHERE id = ?', (xp_gained, village_id))
+
+                elif status == 'exploring':
+                    efficiency = (p_agi + p_per) / 2.0 / 100.0
+                    budget_minutes = hours * 60 * efficiency
+
+                    # We process budget in 30m chunks
+                    chunks = int(budget_minutes // 30)
+                    for _ in range(chunks):
+                        roll = random.random()
+                        if roll < 0.40:
+                            pass # Miss
+                        else:
+                            # Found a node
+                            if roll < 0.75: # 35% chance (0.4 to 0.75)
+                                n_lvl, n_stock = 1, 1000
+                            elif roll < 0.90: # 15% chance
+                                n_lvl, n_stock = 2, 2000
+                            elif roll < 0.97: # 7% chance
+                                n_lvl, n_stock = 3, 4000
+                            else: # 3% chance
+                                n_lvl, n_stock = 4, 8000
+
+                            n_type = random.choice(['food', 'wood', 'stone'])
+                            n_qual = random.randint(75 + (n_lvl - 1) * 25, 125 + (n_lvl - 1) * 25)
+                            expiry = now + timedelta(hours=48)
+
+                            await db.execute('''
+                                INSERT INTO resource_nodes (village_id, type, level, quality, remaining_amount, expiry_time)
+                                VALUES (?, ?, ?, ?, ?, ?)
+                            ''', (village_id, n_type, n_lvl, n_qual, n_stock, expiry.isoformat()))
+                            # We only find one node per hour cycle to simplify, or allow multiple.
+                            # As per docs, multiple could be found if efficiency is extremely high, but normally one.
+
+                # Apply storage capacity limits
+                new_food = min(storage_capacity, v_food + food_gained)
+                new_wood = min(storage_capacity, v_wood + wood_gained)
+                new_stone = min(storage_capacity, v_stone + stone_gained)
+
+                if food_gained > 0 or wood_gained > 0 or stone_gained > 0:
+                    await db.execute('UPDATE villages SET food = ?, wood = ?, stone = ? WHERE id = ?', (new_food, new_wood, new_stone, village_id))
+
+            new_status = status
+            new_target = target_id
+            new_completion = None
+
+            # Check for inactive to missing transition
+            async with db.execute('SELECT last_message_time FROM players WHERE id = ?', (player_id,)) as cursor:
+                last_msg_row = await cursor.fetchone()
+
+            if last_msg_row:
+                last_msg = Engine._parse_timestamp(last_msg_row[0])
+                if last_msg and (now - last_msg).total_days() >= 7 and (now - target_time).total_days() >= 7:
+                    new_status = 'missing'
+                    new_target = None
+
+            if interrupted:
+                new_status = 'idle'
+                new_target = None
+
+            if not interrupted and not is_ui_refresh and status != 'missing' and status != 'idle' and completion_time is not None and target_time >= completion_time:
+                # Only auto-restart if the action actually completed its cycle.
+                restarted = await Engine.start_action(player_id, status, target_id, db)
+                if restarted:
+                    return # start_action handles the DB update
+                else:
+                    new_status = 'idle'
+                    new_target = None
+            elif not interrupted and status != 'missing' and status != 'idle' and completion_time is not None and target_time < completion_time:
+                # We haven't completed, retain current completion time
+                new_completion = completion_time_str
+
+            # Update the state if interrupted, completed & not restarted, or idle tracking, or UI refresh keeping completion
+            if interrupted or new_status == 'idle' or (completion_time is None and status == 'idle') or is_ui_refresh:
+                await db.execute('''
+                    UPDATE players
+                    SET status = ?, target_id = ?, last_update_time = ?, completion_time = ?
+                    WHERE id = ?
+                ''', (new_status, new_target, now.isoformat(), new_completion, player_id))
+
+            await db.commit()
+
+        finally:
+            if close_db:
+                await db.close()
+
+    @staticmethod
+    async def start_action(player_id: int, action: str, target_id: int = None, db=None) -> bool:
+        """
+        Attempts to start a 1-hour action cycle, pre-deducting resources.
+        Returns True if successful, False if resources/conditions were not met.
+        """
+        close_db = False
+        if db is None:
+            db = await get_connection()
+            close_db = True
+
+        try:
+            async with db.execute('SELECT village_id FROM players WHERE id = ?', (player_id,)) as cursor:
+                player_row = await cursor.fetchone()
+
+            if not player_row:
+                return False
+
+            village_id = player_row[0]
+
+            async with db.execute('SELECT food, wood, stone, food_efficiency_xp FROM villages WHERE id = ?', (village_id,)) as cursor:
+                village = await cursor.fetchone()
+
+            if not village:
+                return False
+
+            v_food, v_wood, v_stone, v_food_xp = village
+
+            food_cost, wood_cost, stone_cost = 0, 0, 0
+
+            if action in ('gathering', 'exploring'):
+                food_cost = 1
+            elif action == 'building':
+                food_cost = 1
+                wood_cost = 10
+                stone_cost = 5
+
+            # Check costs
+            if v_food < food_cost or v_wood < wood_cost or v_stone < stone_cost:
+                return False
+
+            # Additional checks for nodes
+            if action == 'gathering' and target_id:
+                async with db.execute('SELECT remaining_amount, expiry_time FROM resource_nodes WHERE id = ?', (target_id,)) as cursor:
+                    node = await cursor.fetchone()
+                if not node:
+                    return False
+                n_rem, n_exp_str = node
+                if n_rem <= 0:
+                    return False
+                n_exp = Engine._parse_timestamp(n_exp_str)
+                if n_exp and datetime.utcnow() >= n_exp:
+                    return False
+
+            # Deduct costs
+            if food_cost > 0 or wood_cost > 0 or stone_cost > 0:
+                await db.execute('UPDATE villages SET food = food - ?, wood = wood - ?, stone = stone - ? WHERE id = ?', (food_cost, wood_cost, stone_cost, village_id))
+
+            # Calculate duration (1 hour, modified by food efficiency if it costs food)
+            duration_hours = 1.0
+            if food_cost > 0:
+                food_eff_level = Engine._building_level_from_xp(v_food_xp)
+                duration_hours = 1.0 + (food_eff_level * 0.2)
+
+            now = datetime.utcnow()
+            completion_time = now + timedelta(hours=duration_hours)
+
             await db.execute('''
                 UPDATE players
-                SET last_update_time = ?, satiety_deadline = ?, status = ?, location_status = ?, current_action_type = ?, completion_time = ?, current_weight = ?
+                SET status = ?, target_id = ?, last_update_time = ?, completion_time = ?
                 WHERE id = ?
-            ''', (
-                target_time.isoformat(),
-                deadline_value,
-                new_status,
-                new_location,
-                new_action_type,
-                new_completion_time,
-                new_weight,
-                player_id,
-            ))
+            ''', (action, target_id, now.isoformat(), completion_time.isoformat(), player_id))
+
             await db.commit()
+            return True
+
         finally:
             if close_db:
                 await db.close()
@@ -286,6 +434,9 @@ class Engine:
         """
         async with get_connection() as db:
             now = datetime.utcnow().isoformat()
+
+            # Clean up expired nodes
+            await db.execute("DELETE FROM resource_nodes WHERE expiry_time <= ? OR remaining_amount <= 0", (now,))
 
             # Settle expired players
             async with db.execute('SELECT id FROM players WHERE completion_time <= ?', (now,)) as cursor:

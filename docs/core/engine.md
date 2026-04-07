@@ -46,3 +46,5 @@
 - 取消/失敗: 若在此階段終止, 返程所需時間 = (Now - start_time).
 - 抵達 (Arrival): 狀態改為 working, 位置為 at_node.
 - 消耗: 前往目標消耗飽食度, 回程返回村莊則免.
+
+- 2026.04.07.00: Updated to reflect 1-hour lease model and stats recalculation logic. See [2026.04.07.00.md](../../changelogs/2026.04.07.00.md)

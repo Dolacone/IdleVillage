@@ -59,3 +59,5 @@ Every documentation file in `docs/` (except changelogs) MUST contain a `## Chang
 
 ## Changelog
 - 2026.04.06.00: Clarified and then finalized the workflow around the current flat `src/` service layout and required document synchronization. See [2026.04.06.00.md](../../changelogs/2026.04.06.00.md)
+
+- 2026.04.07.00: Updated to reflect 1-hour lease model and stats recalculation logic. See [2026.04.07.00.md](../../changelogs/2026.04.07.00.md)

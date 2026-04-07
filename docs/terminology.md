@@ -41,3 +41,5 @@
 
 - The Watcher (監視任務):
   - 定義: 背景執行的輕量級任務, 負責處理那些已達到 Completion Timestamp 但尚未被玩家主動觸發更新的結算作業.
+
+- 2026.04.07.00: Updated to reflect 1-hour lease model and stats recalculation logic. See [2026.04.07.00.md](../../changelogs/2026.04.07.00.md)
