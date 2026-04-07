@@ -22,8 +22,8 @@ Every significant change must follow this lifecycle.
 
 ### Phase 3: Finalization
 - Action: AI updates all affected documents (see below).
-- Status: `Done`
-- Action: AI updates the Change Plan file status to `Done` and summarizes the final implementation details.
+- Status: `Done` only after all required tests pass and staging verification passes.
+- Action: AI may prepare document updates and summaries before release, but should only update the Change Plan file status to `Done` after the post-test and post-staging gate is satisfied.
 - Merge: Branch is ready for merging into `master`.
 
 ## 3. Document Synchronization
@@ -59,3 +59,5 @@ Every documentation file in `docs/` (except changelogs) MUST contain a `## Chang
 
 ## Changelog
 - 2026.04.06.00: Clarified and then finalized the workflow around the current flat `src/` service layout and required document synchronization. See [2026.04.06.00.md](../../changelogs/2026.04.06.00.md)
+
+- 2026.04.07.00: Updated to reflect 1-hour lease model and stats recalculation logic. See [2026.04.07.00.md](../../changelogs/2026.04.07.00.md)

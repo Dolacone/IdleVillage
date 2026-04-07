@@ -34,3 +34,5 @@ Embed 下方包含以下互動元件:
 - 在村莊時: 玩家可以看到完整的資源點列表與建築選項.
 - 在荒野時: 玩家僅能看到當前工作的進度與 [取消並回村] 的選項.
 - 自動重新整理: 玩家與選單互動時, 系統會重新計算 Until-Timestamp 數值, 確保顯示的飽食度與負重是最新的.
+
+- 2026.04.07.00: Updated to reflect 1-hour lease model and stats recalculation logic. See [2026.04.07.00.md](../../changelogs/2026.04.07.00.md)
