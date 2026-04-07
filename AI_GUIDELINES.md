@@ -18,7 +18,7 @@
 - Owner Only: `/idlevillage-initial` must check for `ALLOWED_OWNER_ID`.
 
 ## Commit & Workflow Standards
-- Commit Format: `type: [YYYY.MM.DD.NN] description` (e.g., `feat: [2026.04.07.00] implement ...`).
+- Commit Format: `[YYYY.MM.DD.NN] type: description` (e.g., `[2026.04.07.00] feat: implement ...`).
 - Status Lifecycle: Draft -> In-Progress -> Done. (SSOT: `docs/core/development_workflow.md`)
 
 ## Testing Standards

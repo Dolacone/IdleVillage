@@ -18,7 +18,7 @@ Every significant change must follow this lifecycle.
 ### Phase 2: Implementation
 - Status: `In-Progress`
 - Action: AI implements changes in a feature branch (e.g., `feat/2026.04.06.00`).
-- Commit: Every commit message must include the version, e.g., `feat: [2026.04.06.00] implement ...`.
+- Commit: Every commit message must include the version, e.g., `[2026.04.06.00] feat: implement ...`.
 
 ### Phase 3: Finalization
 - Action: AI updates all affected documents (see below).
