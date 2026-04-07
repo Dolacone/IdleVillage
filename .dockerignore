@@ -1,7 +1,6 @@
 data/
 tests/
 docs/
-.env
 .env.example
 .gitignore
 README.md
