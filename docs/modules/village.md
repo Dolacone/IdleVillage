@@ -7,16 +7,18 @@
 - 需透過指令 `/idlevillage-initial` 進行初始化綁定.
 
 ### 2. 共用倉庫基礎邏輯 (Repository Logic)
-- 資源入庫: 玩家抵達村莊時, 將身上的資源 (Wood, Stone, Food) 累加至村莊表, 並歸零個人負重.
-- 自動補給 (Satiety Refill):
-  - 觸發時機: 玩家進入 `idle` 狀態時, 或玩家位於村莊並準備由 `idle` 狀態離開開始下一個行動時.
-  - 條件: 只要玩家位於村莊並進入上述檢查時機, 就會嘗試補滿至 100 小時.
-  - 消耗村莊糧食以恢復飽食度:
-    - 所需小時數 = 100 - 剩餘小時數.
-    - 消耗糧食量 = 所需小時數 / Food Efficiency.
-    - 更新 satiety_deadline = Now + 100 小時.
-  - 恢復效率受 Food Efficiency 建築加成.
-
+- 資源預扣 (Pre-deduction): 
+  - 任何非 `idle` 行動在 1 小時循環開始時, 立即扣除村莊倉庫所需資源 (糧食、木材、石材).
+  - 資源扣除採先結算者優先 (First-come, first-served).
+  - 資源一經扣除概不退還 (Non-refundable).
+- 自動續期判定 (Auto-restart Check):
+  - 1 小時循環結束後, 系統檢查村莊倉庫資源.
+  - 若資源不足以支付下一個 1 小時循環, 玩家狀態將自動變更為 `idle`.
+- 資源入庫 (Settlement):
+  - 行動完成後, 產出的資源直接累加至村莊表.
+- 溢出處理: 
+  - 若存入資源後超過 `Storage Capacity` 建築提供的上限, 溢出的資源將直接被捨棄 (Discarded).
+- 歸零: 轉移完成後, 玩家個人的暫存數據歸零.
 
 ### 3. 混合式損耗演算法 (Hybrid Decay)
 為了確保離線期間建築仍會損壞, 採用延遲結算模型:
@@ -27,13 +29,22 @@
   3. 套用: 將 villages 表中所有 XP 欄位減去總損耗 (最小為 0).
   4. 更新: last_tick_time = 現在時間.
 
-### 4. 平衡性參數 (Balance Numbers)
-- 初始糧食: 100.
+### 4. 建築效果調整 (Building Effects)
+- 糧食效率 (Food Efficiency): 提升單位糧食的可支撐時長.
+  - 公式: 1 單位糧食可供行動小時數 = 1.0 + (Level * 0.2).
+- 儲存容量 (Storage Capacity): 
+  - 總容量 = 1000 * (2 ^ Level).
+
+### 5. 平衡性參數 (Balance Numbers)
+- 初始糧食: 0.
 - 初始木材/石材: 0.
 - 損耗基礎值: 10/小時.
 
-### 5. 初始值 (Initial Village State)
-- 糧食: 100.
+### 6. 初始值 (Initial Village State)
+- 糧食: 0.
 - 木材/石材: 0.
 - 所有建築 XP: 0 (等級 0).
 - 上次結算時間: 創立時間 (Now).
+
+## Changelog
+- 2026.04.07.00: Replaced satiety refill with 1-hour lease logic. Updated building effects. See [2026.04.07.00.md](../../changelogs/2026.04.07.00.md)
