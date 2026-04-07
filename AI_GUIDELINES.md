@@ -21,6 +21,12 @@
 - Commit Format: `type: [YYYY.MM.DD.NN] description` (e.g., `feat: [2026.04.07.00] implement ...`).
 - Status Lifecycle: Draft -> In-Progress -> Done. (SSOT: `docs/core/development_workflow.md`)
 
+## Testing Standards
+- Mechanic-First Tests: Tests should be named and structured around documented game behaviors in `docs/modules/`, not around implementation details.
+- Implementation Phase: The implementing agent should add or update automated tests for any changed mechanic and run `.venv/bin/python -m unittest discover -s tests -v` before handoff.
+- Verification Phase: The reviewing agent must audit both the code and the tests against `docs/modules/`; passing tests are evidence, not ground truth.
+- Expected Failures: Use `expectedFailure` only for known, explicitly acknowledged gaps. Review output must distinguish them from unexpected regressions.
+
 ## Database Standards
 - Use `aiosqlite` for asynchronous connections.
 - Table names are plural. Parse `docs/` for table structures (Markdown SSOT).
