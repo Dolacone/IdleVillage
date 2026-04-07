@@ -3,7 +3,7 @@ import math
 from datetime import datetime, timedelta
 import disnake
 from disnake.ext import tasks
-from src.database.schema import get_connection
+from database.schema import get_connection
 
 class Engine:
     """Core game engine handling settlements and triggers."""

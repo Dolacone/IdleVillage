@@ -1,0 +1,16 @@
+data/
+tests/
+docs/
+.env
+.env.example
+.gitignore
+README.md
+AI_GUIDELINES.md
+fly.toml
+Dockerfile
+.git/
+__pycache__/
+**/*.pyc
+.pytest_cache/
+.venv/
+venv/

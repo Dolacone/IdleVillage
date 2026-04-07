@@ -29,3 +29,11 @@
 - DISCORD_TOKEN=your_bot_token_here
 - DATABASE_PATH=data/village.db
 - DEBUG=1
+
+### 3. 本地執行
+
+- 安裝依賴: `pip install -r src/requirements.txt`
+- 啟動 Bot: `python src/main.py`
+
+## Changelog
+- **2026.04.06.00**: Updated setup instructions for the flat `src/` runtime layout and `.env.example` flow. See [2026.04.06.00.md](./changelogs/2026.04.06.00.md)

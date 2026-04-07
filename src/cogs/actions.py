@@ -1,8 +1,8 @@
 import disnake
 from disnake.ext import commands
 import datetime
-from src.database.schema import get_connection
-from src.core.engine import Engine
+from database.schema import get_connection
+from core.engine import Engine
 
 class ActionSubmitButton(disnake.ui.Button):
     def __init__(self, action: str, target: str):

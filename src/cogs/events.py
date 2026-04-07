@@ -1,7 +1,7 @@
 import disnake
 from disnake.ext import commands
 import datetime
-from src.database.schema import get_connection
+from database.schema import get_connection
 
 ALLOWED_OWNER_ID = 151517260622594048
 

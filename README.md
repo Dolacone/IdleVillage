@@ -15,14 +15,16 @@
 ## 3. 專案結構 (Project Structure)
 - `docs/core/`: 核心系統邏輯 (引擎, 玩家系統, 村莊系統).
 - `docs/modules/`: 遊戲玩法的模組化定義 (建築, 資源, 探索).
+- `src/`: Discord Bot 服務主體.
 - `src/core/`: 實作結算與計算引擎.
 - `src/cogs/`: Discord 互動指令與介面.
 - `src/database/`: 基於 Markdown 定義的資料庫動態管理.
+- `tests/`: 自動化測試根目錄 (不打包進 Docker).
 
 ## 4. 快速啟動 (Quick Start)
 1. 複製 `.env.example` 並填寫 `DISCORD_TOKEN`.
-2. 安裝依賴: `pip install -r requirements.txt`.
-3. 執行: `python main.py`.
+2. 安裝依賴: `pip install -r src/requirements.txt`.
+3. 執行: `python src/main.py`.
 
 ## 5. 遊戲發展流程
 1. 提案: 玩家在社群中討論並提出新的模組想法 (例如: 釣魚, 鍛造).

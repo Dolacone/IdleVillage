@@ -15,7 +15,10 @@
 - `player_actions_log` is transition-based: record completed action segments using `action_type`, `start_time`, and `end_time`. Do not default to hourly stat-category rows unless the docs are explicitly changed.
 
 ## Commit Standards
-- Use Conventional Commits for all changes:
+- Use Conventional Commits with versioning (e.g., `feat: [2026.04.06.00] ...`).
+- All significant changes MUST follow the lifecycle defined in `docs/core/development_workflow.md`.
+- Status transition: Draft -> In-Progress -> Done.
+- Conventional Commit types:
   - `feat:`: New features or game modules.
   - `fix:`: Bug fixes in logic or commands.
   - `docs:`: Updates to game design or documentation.
@@ -37,8 +40,9 @@
 - Satiety should only drain while the player is not `idle`. Refill checks should happen at village idle boundaries according to the current design docs.
 
 ## Project Structure
-- `src/cogs/`: Command implementations.
-- `src/core/`: Game engine and logic (stats, settlement, satiety).
-- `src/database/`: DB connection and schema management.
-- `data/`: Local SQLite storage (excluded from git).
+- `src/`: Core application source (entrypoint, cogs, core, database, requirements).
+- `data/`: Local SQLite storage (excluded from git and docker).
+- `tests/`: Root-level automated test suite (excluded from Docker images).
 - `docs/`: Game design and planning documents.
+- `docs/changelogs/`: Historical change plans and changelogs.
+- `docs/core/development_workflow.md`: Standards for versioning and AI collaboration.
