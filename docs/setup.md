@@ -24,11 +24,12 @@
 
 ### 2. 環境變數配置 (.env)
 
-在專案根目錄建立 .env 檔案:
+在專案根目錄建立 .env 檔案, 並參考 `.env.example`:
 
-- DISCORD_TOKEN=your_bot_token_here
-- DATABASE_PATH=data/village.db
-- DEBUG=1
+- `DISCORD_TOKEN`: 機器人存取憑證.
+- `DATABASE_PATH`: 資料庫儲存路徑 (預設 `data/village.db`).
+- `ADMIN_IDS`: 允許執行管理指令 (Initial/Announcement) 的 Discord ID 清單 (以逗號分隔).
+- `ACTION_CYCLE_MINUTES`: 遊戲倍速/行動週期長度 (分鐘, 預設 `60`).
 
 ### 3. 本地執行
 
@@ -36,6 +37,6 @@
 - 啟動 Bot: `python src/main.py`
 
 ## Changelog
-- 2026.04.06.00: Updated setup instructions for the flat `src/` runtime layout and `.env.example` flow. See [2026.04.06.00.md](./changelogs/2026.04.06.00.md)
-
-- 2026.04.07.00: Updated to reflect 1-hour lease model and stats recalculation logic. See [2026.04.07.00.md](../../changelogs/2026.04.07.00.md)
+- 2026.04.06.00: Updated setup instructions for the flat `src/` runtime layout and `.env.example` flow. - See [2026.04.06.00.md](changelogs/2026.04.06.00.md)
+- 2026.04.07.00: Updated to reflect 1-hour lease model and stats recalculation logic. - See [2026.04.07.00.md](changelogs/2026.04.07.00.md)
+- 2026.04.08.00: Added ADMIN_IDS and ACTION_CYCLE_MINUTES configuration details. - See [2026.04.08.00.md](changelogs/2026.04.08.00.md)

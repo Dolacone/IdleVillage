@@ -1,0 +1,34 @@
+# Interface: Village Announcement
+
+定義伺服器公開頻道中的村莊公告看板格式.
+
+### 1. 顯示規則
+- **訊息類型:** 純文字訊息 (使用 Code Block ` ``` ` 包裹以實現等寬對齊).
+- **更新機制:** 當村莊中有玩家執行 `/idlevillage` 時嘗試觸發更新.
+- **節流控制 (Throttling)**: 每次公告更新後需冷卻 60 秒 (由資料庫 `last_announcement_updated` 紀錄).
+- **排序邏輯:** 村民列表依據「最後行動開始時間 (start_time)」降序排列 (Latest at top).
+- **活躍定義:** 僅列出目前非 `missing` 狀態的玩家.
+
+### 2. 訊息格式模板 (Template)
+```text
+=== [ VILLAGE NAME ] STATUS REPORT ===
+Resources: 🍎 {food} | 🪵 {wood} | 🪨 {stone} (Cap: {max})
+Buildings: 🌾 廚房 Lv{lv} | 📦 倉庫 Lv{lv} | ⚒️ 加工 Lv{lv}
+
+--- ACTIVE VILLAGERS (Sorted by latest action) ---
+{Player_Name} | 💪{STR} 🏃{AGI} 👁️{PER} 🧠{KNO} 🔋{END} | {Status_Text}
+{Player_Name} | 💪{STR} 🏃{AGI} 👁️{PER} 🧠{KNO} | {Status_Text}
+...
+(Last Update: {YYYY-MM-DD HH:MM:SS} UTC)
+```
+
+### 3. 欄位規範與截斷
+- **Player Name**: 截斷至 12 字元.
+- **Status Text**: 顯示當前動作 (e.g., Gathering, Building, Exploring, Idle).
+- **字元限制**: 若村民過多導致訊息超過 2000 字, 僅顯示前 20 位最活躍的村民.
+
+### 4. 錯誤處理
+- 若公告訊息 ID 遺失或被刪除, 系統應在下次更新嘗試時檢測到 404 錯誤, 並清除資料庫紀錄.
+
+## Changelog
+- 2026.04.08.00: Initial specification for Village Announcement dashboard. - See [2026.04.08.00.md](../changelogs/2026.04.08.00.md)
