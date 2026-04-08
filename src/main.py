@@ -2,6 +2,7 @@ import os
 import disnake
 from disnake.ext import commands
 from dotenv import load_dotenv
+from core.engine import Engine
 from database.schema import init_db
 
 load_dotenv()
@@ -16,7 +17,7 @@ class IdleVillageBot(commands.InteractionBot):
         print("Initializing database schemas...")
         await init_db()
 
-        from core.engine import Engine
+        Engine.set_bot(self)
         if not Engine.start_watcher_loop.is_running():
             Engine.start_watcher_loop.start()
             print("Watcher loop started.")

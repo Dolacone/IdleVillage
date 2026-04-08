@@ -54,17 +54,32 @@ except ImportError:
 
 
 from database import schema
+from core.engine import Engine
 
 
 class DatabaseTestCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.original_db_path = schema.DB_PATH
+        self.original_action_cycle_minutes = os.environ.get("ACTION_CYCLE_MINUTES")
+        self.original_admin_ids = os.environ.get("ADMIN_IDS")
         schema.DB_PATH = os.path.join(self.temp_dir.name, "test.db")
+        Engine.bot = None
+        os.environ.pop("ACTION_CYCLE_MINUTES", None)
+        os.environ.pop("ADMIN_IDS", None)
         await schema.init_db()
 
     async def asyncTearDown(self):
         schema.DB_PATH = self.original_db_path
+        if self.original_action_cycle_minutes is None:
+            os.environ.pop("ACTION_CYCLE_MINUTES", None)
+        else:
+            os.environ["ACTION_CYCLE_MINUTES"] = self.original_action_cycle_minutes
+        if self.original_admin_ids is None:
+            os.environ.pop("ADMIN_IDS", None)
+        else:
+            os.environ["ADMIN_IDS"] = self.original_admin_ids
+        Engine.bot = None
         self.temp_dir.cleanup()
 
     async def create_village(
@@ -149,7 +164,6 @@ class DatabaseTestCase(unittest.IsolatedAsyncioTestCase):
         village_id,
         *,
         node_type="food",
-        level=1,
         quality=100,
         remaining_amount=100,
         expiry_time=None,
@@ -158,14 +172,13 @@ class DatabaseTestCase(unittest.IsolatedAsyncioTestCase):
             await db.execute(
                 """
                 INSERT INTO resource_nodes (
-                    village_id, type, level, quality, remaining_amount, expiry_time
+                    village_id, type, quality, remaining_amount, expiry_time
                 )
-                VALUES (?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?)
                 """,
                 (
                     village_id,
                     node_type,
-                    level,
                     quality,
                     remaining_amount,
                     (expiry_time or (datetime.utcnow() + timedelta(hours=4))).isoformat(),

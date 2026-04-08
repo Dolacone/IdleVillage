@@ -23,16 +23,20 @@
   - 廚房: `Lv.{lv} [XP: {curr} / {next}]`
   - 倉庫: `Lv.{lv} [XP: {curr} / {next}]`
   - 加工: `Lv.{lv} [XP: {curr} / {next}]`
+  - 備註: 建築名稱與 `Lv.` 之間僅保留單一空格, XP 數值需使用千分位格式 (例如 `1,000`).
 
 - **👤 Player Status** (位於 Embed 最下方)
   - **Stats:** `💪 STR {val} | 🏃 AGI {val} | 👁️ PER {val} | 🧠 KNO {val} | 🔋 END {val}`
   - **Status:** 顯示當前行動、最後互動時間與下次結算時間 (當地時區時標).
-    - 範例: `⛏️ Gathering Stone (Last activity: <t:{ts}:t>, Next check: <t:{ts}:R>)`
-    - 閒置範例: `🏕️ Idle (Last activity: <t:{ts}:t>, Next check: <t:{ts}:R>)`
+    - 範例: `Gathering Stone (Last activity: <t:{ts}:t>, Next check: <t:{ts}:R>)`
+    - 閒置範例: `Idle (Last activity: <t:{ts}:t>, Next check: Manual refresh)`
 
 #### 2.2 互動組件 (Components)
 - **Dropdown: Action Category** (Gather, Build, Explore, Return to Village)
 - **Dropdown: Sub-menu** (動態顯示對應節點或建築)
+  - Gather 節點格式: `{Type} Node`
+  - Gather 描述格式: `Stock {amount} | Quality {quality}%`
+  - 玩家選取目標後, 第二層下拉選單需保留已選中的 target, 再顯示 Submit 按鈕.
 - **Button: Submit** (Green, Start Action)
 - **Button: Refresh** (Gray, 🔄 Refresh Status, 設有 5 秒冷卻)
 

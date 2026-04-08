@@ -22,7 +22,7 @@ class EngineWatcherBehaviorTests(DatabaseTestCase):
             status="idle",
             last_message_time="",
             last_update_time=now - timedelta(hours=1),
-            completion_time=now - timedelta(minutes=1),
+            completion_time=now,
         )
 
         await Engine.process_watcher()
@@ -34,7 +34,7 @@ class EngineWatcherBehaviorTests(DatabaseTestCase):
 
         self.assertIsNone(expired_node)
         self.assertEqual(active_node[0], active_node_id)
-        self.assertEqual(village[0], 7)
+        self.assertEqual(village[0], 10)
         self.assertEqual(logs, [("idle",)])
 
     async def test_player_system_inactive_players_become_missing_after_7_days(self):

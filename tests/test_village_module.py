@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timedelta
 
 from support import DatabaseTestCase
@@ -5,19 +6,16 @@ from core.engine import Engine
 
 
 class VillageModuleBehaviorTests(DatabaseTestCase):
-
-    async def test_village_pre_deduction_applies_at_action_start(self):
-        village_id = await self.create_village(food=5, wood=20, stone=10, food_efficiency_xp=1000)
+    async def test_village_pre_deduction_uses_food_efficiency_and_cycle_minutes(self):
+        os.environ["ACTION_CYCLE_MINUTES"] = "30"
+        village_id = await self.create_village(food=15, wood=20, stone=10, food_efficiency_xp=1000)
         player_id = await self.create_player(village_id)
 
         success = await Engine.start_action(player_id, "building", 1)
 
         self.assertTrue(success)
-        village = await self.fetchone(
-            "SELECT food, wood, stone FROM villages WHERE id = ?",
-            (village_id,),
-        )
-        self.assertEqual(village, (4, 10, 5))
+        village = await self.fetchone("SELECT food, wood, stone FROM villages WHERE id = ?", (village_id,))
+        self.assertEqual(village, (6, 10, 5))
 
         player = await self.fetchone(
             "SELECT status, target_id, last_update_time, completion_time FROM players WHERE id = ?",
@@ -28,8 +26,8 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
 
         last_update = Engine._parse_timestamp(player[2])
         completion = Engine._parse_timestamp(player[3])
-        duration_hours = (completion - last_update).total_seconds() / 3600.0
-        self.assertAlmostEqual(duration_hours, 1.2, places=2)
+        duration_minutes = (completion - last_update).total_seconds() / 60.0
+        self.assertAlmostEqual(duration_minutes, 30.0, places=2)
 
     async def test_village_hybrid_decay_uses_base_plus_active_players(self):
         last_tick = datetime.utcnow() - timedelta(hours=2)
@@ -54,7 +52,7 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         self.assertEqual(village, (78, 78, 78))
 
     async def test_village_interrupted_action_settles_partial_progress(self):
-        village_id = await self.create_village()
+        village_id = await self.create_village(food=0)
         node_id = await self.create_resource_node(village_id, node_type="food", quality=100, remaining_amount=100)
         now = datetime.utcnow()
         player_id = await self.create_player(
@@ -72,15 +70,15 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         village = await self.fetchone("SELECT food FROM villages WHERE id = ?", (village_id,))
         player = await self.fetchone("SELECT status, target_id, completion_time FROM players WHERE id = ?", (player_id,))
         node = await self.fetchone("SELECT remaining_amount FROM resource_nodes WHERE id = ?", (node_id,))
-        log = await self.fetchone(
+        log_row = await self.fetchone(
             "SELECT action_type FROM player_actions_log WHERE player_id = ? ORDER BY id DESC LIMIT 1",
             (player_id,),
         )
 
-        self.assertEqual(village[0], 2)
+        self.assertEqual(village[0], 5)
         self.assertEqual(player, ("idle", None, None))
-        self.assertEqual(node[0], 98)
-        self.assertEqual(log[0], "gathering_food")
+        self.assertEqual(node[0], 95)
+        self.assertEqual(log_row[0], "gathering_food")
 
     async def test_resources_gathering_requires_a_real_node(self):
         village_id = await self.create_village(food=3)
@@ -94,6 +92,24 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         self.assertEqual(village[0], 3)
         self.assertEqual(player[0], "idle")
 
+    async def test_ui_refresh_keeps_next_cycle_when_action_has_already_completed(self):
+        village_id = await self.create_village(food=20, wood=20, stone=10)
+        now = datetime.utcnow()
+        player_id = await self.create_player(
+            village_id,
+            status="building",
+            target_id=1,
+            last_update_time=now - timedelta(hours=2),
+            completion_time=now - timedelta(hours=1),
+        )
 
-if __name__ == "__main__":
-    unittest.main()
+        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+            await Engine.settle_player(player_id, db, is_ui_refresh=True)
+
+        player = await self.fetchone(
+            "SELECT status, target_id, completion_time FROM players WHERE id = ?",
+            (player_id,),
+        )
+        self.assertEqual(player[0], "building")
+        self.assertEqual(player[1], 1)
+        self.assertIsNotNone(player[2])

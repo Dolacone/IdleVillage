@@ -23,5 +23,10 @@
 | storage_capacity_xp | INTEGER | |
 | resource_yield_xp | INTEGER | |
 | last_tick_time | TIMESTAMP | |
+| announcement_channel_id | TEXT | 公告面板所在的頻道 ID |
+| announcement_message_id | TEXT | 公告面板訊息 ID |
+| last_announcement_updated | TIMESTAMP | 上次公開儀表板刷新的時間 |
 
+## Changelog
 - 2026.04.07.00: Updated to reflect 1-hour lease model and stats recalculation logic. See [2026.04.07.00.md](../../changelogs/2026.04.07.00.md)
+- 2026.04.08.00: Added announcement channel/message tracking fields for the public village dashboard. See [2026.04.08.00.md](../../changelogs/2026.04.08.00.md)

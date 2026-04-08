@@ -14,10 +14,10 @@
 | discord_id | TEXT | (discord_id, village_id) 組合為 Unique |
 | village_id | INTEGER (FK) | 關聯至 villages.id |
 | last_message_time | TIMESTAMP | 用於追蹤玩家活躍度 (7 天內發言或行動) |
-| status | TEXT | idle, gathering, building, missing |
+| status | TEXT | idle, gathering, building, exploring, missing |
 | target_id | INTEGER | 當前行動的目標 ID (如果是採集則為 resource_nodes.id, 建設則為建築類別) |
-| last_update_time | TIMESTAMP | 上次結算產出的時間 |
-| completion_time | TIMESTAMP | 當前 1 小時循環的預計完成時間 |
+| last_update_time | TIMESTAMP | 本次行動片段開始或上次結算的時間 |
+| completion_time | TIMESTAMP | 當前 Action Cycle 的預計完成時間 |
 
 ### 3. 初始值 (Initial Values for New Players)
 - Status: idle
@@ -26,3 +26,4 @@
 
 ## Changelog
 - 2026.04.07.00: Simplified status and schema. Removed weight and satiety. See [2026.04.07.00.md](../../changelogs/2026.04.07.00.md)
+- 2026.04.08.00: Added exploring to the active player states and clarified Action Cycle timing fields. See [2026.04.08.00.md](../../changelogs/2026.04.08.00.md)

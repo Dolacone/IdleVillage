@@ -3,8 +3,6 @@ from disnake.ext import commands
 import datetime
 from database.schema import get_connection
 
-ALLOWED_OWNER_ID = 151517260622594048
-
 class EventsCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
