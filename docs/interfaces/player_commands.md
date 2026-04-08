@@ -7,6 +7,7 @@
 - `/idlevillage-help`: [暫不實作] 顯示遊戲指南.
 - `/idlevillage-announcement`: [管理員] 在當前頻道發布村莊公告訊息 (Public).
 - `/idlevillage-initial`: [管理員] 初始化村莊.
+- `/idlevillage-admin`: [管理員] 管理村莊資源與節點.
 
 ### 2. 個人主介面 (/idlevillage)
 這是一個包含 Embed 與多個互動組件的隱藏訊息 (Ephemeral).
@@ -29,7 +30,7 @@
   - **Stats:** `💪 STR {val} | 🏃 AGI {val} | 👁️ PER {val} | 🧠 KNO {val} | 🔋 END {val}`
   - **Status:** 顯示當前行動、最後互動時間與下次結算時間 (當地時區時標).
     - 範例: `Gathering Stone (Last activity: <t:{ts}:t>, Next check: <t:{ts}:R>)`
-    - 閒置範例: `Idle (Last activity: <t:{ts}:t>, Next check: Manual refresh)`
+    - 閒置範例: `Idle (Last activity: <t:{ts}:t>, Next check: <t:{ts}:R>)`
 
 #### 2.2 互動組件 (Components)
 - **Dropdown: Action Category** (Gather, Build, Explore, Return to Village)
@@ -40,7 +41,13 @@
 - **Button: Submit** (Green, Start Action)
 - **Button: Refresh** (Gray, 🔄 Refresh Status, 設有 5 秒冷卻)
 
-### 3. 間隔控制規範 (Interval Control)
+### 3. 管理員指令 (/idlevillage-admin)
+[僅限管理員] 用於手動調整村莊狀態.
+- 目前透過參數組合執行:
+  - `mode=resource set`, `target=food|wood|stone`, `amount=<數值>`: 設定資源數值.
+  - `mode=node remove`, `target=<node_id>`: 移除指定的資源節點.
+
+### 4. 間隔控制規範 (Interval Control)
 - **Action Cycle Duration**: 由環境變數 `ACTION_CYCLE_MINUTES` 定義.
 - **Refresh Button Cooldown**: 5 秒.
 - **Announcement Throttling**: 60 秒.
@@ -48,3 +55,4 @@
 
 ## Changelog
 - 2026.04.08.00: Initial specification for modernized /idlevillage interface and interval controls. - See [2026.04.08.00.md](../changelogs/2026.04.08.00.md)
+- 2026.04.08.02: Added /idlevillage-admin command and fixed next check display for idle players. - See [2026.04.08.02.md](../changelogs/2026.04.08.02.md)

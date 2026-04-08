@@ -160,7 +160,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         await cog.idlevillage_initial.callback(cog, inter)
 
         village = await self.fetchone("SELECT food, wood, stone FROM villages WHERE id = ?", (77,))
-        self.assertEqual(village, (100, 0, 0))
+        self.assertEqual(village, (1000, 1000, 1000))
         self.assertEqual(inter.response.calls[-1]["ephemeral"], True)
 
     async def test_village_binding_rejects_reuse_on_existing_server(self):
@@ -310,6 +310,30 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         self.assertIn(f"<t:{Engine._to_discord_unix(last_update)}:t>", player_status_field.value)
         self.assertIn(f"<t:{Engine._to_discord_unix(completion_time)}:R>", player_status_field.value)
 
+    async def test_idlevillage_embed_shows_next_cycle_for_idle_players(self):
+        village_id = await self.create_village(guild_id=68)
+        last_update = datetime(2026, 4, 8, 0, 15, 0)
+        player_discord_id = await self.create_player(
+            village_id,
+            discord_id=323,
+            status="idle",
+            last_update_time=last_update,
+            completion_time=None,
+        )
+
+        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+            embed = await _build_embed(
+                SimpleNamespace(guild=SimpleNamespace(name="Village 68")),
+                db,
+                village_id,
+                player_discord_id,
+            )
+
+        player_status_field = next(field for field in embed.fields if field.name == "Player Status")
+        expected_next_check = Engine._next_idle_completion(last_update)
+        self.assertIn(f"<t:{Engine._to_discord_unix(expected_next_check)}:R>", player_status_field.value)
+        self.assertNotIn("Manual refresh", player_status_field.value)
+
     async def test_village_announcement_uses_human_readable_names_without_emojis(self):
         village_id = await self.create_village(guild_id=88)
         player_discord_id = await self.create_player(village_id, discord_id=999, status="idle")
@@ -329,5 +353,74 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         self.assertIn("Resources: 食物", announcement)
         self.assertIn("Buildings: 廚房", announcement)
         self.assertIn("User 999", announcement)
+        self.assertIn("[Idle]", announcement)
         self.assertNotIn("🍎", announcement)
         self.assertNotIn("🌾", announcement)
+        self.assertNotIn("STR", announcement)
+        self.assertNotIn("AGI", announcement)
+
+    async def test_admin_command_can_set_village_resources(self):
+        await self.create_village(guild_id=90, food=5, wood=6, stone=7)
+        cog = General(bot=_FakeBot())
+        inter = SimpleNamespace(
+            author=SimpleNamespace(id=ALLOWED_OWNER_ID),
+            guild=SimpleNamespace(id=90),
+            response=_FakeResponse(),
+        )
+
+        await cog.idlevillage_admin.callback(cog, inter, "resource set", "wood", 4321)
+
+        village = await self.fetchone("SELECT food, wood, stone FROM villages WHERE id = ?", (90,))
+        self.assertEqual(village, (5, 4321, 7))
+        self.assertIn("4,321", inter.response.calls[-1]["content"])
+        self.assertTrue(inter.response.calls[-1]["ephemeral"])
+
+    async def test_admin_command_can_remove_resource_node(self):
+        village_id = await self.create_village(guild_id=91)
+        node_id = await self.create_resource_node(village_id, node_type="stone", remaining_amount=25)
+        cog = General(bot=_FakeBot())
+        inter = SimpleNamespace(
+            author=SimpleNamespace(id=ALLOWED_OWNER_ID),
+            guild=SimpleNamespace(id=91),
+            response=_FakeResponse(),
+        )
+
+        await cog.idlevillage_admin.callback(cog, inter, "node remove", str(node_id), None)
+
+        node = await self.fetchone("SELECT id FROM resource_nodes WHERE id = ?", (node_id,))
+        self.assertIsNone(node)
+        self.assertIn("Stone node", inter.response.calls[-1]["content"])
+
+    async def test_settle_player_posts_idle_and_node_expiry_notifications(self):
+        village_id = await self.create_village(guild_id=92)
+        node_id = await self.create_resource_node(village_id, node_type="food", quality=100, remaining_amount=20)
+        now = datetime.utcnow()
+        player_discord_id = await self.create_player(
+            village_id,
+            discord_id=987,
+            status="gathering",
+            target_id=node_id,
+            last_update_time=now - timedelta(hours=1),
+            completion_time=now,
+        )
+        bot = _FakeBot()
+        bot.register_guild(92)
+        Engine.bot = bot
+
+        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+            await db.execute(
+                """
+                UPDATE villages
+                SET announcement_channel_id = ?
+                WHERE id = ?
+                """,
+                ("456", village_id),
+            )
+            await db.commit()
+            await Engine.settle_player(player_discord_id, village_id, db)
+
+        messages = [message.content for message in bot.get_channel(456).messages.values()]
+        event_messages = [message for message in messages if not message.startswith("```text")]
+        self.assertEqual(len(event_messages), 2)
+        self.assertTrue(any("out of stock" in message for message in event_messages))
+        self.assertTrue(any("<@987>" in message and "now idle" in message for message in event_messages))

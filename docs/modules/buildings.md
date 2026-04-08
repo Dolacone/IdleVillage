@@ -12,7 +12,7 @@
 - 屬性掛鉤 (Efficiency Stats):
   - 建設效率: 知識 (KNO) + 耐力 (END).
 - 效率公式: (知識 + 耐力) / 2 / 100.
-- 產出公式: 基礎產出 (20 XP) * 效率係數 * (實際持續分鐘 / ACTION_CYCLE_MINUTES).
+- 產出公式: 基礎產出 (50 XP) * 效率係數 * (實際持續分鐘 / ACTION_CYCLE_MINUTES).
 
 ### 2. XP 與等級門檻
 - 採用指數成長門檻, 每級所需 XP 加倍.
@@ -33,3 +33,4 @@
 ## Changelog
 - 2026.04.07.00: Defined construction efficiency and 1-hour cycle building process. - See [2026.04.07.00.md](../changelogs/2026.04.07.00.md)
 - 2026.04.08.00: Refactored to Cycle-based logic and aligned base output to 20 XP. - See [2026.04.08.00.md](../changelogs/2026.04.08.00.md)
+- 2026.04.08.02: Increased base output from 20 XP to 50 XP. - See [2026.04.08.02.md](../changelogs/2026.04.08.02.md)

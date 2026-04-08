@@ -114,9 +114,9 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
             (player_discord_id, village_id),
         )
 
-        self.assertEqual(village[0], 5)
+        self.assertEqual(village[0], 12)
         self.assertEqual(player, ("idle", None, None))
-        self.assertEqual(node[0], 95)
+        self.assertEqual(node[0], 88)
         self.assertEqual(log_row[0], "gathering_food")
 
     async def test_resources_gathering_requires_a_real_node(self):
@@ -208,7 +208,7 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
             (player_discord_id, village_id),
         )
 
-        self.assertEqual(village, (40, 40, 70, 50))
+        self.assertEqual(village, (40, 40, 70, 129))
         self.assertEqual(player[0], "building")
         self.assertEqual(player[1], 1)
         self.assertIsNotNone(player[2])
@@ -259,4 +259,4 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
             "SELECT food_efficiency_xp FROM villages WHERE id = ?",
             (village_id,),
         )
-        self.assertEqual(village[0], 99)
+        self.assertEqual(village[0], 251)

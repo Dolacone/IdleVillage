@@ -144,8 +144,12 @@ async def _build_embed(inter, db, village_id: int, player_discord_id: int):
     else:
         last_activity_text = "Unknown"
 
-    if completion_time:
-        next_check_text = f"<t:{Engine._to_discord_unix(completion_time)}:R>"
+    next_check_time = completion_time
+    if status == "idle":
+        next_check_time = Engine._next_idle_completion(last_update)
+
+    if next_check_time:
+        next_check_text = f"<t:{Engine._to_discord_unix(next_check_time)}:R>"
     else:
         next_check_text = "Manual refresh"
 
