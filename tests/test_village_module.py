@@ -33,15 +33,16 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         duration_minutes = (completion - last_update).total_seconds() / 60.0
         self.assertAlmostEqual(duration_minutes, 30.0, places=2)
 
-    async def test_village_hybrid_decay_uses_base_plus_active_players(self):
-        last_tick = datetime.utcnow() - timedelta(hours=2)
+    async def test_village_dynamic_decay_matches_small_village_target(self):
+        last_tick = datetime.utcnow() - timedelta(hours=1)
         village_id = await self.create_village(
-            food_efficiency_xp=100,
-            storage_capacity_xp=100,
-            resource_yield_xp=100,
+            food_efficiency_xp=3000,
+            storage_capacity_xp=3000,
+            resource_yield_xp=3000,
             last_tick_time=last_tick,
         )
-        await self.create_player(village_id, last_message_time=datetime.utcnow(), status="idle")
+        for _ in range(5):
+            await self.create_player(village_id, last_message_time=datetime.utcnow(), status="idle")
 
         async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
             await Engine.settle_village(village_id, db)
@@ -53,15 +54,61 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
             """,
             (village_id,),
         )
-        self.assertEqual(village, (78, 78, 78))
+        self.assertEqual(village, (2994, 2994, 2994))
 
-    async def test_village_decay_uses_cycle_units_for_short_heartbeat(self):
+    async def test_village_dynamic_decay_matches_mid_village_target(self):
+        last_tick = datetime.utcnow() - timedelta(hours=1)
+        village_id = await self.create_village(
+            food_efficiency_xp=31000,
+            storage_capacity_xp=31000,
+            resource_yield_xp=31000,
+            last_tick_time=last_tick,
+        )
+        for _ in range(10):
+            await self.create_player(village_id, last_message_time=datetime.utcnow(), status="idle")
+
+        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+            await Engine.settle_village(village_id, db)
+
+        village = await self.fetchone(
+            """
+            SELECT food_efficiency_xp, storage_capacity_xp, resource_yield_xp
+            FROM villages WHERE id = ?
+            """,
+            (village_id,),
+        )
+        self.assertEqual(village, (30772, 30772, 30772))
+
+    async def test_village_dynamic_decay_matches_extreme_village_target(self):
+        last_tick = datetime.utcnow() - timedelta(hours=1)
+        village_id = await self.create_village(
+            food_efficiency_xp=511000,
+            storage_capacity_xp=511000,
+            resource_yield_xp=511000,
+            last_tick_time=last_tick,
+        )
+        for _ in range(100):
+            await self.create_player(village_id, last_message_time=datetime.utcnow(), status="idle")
+
+        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+            await Engine.settle_village(village_id, db)
+
+        village = await self.fetchone(
+            """
+            SELECT food_efficiency_xp, storage_capacity_xp, resource_yield_xp
+            FROM villages WHERE id = ?
+            """,
+            (village_id,),
+        )
+        self.assertEqual(village, (458213, 458213, 458213))
+
+    async def test_village_dynamic_decay_uses_cycle_units_for_short_heartbeat(self):
         os.environ["ACTION_CYCLE_MINUTES"] = "1"
-        last_tick = datetime.utcnow() - timedelta(seconds=60)
+        last_tick = datetime.utcnow() - timedelta(seconds=30)
         village_id = await self.create_village(
-            food_efficiency_xp=100,
-            storage_capacity_xp=100,
-            resource_yield_xp=100,
+            food_efficiency_xp=5000,
+            storage_capacity_xp=5000,
+            resource_yield_xp=5000,
             last_tick_time=last_tick,
         )
         await self.create_player(village_id, last_message_time=datetime.utcnow(), status="idle")
@@ -76,7 +123,7 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
             """,
             (village_id,),
         )
-        self.assertEqual(village, (89, 89, 89))
+        self.assertEqual(village, (4995, 4995, 4995))
 
     async def test_village_interrupted_action_settles_partial_progress(self):
         village_id = await self.create_village(food=0)

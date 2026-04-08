@@ -91,6 +91,18 @@ class Engine:
         return last_update + timedelta(minutes=Engine._action_cycle_minutes())
 
     @staticmethod
+    def _building_decay_per_cycle(active_players: int, current_xp: int):
+        active_players = max(0, int(active_players or 0))
+        current_xp = max(0, int(current_xp or 0))
+        return int(active_players * 0.5) + int(current_xp * (0.001 + (current_xp / 5_000_000.0)))
+
+    @staticmethod
+    def _building_progress_line(building_id: int, xp: int):
+        level = Engine._building_level_from_xp(xp)
+        next_threshold = Engine._next_building_threshold(level)
+        return f"{Engine.BUILDING_NAMES[building_id]}: Lv.{level} [XP: {xp:,} / {next_threshold:,}]"
+
+    @staticmethod
     def _format_remaining_short(target_time: datetime, reference_time: datetime = None):
         if target_time is None:
             return "manual"
@@ -172,6 +184,24 @@ class Engine:
     @staticmethod
     async def send_idle_announcement(village_id: int, player_discord_id: int, bot=None, req_id: str = None, user_id=None):
         message = f"<@{player_discord_id}> You have finished your task and are now idle in the village."
+        return await Engine._announce_channel_message(
+            village_id,
+            message,
+            bot=bot,
+            req_id=req_id,
+            user_id=user_id,
+        )
+
+    @staticmethod
+    async def send_upgrade_announcement(
+        village_id: int,
+        building_name: str,
+        new_level: int,
+        bot=None,
+        req_id: str = None,
+        user_id=None,
+    ):
+        message = f"The village has successfully upgraded the {building_name} to Level {new_level}! 🎉"
         return await Engine._announce_channel_message(
             village_id,
             message,
@@ -292,12 +322,12 @@ class Engine:
         user_id=None,
     ):
         if end_time <= start_time or status == "missing":
-            return {"discoveries": [], "expired_nodes": []}
+            return {"discoveries": [], "expired_nodes": [], "upgrades": []}
 
         p_str, p_agi, p_per, p_kno, p_end = await Engine.recalculate_player_stats(player_discord_id, village_id, db)
         delta_seconds = max(0.0, (end_time - start_time).total_seconds())
         if delta_seconds <= 0:
-            return {"discoveries": [], "expired_nodes": []}
+            return {"discoveries": [], "expired_nodes": [], "upgrades": []}
 
         time_ratio = Engine._time_ratio(delta_seconds)
         await Engine._record_action_logs(
@@ -321,9 +351,10 @@ class Engine:
             village_row = await cursor.fetchone()
 
         if not village_row:
-            return {"discoveries": [], "expired_nodes": []}
+            return {"discoveries": [], "expired_nodes": [], "upgrades": []}
 
         discoveries = []
+        upgrades = []
         v_food, v_wood, v_stone, _food_eff_xp, v_storage_xp, v_yield_xp = village_row
         storage_capacity = Engine._storage_capacity(v_storage_xp)
         yield_mult = Engine._yield_multiplier(v_yield_xp)
@@ -379,6 +410,15 @@ class Engine:
             efficiency = (p_kno + p_end) / 2.0 / 100.0
             xp_gained = int(50 * efficiency * time_ratio)
             if xp_gained > 0:
+                xp_by_building = {
+                    1: _food_eff_xp,
+                    2: v_storage_xp,
+                    3: v_yield_xp,
+                }
+                previous_xp = xp_by_building.get(target_id, 0)
+                previous_level = Engine._building_level_from_xp(previous_xp)
+                new_xp = previous_xp + xp_gained
+                new_level = Engine._building_level_from_xp(new_xp)
                 if target_id == 1:
                     await db.execute(
                         "UPDATE villages SET food_efficiency_xp = food_efficiency_xp + ? WHERE id = ?",
@@ -393,6 +433,14 @@ class Engine:
                     await db.execute(
                         "UPDATE villages SET resource_yield_xp = resource_yield_xp + ? WHERE id = ?",
                         (xp_gained, village_id),
+                    )
+                if new_level > previous_level:
+                    upgrades.append(
+                        {
+                            "building_id": target_id,
+                            "building_name": Engine.BUILDING_NAMES.get(target_id, f"Building {target_id}"),
+                            "level": new_level,
+                        }
                     )
 
         elif status == "exploring" and time_ratio > 0:
@@ -454,7 +502,7 @@ class Engine:
                 ),
             )
 
-        return {"discoveries": discoveries, "expired_nodes": depleted_nodes}
+        return {"discoveries": discoveries, "expired_nodes": depleted_nodes, "upgrades": upgrades}
 
     @staticmethod
     async def settle_village(village_id: int, db=None, req_id: str = None, user_id=None):
@@ -488,23 +536,24 @@ class Engine:
 
             delta = (now - last_tick).total_seconds()
             cycle_units = delta / Engine._action_cycle_seconds()
-            active_threshold = (now - timedelta(days=7)).isoformat()
 
             async with db.execute(
                 """
                 SELECT count(*)
                 FROM players
                 WHERE village_id = ?
-                  AND (last_message_time >= ? OR status != 'missing')
+                  AND status != 'missing'
                 """,
-                (village_id, active_threshold),
+                (village_id,),
             ) as cursor:
                 active_count_row = await cursor.fetchone()
 
             active_count = active_count_row[0] if active_count_row else 0
-            decay = int(cycle_units * (10 + active_count))
+            food_decay = int(cycle_units * Engine._building_decay_per_cycle(active_count, food_xp))
+            storage_decay = int(cycle_units * Engine._building_decay_per_cycle(active_count, storage_xp))
+            yield_decay = int(cycle_units * Engine._building_decay_per_cycle(active_count, yield_xp))
 
-            if decay > 0:
+            if food_decay > 0 or storage_decay > 0 or yield_decay > 0:
                 await db.execute(
                     """
                     UPDATE villages
@@ -515,15 +564,23 @@ class Engine:
                     WHERE id = ?
                     """,
                     (
-                        max(0, food_xp - decay),
-                        max(0, storage_xp - decay),
-                        max(0, yield_xp - decay),
+                        max(0, food_xp - food_decay),
+                        max(0, storage_xp - storage_decay),
+                        max(0, yield_xp - yield_decay),
                         now.isoformat(),
                         village_id,
                     ),
                 )
                 await db.commit()
-                log_event(req_id, user_id, "SETTLE", f"Village {village_id} decay applied: {decay} XP")
+                log_event(
+                    req_id,
+                    user_id,
+                    "SETTLE",
+                    (
+                        f"Village {village_id} decay applied: "
+                        f"food={food_decay}, storage={storage_decay}, yield={yield_decay}"
+                    ),
+                )
 
         finally:
             if close_db:
@@ -673,6 +730,7 @@ class Engine:
 
             discoveries = []
             expired_nodes = []
+            upgrades = []
             send_idle_notification = False
             current_status = status
             current_target = target_id
@@ -698,6 +756,7 @@ class Engine:
                     )
                     discoveries.extend(slice_result["discoveries"])
                     expired_nodes.extend(slice_result["expired_nodes"])
+                    upgrades.extend(slice_result["upgrades"])
                     current_last_update = current_completion
 
                     if Engine._player_is_missing(last_message_time, last_command_time, now):
@@ -774,6 +833,7 @@ class Engine:
                 )
                 discoveries.extend(slice_result["discoveries"])
                 expired_nodes.extend(slice_result["expired_nodes"])
+                upgrades.extend(slice_result["upgrades"])
                 current_last_update = partial_end
 
             new_status = current_status
@@ -826,6 +886,16 @@ class Engine:
                     expired_node["node_id"],
                     expired_node["node_type"],
                     expired_node["reason"],
+                    bot=Engine.bot,
+                    req_id=req_id,
+                    user_id=user_id,
+                )
+
+            for upgrade in upgrades:
+                await Engine.send_upgrade_announcement(
+                    village_id,
+                    upgrade["building_name"],
+                    upgrade["level"],
                     bot=Engine.bot,
                     req_id=req_id,
                     user_id=user_id,
@@ -1081,12 +1151,19 @@ class Engine:
             guild_id, food, wood, stone, food_xp, storage_xp, yield_xp = village
             village_name = await Engine._resolve_village_name(bot or Engine.bot, guild_id)
             storage_capacity = Engine._storage_capacity(storage_xp)
-            building_line = " | ".join(
-                [
-                    f"{Engine.BUILDING_NAMES[idx]} Lv{Engine._building_level_from_xp(xp)}"
-                    for idx, xp in ((1, food_xp), (2, storage_xp), (3, yield_xp))
-                ]
-            )
+            rich_text_lines = [
+                village_name,
+                "",
+                "Village Resources",
+                f"🍎 {food:,} | 🪵 {wood:,} | 🪨 {stone:,} (Cap: {storage_capacity:,})",
+                "",
+                "Village Buildings",
+                Engine._building_progress_line(1, food_xp),
+                Engine._building_progress_line(2, storage_xp),
+                Engine._building_progress_line(3, yield_xp),
+                "",
+                "--- ACTIVE VILLAGERS (Sorted by latest action) ---",
+            ]
 
             async with db.execute(
                 """
@@ -1106,13 +1183,7 @@ class Engine:
             ) as cursor:
                 players = await cursor.fetchall()
 
-            lines = [
-                f"=== [ {village_name} ] STATUS REPORT ===",
-                f"Resources: 食物 {food:,} | 木頭 {wood:,} | 石頭 {stone:,} (Cap: {storage_capacity:,})",
-                f"Buildings: {building_line}",
-                "",
-                "--- ACTIVE VILLAGERS (Sorted by latest action) ---",
-            ]
+            villager_lines = []
 
             for row in players:
                 (
@@ -1133,13 +1204,22 @@ class Engine:
                     last_update,
                     completion_time,
                 )
-                lines.append(f"{display_name:<12} | {status_text}")
+                villager_lines.append(f"{display_name:<12} | {status_text}")
 
-            lines.append(f"(Last Update: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC)")
+            villager_lines.append(f"(Last Update: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC)")
 
-            while players and len("```text\n" + "\n".join(lines) + "\n```") > 2000:
+            while players:
+                announcement = (
+                    "\n".join(rich_text_lines)
+                    + "\n```text\n"
+                    + "\n".join(villager_lines)
+                    + "\n```"
+                )
+                if len(announcement) <= 2000:
+                    return announcement
+
                 players = players[:-1]
-                lines = lines[:5]
+                villager_lines = []
                 for row in players:
                     (
                         discord_id,
@@ -1159,10 +1239,15 @@ class Engine:
                         last_update,
                         completion_time,
                     )
-                    lines.append(f"{display_name:<12} | {status_text}")
-                lines.append(f"(Last Update: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC)")
+                    villager_lines.append(f"{display_name:<12} | {status_text}")
+                villager_lines.append(f"(Last Update: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC)")
 
-            return "```text\n" + "\n".join(lines) + "\n```"
+            return (
+                "\n".join(rich_text_lines)
+                + "\n```text\n"
+                + "\n".join(villager_lines)
+                + "\n```"
+            )
 
         finally:
             if close_db:

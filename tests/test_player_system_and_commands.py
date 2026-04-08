@@ -5,7 +5,17 @@ from unittest.mock import patch
 from cogs.actions import ActionsCog, _build_embed
 from support import DatabaseTestCase
 from cogs.events import EventsCog
-from cogs.general import ALLOWED_OWNER_ID, General
+from cogs.general import (
+    ALLOWED_OWNER_ID,
+    General,
+    ManageView,
+    NodeSelect,
+    RemoveNodeButton,
+    ResourceAmountModal,
+    SetCustomButton,
+    _adjust_village_resource,
+    _remove_village_node,
+)
 from core.engine import Engine
 
 
@@ -15,6 +25,12 @@ class _FakeResponse:
 
     async def send_message(self, content, ephemeral=False, **kwargs):
         self.calls.append({"content": content, "ephemeral": ephemeral, **kwargs})
+
+    async def edit_message(self, content=None, **kwargs):
+        self.calls.append({"content": content, **kwargs})
+
+    async def send_modal(self, modal):
+        self.calls.append({"modal": modal})
 
 
 class _FakeMessage:
@@ -334,7 +350,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         self.assertIn(f"<t:{Engine._to_discord_unix(expected_next_check)}:R>", player_status_field.value)
         self.assertNotIn("Manual refresh", player_status_field.value)
 
-    async def test_village_announcement_uses_human_readable_names_without_emojis(self):
+    async def test_village_announcement_uses_mixed_rich_text_and_villager_code_block(self):
         village_id = await self.create_village(guild_id=88)
         player_discord_id = await self.create_player(village_id, discord_id=999, status="idle")
         bot = _FakeBot()
@@ -349,47 +365,139 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
             await db.commit()
             announcement = await Engine.render_announcement(village_id, db=db, bot=bot)
 
-        self.assertIn("=== [ Village 88 ] STATUS REPORT ===", announcement)
-        self.assertIn("Resources: 食物", announcement)
-        self.assertIn("Buildings: 廚房", announcement)
+        self.assertIn("Village 88", announcement)
+        self.assertIn("Village Resources", announcement)
+        self.assertIn("🍎 0 | 🪵 0 | 🪨 0", announcement)
+        self.assertIn("Village Buildings", announcement)
+        self.assertIn("廚房: Lv.0 [XP: 0 / 1,000]", announcement)
         self.assertIn("User 999", announcement)
         self.assertIn("[Idle]", announcement)
-        self.assertNotIn("🍎", announcement)
-        self.assertNotIn("🌾", announcement)
+        self.assertIn("```text", announcement)
         self.assertNotIn("STR", announcement)
         self.assertNotIn("AGI", announcement)
+        self.assertNotIn("**", announcement)
 
-    async def test_admin_command_can_set_village_resources(self):
+    async def test_manage_command_returns_interactive_view(self):
         await self.create_village(guild_id=90, food=5, wood=6, stone=7)
-        cog = General(bot=_FakeBot())
+        bot = _FakeBot()
+        bot.register_guild(90)
+        cog = General(bot=bot)
         inter = SimpleNamespace(
             author=SimpleNamespace(id=ALLOWED_OWNER_ID),
             guild=SimpleNamespace(id=90),
             response=_FakeResponse(),
+            bot=bot,
         )
 
-        await cog.idlevillage_admin.callback(cog, inter, "resource set", "wood", 4321)
+        await cog.idlevillage_manage.callback(cog, inter)
 
-        village = await self.fetchone("SELECT food, wood, stone FROM villages WHERE id = ?", (90,))
-        self.assertEqual(village, (5, 4321, 7))
-        self.assertIn("4,321", inter.response.calls[-1]["content"])
         self.assertTrue(inter.response.calls[-1]["ephemeral"])
+        self.assertIsInstance(inter.response.calls[-1]["view"], ManageView)
+        self.assertEqual(inter.response.calls[-1]["embed"].title, "Idle Village Admin - Village 90")
 
-    async def test_admin_command_can_remove_resource_node(self):
+    async def test_manage_helpers_can_adjust_resources_and_remove_nodes(self):
+        await self.create_village(guild_id=90, food=5, wood=6, stone=7)
         village_id = await self.create_village(guild_id=91)
         node_id = await self.create_resource_node(village_id, node_type="stone", remaining_amount=25)
-        cog = General(bot=_FakeBot())
-        inter = SimpleNamespace(
+        new_amount = await _adjust_village_resource(90, "wood", 4315)
+        removed_type = await _remove_village_node(village_id, node_id)
+
+        village = await self.fetchone("SELECT food, wood, stone FROM villages WHERE id = ?", (90,))
+        node = await self.fetchone("SELECT id FROM resource_nodes WHERE id = ?", (node_id,))
+        self.assertEqual(new_amount, 4321)
+        self.assertEqual(village, (5, 4321, 7))
+        self.assertEqual(removed_type, "stone")
+        self.assertIsNone(node)
+
+    async def test_manage_set_custom_modal_updates_resource_and_refreshes_announcement(self):
+        village_id = await self.create_village(guild_id=94, food=5, wood=6, stone=7)
+        bot = _FakeBot()
+        bot.register_guild(94)
+        Engine.bot = bot
+
+        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+            await db.execute(
+                """
+                UPDATE villages
+                SET announcement_channel_id = ?
+                WHERE id = ?
+                """,
+                ("456", village_id),
+            )
+            await db.commit()
+
+        view = await ManageView(village_id, bot, "REQ-MODAL").refresh_state()
+        set_custom_button = next(item for item in view.children if isinstance(item, SetCustomButton))
+        button_inter = SimpleNamespace(
             author=SimpleNamespace(id=ALLOWED_OWNER_ID),
-            guild=SimpleNamespace(id=91),
             response=_FakeResponse(),
         )
 
-        await cog.idlevillage_admin.callback(cog, inter, "node remove", str(node_id), None)
+        await set_custom_button.callback(button_inter)
+
+        modal = button_inter.response.calls[-1]["modal"]
+        self.assertIsInstance(modal, ResourceAmountModal)
+
+        modal_inter = SimpleNamespace(
+            author=SimpleNamespace(id=ALLOWED_OWNER_ID),
+            text_values={"amount": "4321"},
+            response=_FakeResponse(),
+        )
+
+        await modal.callback(modal_inter)
+
+        village = await self.fetchone("SELECT food, wood, stone FROM villages WHERE id = ?", (village_id,))
+        board_message = next(iter(bot.get_channel(456).messages.values()))
+
+        self.assertEqual(village, (4321, 6, 7))
+        self.assertIn("Food set to 4,321.", modal_inter.response.calls[-1]["content"])
+        self.assertIn("🍎 4,321", board_message.content)
+
+    async def test_manage_remove_node_callback_removes_node_and_refreshes_announcement(self):
+        village_id = await self.create_village(guild_id=95)
+        node_id = await self.create_resource_node(village_id, node_type="stone", remaining_amount=25)
+        bot = _FakeBot()
+        bot.register_guild(95)
+        Engine.bot = bot
+
+        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+            await db.execute(
+                """
+                UPDATE villages
+                SET announcement_channel_id = ?
+                WHERE id = ?
+                """,
+                ("456", village_id),
+            )
+            await db.commit()
+
+        view = await ManageView(village_id, bot, "REQ-NODE").refresh_state()
+        view.mode = "nodes"
+        await view.refresh_state()
+        node_select = next(item for item in view.children if isinstance(item, NodeSelect))
+        remove_button = next(item for item in view.children if isinstance(item, RemoveNodeButton))
+        self.assertEqual(view.selected_node_id, node_id)
+        self.assertEqual(node_select.options[0].value, str(node_id))
+
+        remove_inter = SimpleNamespace(
+            author=SimpleNamespace(id=ALLOWED_OWNER_ID),
+            response=_FakeResponse(),
+        )
+
+        await remove_button.callback(remove_inter)
 
         node = await self.fetchone("SELECT id FROM resource_nodes WHERE id = ?", (node_id,))
+        village = await self.fetchone(
+            "SELECT announcement_message_id, last_announcement_updated FROM villages WHERE id = ?",
+            (village_id,),
+        )
+        board_message = next(iter(bot.get_channel(456).messages.values()))
+
         self.assertIsNone(node)
-        self.assertIn("Stone node", inter.response.calls[-1]["content"])
+        self.assertIsNotNone(village[0])
+        self.assertIsNotNone(village[1])
+        self.assertIn(f"Removed Stone node #{node_id}.", remove_inter.response.calls[-1]["content"])
+        self.assertIn("Village Resources", board_message.content)
 
     async def test_settle_player_posts_idle_and_node_expiry_notifications(self):
         village_id = await self.create_village(guild_id=92)
@@ -420,7 +528,37 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
             await Engine.settle_player(player_discord_id, village_id, db)
 
         messages = [message.content for message in bot.get_channel(456).messages.values()]
-        event_messages = [message for message in messages if not message.startswith("```text")]
+        event_messages = [message for message in messages if "Village Resources" not in message]
         self.assertEqual(len(event_messages), 2)
         self.assertTrue(any("out of stock" in message for message in event_messages))
         self.assertTrue(any("<@987>" in message and "now idle" in message for message in event_messages))
+
+    async def test_building_level_up_posts_upgrade_announcement(self):
+        village_id = await self.create_village(guild_id=93, food_efficiency_xp=990)
+        now = datetime.utcnow()
+        player_discord_id = await self.create_player(
+            village_id,
+            discord_id=654,
+            status="building",
+            target_id=1,
+            last_update_time=now - timedelta(hours=1),
+            completion_time=now,
+        )
+        bot = _FakeBot()
+        bot.register_guild(93)
+        Engine.bot = bot
+
+        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+            await db.execute(
+                """
+                UPDATE villages
+                SET announcement_channel_id = ?
+                WHERE id = ?
+                """,
+                ("456", village_id),
+            )
+            await db.commit()
+            await Engine.settle_player(player_discord_id, village_id, db)
+
+        messages = [message.content for message in bot.get_channel(456).messages.values()]
+        self.assertTrue(any("廚房" in message and "Level 1" in message for message in messages))
