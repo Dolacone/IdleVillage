@@ -9,21 +9,23 @@ from core.observability import log_event, new_request_id
 from database.schema import get_connection
 
 
-async def _get_village_id(db, guild_id: str):
-    async with db.execute("SELECT id FROM villages WHERE guild_id = ?", (guild_id,)) as cursor:
-        village_row = await cursor.fetchone()
-    return village_row[0] if village_row else None
-
-
-async def _get_or_create_player(db, village_id: int, discord_id: str):
+async def _village_exists(db, village_id: int):
     async with db.execute(
-        "SELECT id FROM players WHERE discord_id = ? AND village_id = ?",
+        "SELECT 1 FROM villages WHERE id = ?",
+        (village_id,),
+    ) as cursor:
+        return await cursor.fetchone() is not None
+
+
+async def _get_or_create_player(db, village_id: int, discord_id: int):
+    async with db.execute(
+        "SELECT discord_id FROM players WHERE discord_id = ? AND village_id = ?",
         (discord_id, village_id),
     ) as cursor:
         player_row = await cursor.fetchone()
 
     if player_row:
-        return player_row[0]
+        return discord_id
 
     now = datetime.datetime.utcnow().isoformat()
     await db.execute(
@@ -34,18 +36,20 @@ async def _get_or_create_player(db, village_id: int, discord_id: str):
         (discord_id, village_id, now),
     )
     await db.commit()
-
-    async with db.execute(
-        "SELECT id FROM players WHERE discord_id = ? AND village_id = ?",
-        (discord_id, village_id),
-    ) as cursor:
-        player_row = await cursor.fetchone()
-    return player_row[0]
+    return discord_id
 
 
-async def _update_player_activity(db, player_id: int):
+async def _update_player_activity(db, player_discord_id: int, village_id: int):
     now = datetime.datetime.utcnow().isoformat()
-    await db.execute("UPDATE players SET last_message_time = ? WHERE id = ?", (now, player_id))
+    await db.execute(
+        """
+        UPDATE players
+        SET last_message_time = ?
+        WHERE discord_id = ?
+          AND village_id = ?
+        """,
+        (now, player_discord_id, village_id),
+    )
     await db.commit()
 
 
@@ -85,7 +89,7 @@ async def _load_submenu_options(db, village_id: int, action: str):
     return []
 
 
-async def _build_embed(inter, db, village_id: int, player_id: int):
+async def _build_embed(inter, db, village_id: int, player_discord_id: int):
     async with db.execute(
         """
         SELECT food, wood, stone, food_efficiency_xp, storage_capacity_xp, resource_yield_xp
@@ -100,9 +104,10 @@ async def _build_embed(inter, db, village_id: int, player_id: int):
         """
         SELECT status, target_id, last_update_time, completion_time
         FROM players
-        WHERE id = ?
+        WHERE discord_id = ?
+          AND village_id = ?
         """,
-        (player_id,),
+        (player_discord_id, village_id),
     ) as cursor:
         player = await cursor.fetchone()
 
@@ -110,9 +115,10 @@ async def _build_embed(inter, db, village_id: int, player_id: int):
         """
         SELECT strength, agility, perception, knowledge, endurance
         FROM player_stats
-        WHERE player_id = ?
+        WHERE player_discord_id = ?
+          AND village_id = ?
         """,
-        (player_id,),
+        (player_discord_id, village_id),
     ) as cursor:
         stats = await cursor.fetchone()
 
@@ -182,12 +188,11 @@ async def _render_interface(
             await inter.response.edit_message(content="This command must be run in a server.", embed=None, view=None)
         return
 
-    guild_id_str = str(inter.guild.id)
-    discord_id_str = str(inter.author.id)
+    village_id = int(inter.guild.id)
+    player_discord_id = int(inter.author.id)
 
     async with get_connection() as db:
-        village_id = await _get_village_id(db, guild_id_str)
-        if village_id is None:
+        if not await _village_exists(db, village_id):
             message = "Village not initialized for this server. Ask an admin to run `/idlevillage-initial`."
             if create_response:
                 await inter.response.send_message(message, ephemeral=True)
@@ -196,10 +201,10 @@ async def _render_interface(
             return
 
         await Engine.settle_village(village_id, db, req_id=req_id, user_id=user_id)
-        player_id = await _get_or_create_player(db, village_id, discord_id_str)
-        await _update_player_activity(db, player_id)
-        await Engine.settle_player(player_id, db, is_ui_refresh=True, req_id=req_id, user_id=user_id)
-        embed = await _build_embed(inter, db, village_id, player_id)
+        player_discord_id = await _get_or_create_player(db, village_id, player_discord_id)
+        await _update_player_activity(db, player_discord_id, village_id)
+        await Engine.settle_player(player_discord_id, village_id, db, is_ui_refresh=True, req_id=req_id, user_id=user_id)
+        embed = await _build_embed(inter, db, village_id, player_discord_id)
         await Engine.sync_announcement(village_id, db=db, bot=getattr(inter, "bot", None), req_id=req_id, user_id=user_id)
 
     active_view = view or VillageView()
@@ -240,33 +245,54 @@ class ActionSubmitButton(disnake.ui.Button):
         req_id = new_request_id()
         log_event(req_id, inter.author.id, "CMD", f"action-submit:{self.action}")
 
-        guild_id_str = str(inter.guild.id)
-        discord_id_str = str(inter.author.id)
+        village_id = int(inter.guild.id)
+        player_discord_id = int(inter.author.id)
 
         async with get_connection() as db:
-            village_id = await _get_village_id(db, guild_id_str)
-            if village_id is None:
+            if not await _village_exists(db, village_id):
                 await inter.response.edit_message(content="Village not initialized.", embed=None, view=None)
                 return
 
-            player_id = await _get_or_create_player(db, village_id, discord_id_str)
-            await _update_player_activity(db, player_id)
+            player_discord_id = await _get_or_create_player(db, village_id, player_discord_id)
+            await _update_player_activity(db, player_discord_id, village_id)
             await Engine.settle_village(village_id, db, req_id=req_id, user_id=inter.author.id)
 
-            async with db.execute("SELECT status FROM players WHERE id = ?", (player_id,)) as cursor:
+            async with db.execute(
+                """
+                SELECT status
+                FROM players
+                WHERE discord_id = ?
+                  AND village_id = ?
+                """,
+                (player_discord_id, village_id),
+            ) as cursor:
                 player_row = await cursor.fetchone()
 
             current_status = player_row[0] if player_row else "idle"
             if current_status != "idle":
-                await Engine.settle_player(player_id, db, interrupted=True, req_id=req_id, user_id=inter.author.id)
+                await Engine.settle_player(
+                    player_discord_id,
+                    village_id,
+                    db,
+                    interrupted=True,
+                    req_id=req_id,
+                    user_id=inter.author.id,
+                )
             else:
-                await Engine.settle_player(player_id, db, req_id=req_id, user_id=inter.author.id)
+                await Engine.settle_player(
+                    player_discord_id,
+                    village_id,
+                    db,
+                    req_id=req_id,
+                    user_id=inter.author.id,
+                )
 
             target_id = int(self.target) if self.target and self.target.isdigit() else None
             success = True
             if self.action != "idle":
                 success = await Engine.start_action(
-                    player_id,
+                    player_discord_id,
+                    village_id,
                     self.action,
                     target_id,
                     db,
@@ -341,7 +367,7 @@ class ActionDropdown(disnake.ui.Select):
             return
 
         async with get_connection() as db:
-            village_id = await _get_village_id(db, str(inter.guild.id))
+            village_id = int(inter.guild.id)
             options = await _load_submenu_options(db, village_id, action) if village_id else []
 
         self.view.reset(action=action, options=options, target=None)

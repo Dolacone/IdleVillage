@@ -110,7 +110,15 @@ class Engine:
         return f"gathering_{node[0]}"
 
     @staticmethod
-    async def _record_action_logs(db, player_id: int, status: str, target_id: int, start: datetime, end: datetime):
+    async def _record_action_logs(
+        db,
+        player_discord_id: int,
+        village_id: int,
+        status: str,
+        target_id: int,
+        start: datetime,
+        end: datetime,
+    ):
         if start >= end or status == "missing":
             return
 
@@ -122,10 +130,10 @@ class Engine:
         for seg_start, seg_end in segments:
             await db.execute(
                 """
-                INSERT INTO player_actions_log (player_id, action_type, start_time, end_time)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO player_actions_log (player_discord_id, village_id, action_type, start_time, end_time)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (player_id, action_type, seg_start.isoformat(), seg_end.isoformat()),
+                (player_discord_id, village_id, action_type, seg_start.isoformat(), seg_end.isoformat()),
             )
 
     @staticmethod
@@ -201,18 +209,19 @@ class Engine:
                 await db.close()
 
     @staticmethod
-    async def recalculate_player_stats(player_id: int, db):
+    async def recalculate_player_stats(player_discord_id: int, village_id: int, db):
         """Recalculates player stats based on the last 150 action log entries."""
         now = datetime.utcnow()
         async with db.execute(
             """
             SELECT action_type, start_time, end_time
             FROM player_actions_log
-            WHERE player_id = ?
+            WHERE player_discord_id = ?
+              AND village_id = ?
             ORDER BY end_time DESC, id DESC
             LIMIT 150
             """,
-            (player_id,),
+            (player_discord_id, village_id),
         ) as cursor:
             logs = await cursor.fetchall()
 
@@ -247,9 +256,12 @@ class Engine:
         final_stats = (int(p_str), int(p_agi), int(p_per), int(p_kno), int(p_end))
         await db.execute(
             """
-            INSERT INTO player_stats (player_id, strength, agility, perception, knowledge, endurance, last_calc_time)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(player_id) DO UPDATE SET
+            INSERT INTO player_stats (
+                player_discord_id, village_id,
+                strength, agility, perception, knowledge, endurance, last_calc_time
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(player_discord_id, village_id) DO UPDATE SET
                 strength = excluded.strength,
                 agility = excluded.agility,
                 perception = excluded.perception,
@@ -257,7 +269,7 @@ class Engine:
                 endurance = excluded.endurance,
                 last_calc_time = excluded.last_calc_time
             """,
-            (player_id, *final_stats, now.isoformat()),
+            (player_discord_id, village_id, *final_stats, now.isoformat()),
         )
 
         return final_stats
@@ -283,7 +295,15 @@ class Engine:
         return status.title()
 
     @staticmethod
-    async def settle_player(player_id: int, db=None, interrupted=False, is_ui_refresh=False, req_id: str = None, user_id=None):
+    async def settle_player(
+        player_discord_id: int,
+        village_id: int,
+        db=None,
+        interrupted=False,
+        is_ui_refresh=False,
+        req_id: str = None,
+        user_id=None,
+    ):
         """Executes settlement for the player's current action."""
         close_db = False
         if db is None:
@@ -293,18 +313,19 @@ class Engine:
         try:
             async with db.execute(
                 """
-                SELECT last_update_time, completion_time, status, target_id, village_id
+                SELECT last_update_time, completion_time, status, target_id
                 FROM players
-                WHERE id = ?
+                WHERE discord_id = ?
+                  AND village_id = ?
                 """,
-                (player_id,),
+                (player_discord_id, village_id),
             ) as cursor:
                 player = await cursor.fetchone()
 
             if not player:
                 return None
 
-            last_update_time_str, completion_time_str, status, target_id, village_id = player
+            last_update_time_str, completion_time_str, status, target_id = player
             now = datetime.utcnow()
 
             try:
@@ -322,12 +343,20 @@ class Engine:
                 except (ValueError, TypeError):
                     completion_time = None
 
-            p_str, p_agi, p_per, p_kno, p_end = await Engine.recalculate_player_stats(player_id, db)
+            p_str, p_agi, p_per, p_kno, p_end = await Engine.recalculate_player_stats(player_discord_id, village_id, db)
             delta_seconds = max(0.0, (target_time - last_update).total_seconds())
             time_ratio = Engine._time_ratio(delta_seconds)
 
             if delta_seconds > 0 and status != "missing":
-                await Engine._record_action_logs(db, player_id, status, target_id, last_update, target_time)
+                await Engine._record_action_logs(
+                    db,
+                    player_discord_id,
+                    village_id,
+                    status,
+                    target_id,
+                    last_update,
+                    target_time,
+                )
 
             async with db.execute(
                 """
@@ -453,7 +482,7 @@ class Engine:
                         user_id,
                         "SETTLE",
                         (
-                            f"Player {player_id} settled {status}: "
+                            f"Player {player_discord_id} settled {status}: "
                             f"food={food_gained}, wood={wood_gained}, stone={stone_gained}, "
                             f"time_ratio={time_ratio:.2f}"
                         ),
@@ -463,7 +492,15 @@ class Engine:
             new_target = target_id
             new_completion = None
 
-            async with db.execute("SELECT last_message_time FROM players WHERE id = ?", (player_id,)) as cursor:
+            async with db.execute(
+                """
+                SELECT last_message_time
+                FROM players
+                WHERE discord_id = ?
+                  AND village_id = ?
+                """,
+                (player_discord_id, village_id),
+            ) as cursor:
                 last_message_row = await cursor.fetchone()
 
             if last_message_row:
@@ -485,7 +522,8 @@ class Engine:
                 and target_time >= completion_time
             ):
                 restarted = await Engine.start_action(
-                    player_id,
+                    player_discord_id,
+                    village_id,
                     status,
                     target_id,
                     db,
@@ -497,7 +535,7 @@ class Engine:
                     for discovery in discoveries:
                         await Engine.send_discovery_announcement(
                             village_id,
-                            player_id,
+                            player_discord_id,
                             discovery,
                             bot=Engine.bot,
                             req_id=req_id,
@@ -519,9 +557,10 @@ class Engine:
                     """
                     UPDATE players
                     SET status = ?, target_id = ?, last_update_time = ?, completion_time = ?
-                    WHERE id = ?
+                    WHERE discord_id = ?
+                      AND village_id = ?
                     """,
-                    (new_status, new_target, now.isoformat(), new_completion, player_id),
+                    (new_status, new_target, now.isoformat(), new_completion, player_discord_id, village_id),
                 )
 
             await db.commit()
@@ -531,13 +570,13 @@ class Engine:
                     req_id,
                     user_id,
                     "STATUS",
-                    f"Player {player_id} status changed from {status} to {new_status}",
+                    f"Player {player_discord_id} status changed from {status} to {new_status}",
                 )
 
             for discovery in discoveries:
                 await Engine.send_discovery_announcement(
                     village_id,
-                    player_id,
+                    player_discord_id,
                     discovery,
                     bot=Engine.bot,
                     req_id=req_id,
@@ -551,7 +590,15 @@ class Engine:
                 await db.close()
 
     @staticmethod
-    async def start_action(player_id: int, action: str, target_id: int = None, db=None, req_id: str = None, user_id=None) -> bool:
+    async def start_action(
+        player_discord_id: int,
+        village_id: int,
+        action: str,
+        target_id: int = None,
+        db=None,
+        req_id: str = None,
+        user_id=None,
+    ) -> bool:
         """Attempts to start an action cycle and pre-deduct village resources."""
         close_db = False
         if db is None:
@@ -559,13 +606,19 @@ class Engine:
             close_db = True
 
         try:
-            async with db.execute("SELECT village_id FROM players WHERE id = ?", (player_id,)) as cursor:
+            async with db.execute(
+                """
+                SELECT 1
+                FROM players
+                WHERE discord_id = ?
+                  AND village_id = ?
+                """,
+                (player_discord_id, village_id),
+            ) as cursor:
                 player_row = await cursor.fetchone()
 
             if not player_row:
                 return False
-
-            village_id = player_row[0]
             async with db.execute(
                 """
                 SELECT food, wood, stone, food_efficiency_xp
@@ -612,13 +665,13 @@ class Engine:
 
             if v_food < food_cost or v_wood < wood_cost or v_stone < stone_cost:
                 log_event(
-                    req_id,
-                    user_id,
-                    "ERROR",
-                    (
-                        f"Player {player_id} could not start {action}: "
-                        f"food={v_food}/{food_cost}, wood={v_wood}/{wood_cost}, stone={v_stone}/{stone_cost}"
-                    ),
+                        req_id,
+                        user_id,
+                        "ERROR",
+                        (
+                            f"Player {player_discord_id} could not start {action}: "
+                            f"food={v_food}/{food_cost}, wood={v_wood}/{wood_cost}, stone={v_stone}/{stone_cost}"
+                        ),
                 )
                 return False
 
@@ -636,7 +689,7 @@ class Engine:
                     user_id,
                     "COST",
                     (
-                        f"Player {player_id} started {action}: "
+                        f"Player {player_discord_id} started {action}: "
                         f"food={food_cost}, wood={wood_cost}, stone={stone_cost}"
                     ),
                 )
@@ -647,16 +700,17 @@ class Engine:
                 """
                 UPDATE players
                 SET status = ?, target_id = ?, last_update_time = ?, completion_time = ?
-                WHERE id = ?
+                WHERE discord_id = ?
+                  AND village_id = ?
                 """,
-                (action, target_id, now.isoformat(), completion_time.isoformat(), player_id),
+                (action, target_id, now.isoformat(), completion_time.isoformat(), player_discord_id, village_id),
             )
             await db.commit()
             log_event(
                 req_id,
                 user_id,
                 "STATUS",
-                f"Player {player_id} entered {action} until {completion_time.isoformat()}",
+                f"Player {player_discord_id} entered {action} until {completion_time.isoformat()}",
             )
             return True
 
@@ -728,7 +782,7 @@ class Engine:
         try:
             async with db.execute(
                 """
-                SELECT guild_id, food, wood, stone, food_efficiency_xp, storage_capacity_xp, resource_yield_xp
+                SELECT id, food, wood, stone, food_efficiency_xp, storage_capacity_xp, resource_yield_xp
                 FROM villages
                 WHERE id = ?
                 """,
@@ -752,7 +806,6 @@ class Engine:
             async with db.execute(
                 """
                 SELECT
-                    p.id,
                     p.discord_id,
                     p.status,
                     p.target_id,
@@ -764,7 +817,9 @@ class Engine:
                     COALESCE(ps.knowledge, 50),
                     COALESCE(ps.endurance, 50)
                 FROM players p
-                LEFT JOIN player_stats ps ON ps.player_id = p.id
+                LEFT JOIN player_stats ps
+                    ON ps.player_discord_id = p.discord_id
+                   AND ps.village_id = p.village_id
                 WHERE p.village_id = ?
                   AND p.status != 'missing'
                 ORDER BY p.last_update_time DESC
@@ -784,7 +839,6 @@ class Engine:
 
             for row in players:
                 (
-                    player_id,
                     discord_id,
                     status,
                     target_id,
@@ -814,7 +868,6 @@ class Engine:
                 lines = lines[:5]
                 for row in players:
                     (
-                        _player_id,
                         discord_id,
                         status,
                         target_id,
@@ -940,14 +993,20 @@ class Engine:
                 await db.close()
 
     @staticmethod
-    async def send_discovery_announcement(village_id: int, player_id: int, discovery: dict, bot=None, req_id: str = None):
+    async def send_discovery_announcement(
+        village_id: int,
+        player_discord_id: int,
+        discovery: dict,
+        bot=None,
+        req_id: str = None,
+    ):
         if not discovery:
             return None
 
         async with get_connection() as db:
             async with db.execute(
                 """
-                SELECT guild_id, announcement_channel_id
+                SELECT id, announcement_channel_id
                 FROM villages
                 WHERE id = ?
                 """,
@@ -962,16 +1021,11 @@ class Engine:
             if not channel_id:
                 return None
 
-            async with db.execute("SELECT discord_id FROM players WHERE id = ?", (player_id,)) as cursor:
-                player = await cursor.fetchone()
-
         channel = await Engine._resolve_channel(bot or Engine.bot, channel_id)
         if channel is None:
             return None
 
-        player_name = "A villager"
-        if player:
-            player_name = await Engine._resolve_player_name(bot or Engine.bot, guild_id, player[0])
+        player_name = await Engine._resolve_player_name(bot or Engine.bot, guild_id, player_discord_id)
 
         message = (
             f"New discovery by {player_name}: "
@@ -995,11 +1049,18 @@ class Engine:
             now = datetime.utcnow().isoformat()
             await db.execute("DELETE FROM resource_nodes WHERE expiry_time <= ? OR remaining_amount <= 0", (now,))
 
-            async with db.execute("SELECT id FROM players WHERE completion_time <= ?", (now,)) as cursor:
+            async with db.execute(
+                """
+                SELECT discord_id, village_id
+                FROM players
+                WHERE completion_time <= ?
+                """,
+                (now,),
+            ) as cursor:
                 players = await cursor.fetchall()
 
             for player in players:
-                await Engine.settle_player(player[0], db, req_id=watcher_req_id, user_id="SYSTEM")
+                await Engine.settle_player(player[0], player[1], db, req_id=watcher_req_id, user_id="SYSTEM")
 
             async with db.execute("SELECT id FROM villages") as cursor:
                 villages = await cursor.fetchall()

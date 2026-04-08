@@ -74,40 +74,68 @@ class _FakeBot(SimpleNamespace):
 
 
 class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
+    async def test_player_system_same_discord_user_can_exist_in_multiple_guilds(self):
+        first_village_id = await self.create_village(guild_id=41)
+        second_village_id = await self.create_village(guild_id=42)
+
+        await self.create_player(first_village_id, discord_id=555, status="idle")
+        await self.create_player(second_village_id, discord_id=555, status="building", target_id=1)
+
+        players = await self.fetchall(
+            """
+            SELECT discord_id, village_id, status, target_id
+            FROM players
+            WHERE discord_id = ?
+            ORDER BY village_id
+            """,
+            (555,),
+        )
+
+        self.assertEqual(
+            players,
+            [
+                (555, 41, "idle", None),
+                (555, 42, "building", 1),
+            ],
+        )
+
     async def test_player_system_message_activity_updates_last_message_time(self):
-        village_id = await self.create_village(guild_id="guild-42")
-        player_id = await self.create_player(village_id, discord_id="123", last_message_time="2000-01-01T00:00:00")
+        village_id = await self.create_village(guild_id=42)
+        player_discord_id = await self.create_player(village_id, discord_id=123, last_message_time="2000-01-01T00:00:00")
         cog = EventsCog(bot=None)
         message = SimpleNamespace(
             author=SimpleNamespace(bot=False, id=123),
-            guild=SimpleNamespace(id="guild-42"),
+            guild=SimpleNamespace(id=42),
         )
 
         await cog.on_message(message)
 
-        player = await self.fetchone("SELECT last_message_time FROM players WHERE id = ?", (player_id,))
+        player = await self.fetchone(
+            "SELECT last_message_time FROM players WHERE discord_id = ? AND village_id = ?",
+            (player_discord_id, village_id),
+        )
         self.assertNotEqual(player[0], "2000-01-01T00:00:00")
 
     async def test_village_binding_owner_can_initialize_once(self):
         cog = General(bot=_FakeBot())
         inter = SimpleNamespace(
             author=SimpleNamespace(id=ALLOWED_OWNER_ID),
-            guild=SimpleNamespace(id="guild-77"),
+            guild=SimpleNamespace(id=77),
             response=_FakeResponse(),
         )
 
         await cog.idlevillage_initial.callback(cog, inter)
 
-        village = await self.fetchone("SELECT food, wood, stone FROM villages WHERE guild_id = ?", ("guild-77",))
+        village = await self.fetchone("SELECT food, wood, stone FROM villages WHERE id = ?", (77,))
         self.assertEqual(village, (100, 0, 0))
         self.assertEqual(inter.response.calls[-1]["ephemeral"], True)
 
     async def test_village_binding_rejects_reuse_on_existing_server(self):
-        await self.create_village(guild_id="guild-88")
+        await self.create_village(guild_id=88)
         cog = General(bot=_FakeBot())
         inter = SimpleNamespace(
             author=SimpleNamespace(id=ALLOWED_OWNER_ID),
-            guild=SimpleNamespace(id="guild-88"),
+            guild=SimpleNamespace(id=88),
             response=_FakeResponse(),
         )
 
@@ -120,24 +148,24 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         cog = General(bot=_FakeBot())
         inter = SimpleNamespace(
             author=SimpleNamespace(id=1),
-            guild=SimpleNamespace(id="guild-99"),
+            guild=SimpleNamespace(id=99),
             response=_FakeResponse(),
         )
 
         await cog.idlevillage_initial.callback(cog, inter)
 
-        village = await self.fetchone("SELECT id FROM villages WHERE guild_id = ?", ("guild-99",))
+        village = await self.fetchone("SELECT id FROM villages WHERE id = ?", (99,))
         self.assertIsNone(village)
         self.assertIn("do not have permission", inter.response.calls[-1]["content"])
 
     async def test_announcement_command_stores_channel_and_message_id(self):
-        await self.create_village(guild_id="77")
+        await self.create_village(guild_id=77)
         bot = _FakeBot()
         bot.register_guild(77)
         cog = General(bot=bot)
         inter = SimpleNamespace(
             author=SimpleNamespace(id=ALLOWED_OWNER_ID),
-            guild=SimpleNamespace(id="77"),
+            guild=SimpleNamespace(id=77),
             channel=bot.get_channel(456),
             response=_FakeResponse(),
             bot=bot,
@@ -149,20 +177,20 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
             """
             SELECT announcement_channel_id, announcement_message_id
             FROM villages
-            WHERE guild_id = ?
+            WHERE id = ?
             """,
-            ("77",),
+            (77,),
         )
         self.assertEqual(village[0], "456")
         self.assertIsNotNone(village[1])
         self.assertEqual(inter.response.calls[-1]["ephemeral"], True)
 
     async def test_exploring_discovery_posts_to_announcement_channel(self):
-        village_id = await self.create_village(guild_id="55")
+        village_id = await self.create_village(guild_id=55)
         now = datetime.utcnow()
-        player_id = await self.create_player(
+        player_discord_id = await self.create_player(
             village_id,
-            discord_id="123",
+            discord_id=123,
             status="exploring",
             last_update_time=now - timedelta(hours=1),
             completion_time=now,
@@ -184,7 +212,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
 
         with patch("core.engine.random.random", return_value=0.0), patch("core.engine.random.choice", return_value="wood"), patch("core.engine.random.gauss", return_value=130), patch("core.engine.random.randint", return_value=2100):
             async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
-                await Engine.settle_player(player_id, db, interrupted=True)
+                await Engine.settle_player(player_discord_id, village_id, db, interrupted=True)
 
         channel = bot.get_channel(456)
         self.assertEqual(len(channel.messages), 1)
@@ -195,11 +223,11 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         self.assertNotIn("Lv", only_message.content)
 
     async def test_idlevillage_embed_uses_localized_building_names_and_compact_status_line(self):
-        village_id = await self.create_village(guild_id="66")
+        village_id = await self.create_village(guild_id=66)
         now = datetime.utcnow()
-        player_id = await self.create_player(
+        player_discord_id = await self.create_player(
             village_id,
-            discord_id="321",
+            discord_id=321,
             status="building",
             target_id=1,
             last_update_time=now - timedelta(minutes=10),
@@ -211,7 +239,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
                 SimpleNamespace(guild=SimpleNamespace(name="Village 66")),
                 db,
                 village_id,
-                player_id,
+                player_discord_id,
             )
 
         village_buildings_field = next(field for field in embed.fields if field.name == "Village Buildings")
@@ -225,12 +253,12 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         self.assertIn("Next check:", player_status_field.value)
 
     async def test_idlevillage_embed_uses_utc_timestamp_for_discord_rendering(self):
-        village_id = await self.create_village(guild_id="67")
+        village_id = await self.create_village(guild_id=67)
         last_update = datetime(2026, 4, 8, 0, 15, 0)
         completion_time = datetime(2026, 4, 8, 1, 15, 0)
-        player_id = await self.create_player(
+        player_discord_id = await self.create_player(
             village_id,
-            discord_id="322",
+            discord_id=322,
             status="building",
             target_id=1,
             last_update_time=last_update,
@@ -242,7 +270,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
                 SimpleNamespace(guild=SimpleNamespace(name="Village 67")),
                 db,
                 village_id,
-                player_id,
+                player_discord_id,
             )
 
         player_status_field = next(field for field in embed.fields if field.name == "Player Status")
@@ -250,14 +278,17 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         self.assertIn(f"<t:{Engine._to_discord_unix(completion_time)}:R>", player_status_field.value)
 
     async def test_village_announcement_uses_human_readable_names_without_emojis(self):
-        village_id = await self.create_village(guild_id="88")
-        player_id = await self.create_player(village_id, discord_id="999", status="idle")
+        village_id = await self.create_village(guild_id=88)
+        player_discord_id = await self.create_player(village_id, discord_id=999, status="idle")
         bot = _FakeBot()
         bot.register_guild(88)
         Engine.bot = bot
 
         async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
-            await db.execute("INSERT INTO player_stats (player_id) VALUES (?)", (player_id,))
+            await db.execute(
+                "INSERT INTO player_stats (player_discord_id, village_id) VALUES (?, ?)",
+                (player_discord_id, village_id),
+            )
             await db.commit()
             announcement = await Engine.render_announcement(village_id, db=db, bot=bot)
 

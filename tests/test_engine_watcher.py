@@ -17,7 +17,7 @@ class EngineWatcherBehaviorTests(DatabaseTestCase):
             expiry_time=datetime.utcnow() + timedelta(hours=4),
         )
         now = datetime.utcnow()
-        player_id = await self.create_player(
+        player_discord_id = await self.create_player(
             village_id,
             status="idle",
             last_message_time="",
@@ -30,7 +30,14 @@ class EngineWatcherBehaviorTests(DatabaseTestCase):
         expired_node = await self.fetchone("SELECT id FROM resource_nodes WHERE id = ?", (expired_node_id,))
         active_node = await self.fetchone("SELECT id FROM resource_nodes WHERE id = ?", (active_node_id,))
         village = await self.fetchone("SELECT food FROM villages WHERE id = ?", (village_id,))
-        logs = await self.fetchall("SELECT action_type FROM player_actions_log WHERE player_id = ?", (player_id,))
+        logs = await self.fetchall(
+            """
+            SELECT action_type
+            FROM player_actions_log
+            WHERE player_discord_id = ? AND village_id = ?
+            """,
+            (player_discord_id, village_id),
+        )
 
         self.assertIsNone(expired_node)
         self.assertEqual(active_node[0], active_node_id)
@@ -40,7 +47,7 @@ class EngineWatcherBehaviorTests(DatabaseTestCase):
     async def test_player_system_inactive_players_become_missing_after_7_days(self):
         village_id = await self.create_village()
         now = datetime.utcnow()
-        player_id = await self.create_player(
+        player_discord_id = await self.create_player(
             village_id,
             status="building",
             target_id=1,
@@ -50,7 +57,10 @@ class EngineWatcherBehaviorTests(DatabaseTestCase):
         )
 
         async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
-            await Engine.settle_player(player_id, db)
+            await Engine.settle_player(player_discord_id, village_id, db)
 
-        player = await self.fetchone("SELECT status, target_id FROM players WHERE id = ?", (player_id,))
+        player = await self.fetchone(
+            "SELECT status, target_id FROM players WHERE discord_id = ? AND village_id = ?",
+            (player_discord_id, village_id),
+        )
         self.assertEqual(player, ("missing", None))

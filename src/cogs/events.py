@@ -13,22 +13,21 @@ class EventsCog(commands.Cog):
         if message.author.bot or not message.guild:
             return
 
-        guild_id_str = str(message.guild.id)
+        village_id = int(message.guild.id)
+        player_discord_id = int(message.author.id)
 
         async with get_connection() as db:
-            # Find village first
-            async with db.execute('SELECT id FROM villages WHERE guild_id = ?', (guild_id_str,)) as cursor:
-                village = await cursor.fetchone()
-
-            if village:
-                village_id = village[0]
-                now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-                await db.execute('''
-                    UPDATE players
-                    SET last_message_time = ?
-                    WHERE discord_id = ? AND village_id = ?
-                ''', (now, str(message.author.id), village_id))
-                await db.commit()
+            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            await db.execute(
+                """
+                UPDATE players
+                SET last_message_time = ?
+                WHERE discord_id = ?
+                  AND village_id = ?
+                """,
+                (now, player_discord_id, village_id),
+            )
+            await db.commit()
 
 def setup(bot: commands.Bot):
     bot.add_cog(EventsCog(bot))

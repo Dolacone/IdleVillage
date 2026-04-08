@@ -9,17 +9,21 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
     async def test_village_pre_deduction_uses_food_efficiency_and_cycle_minutes(self):
         os.environ["ACTION_CYCLE_MINUTES"] = "30"
         village_id = await self.create_village(food=15, wood=20, stone=10, food_efficiency_xp=1000)
-        player_id = await self.create_player(village_id)
+        player_discord_id = await self.create_player(village_id)
 
-        success = await Engine.start_action(player_id, "building", 1)
+        success = await Engine.start_action(player_discord_id, village_id, "building", 1)
 
         self.assertTrue(success)
         village = await self.fetchone("SELECT food, wood, stone FROM villages WHERE id = ?", (village_id,))
         self.assertEqual(village, (6, 10, 5))
 
         player = await self.fetchone(
-            "SELECT status, target_id, last_update_time, completion_time FROM players WHERE id = ?",
-            (player_id,),
+            """
+            SELECT status, target_id, last_update_time, completion_time
+            FROM players
+            WHERE discord_id = ? AND village_id = ?
+            """,
+            (player_discord_id, village_id),
         )
         self.assertEqual(player[0], "building")
         self.assertEqual(player[1], 1)
@@ -55,7 +59,7 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         village_id = await self.create_village(food=0)
         node_id = await self.create_resource_node(village_id, node_type="food", quality=100, remaining_amount=100)
         now = datetime.utcnow()
-        player_id = await self.create_player(
+        player_discord_id = await self.create_player(
             village_id,
             status="gathering",
             target_id=node_id,
@@ -65,14 +69,26 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         )
 
         async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
-            await Engine.settle_player(player_id, db, interrupted=True)
+            await Engine.settle_player(player_discord_id, village_id, db, interrupted=True)
 
         village = await self.fetchone("SELECT food FROM villages WHERE id = ?", (village_id,))
-        player = await self.fetchone("SELECT status, target_id, completion_time FROM players WHERE id = ?", (player_id,))
+        player = await self.fetchone(
+            """
+            SELECT status, target_id, completion_time
+            FROM players
+            WHERE discord_id = ? AND village_id = ?
+            """,
+            (player_discord_id, village_id),
+        )
         node = await self.fetchone("SELECT remaining_amount FROM resource_nodes WHERE id = ?", (node_id,))
         log_row = await self.fetchone(
-            "SELECT action_type FROM player_actions_log WHERE player_id = ? ORDER BY id DESC LIMIT 1",
-            (player_id,),
+            """
+            SELECT action_type
+            FROM player_actions_log
+            WHERE player_discord_id = ? AND village_id = ?
+            ORDER BY id DESC LIMIT 1
+            """,
+            (player_discord_id, village_id),
         )
 
         self.assertEqual(village[0], 5)
@@ -82,20 +98,23 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
 
     async def test_resources_gathering_requires_a_real_node(self):
         village_id = await self.create_village(food=3)
-        player_id = await self.create_player(village_id)
+        player_discord_id = await self.create_player(village_id)
 
-        success = await Engine.start_action(player_id, "gathering", None)
+        success = await Engine.start_action(player_discord_id, village_id, "gathering", None)
 
         self.assertFalse(success)
         village = await self.fetchone("SELECT food FROM villages WHERE id = ?", (village_id,))
-        player = await self.fetchone("SELECT status FROM players WHERE id = ?", (player_id,))
+        player = await self.fetchone(
+            "SELECT status FROM players WHERE discord_id = ? AND village_id = ?",
+            (player_discord_id, village_id),
+        )
         self.assertEqual(village[0], 3)
         self.assertEqual(player[0], "idle")
 
     async def test_ui_refresh_keeps_next_cycle_when_action_has_already_completed(self):
         village_id = await self.create_village(food=20, wood=20, stone=10)
         now = datetime.utcnow()
-        player_id = await self.create_player(
+        player_discord_id = await self.create_player(
             village_id,
             status="building",
             target_id=1,
@@ -104,11 +123,15 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         )
 
         async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
-            await Engine.settle_player(player_id, db, is_ui_refresh=True)
+            await Engine.settle_player(player_discord_id, village_id, db, is_ui_refresh=True)
 
         player = await self.fetchone(
-            "SELECT status, target_id, completion_time FROM players WHERE id = ?",
-            (player_id,),
+            """
+            SELECT status, target_id, completion_time
+            FROM players
+            WHERE discord_id = ? AND village_id = ?
+            """,
+            (player_discord_id, village_id),
         )
         self.assertEqual(player[0], "building")
         self.assertEqual(player[1], 1)

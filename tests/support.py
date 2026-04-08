@@ -63,6 +63,8 @@ class DatabaseTestCase(unittest.IsolatedAsyncioTestCase):
         self.original_db_path = schema.DB_PATH
         self.original_action_cycle_minutes = os.environ.get("ACTION_CYCLE_MINUTES")
         self.original_admin_ids = os.environ.get("ADMIN_IDS")
+        self.next_guild_id = 100
+        self.next_player_discord_id = 1000
         schema.DB_PATH = os.path.join(self.temp_dir.name, "test.db")
         Engine.bot = None
         os.environ.pop("ACTION_CYCLE_MINUTES", None)
@@ -85,7 +87,7 @@ class DatabaseTestCase(unittest.IsolatedAsyncioTestCase):
     async def create_village(
         self,
         *,
-        guild_id="guild-1",
+        guild_id=None,
         food=0,
         wood=0,
         stone=0,
@@ -94,11 +96,16 @@ class DatabaseTestCase(unittest.IsolatedAsyncioTestCase):
         resource_yield_xp=0,
         last_tick_time=None,
     ):
+        if guild_id is None:
+            guild_id = self.next_guild_id
+            self.next_guild_id += 1
+        guild_id = int(guild_id)
+
         async with schema.get_connection() as db:
             await db.execute(
                 """
                 INSERT INTO villages (
-                    guild_id, food, wood, stone,
+                    id, food, wood, stone,
                     food_efficiency_xp, storage_capacity_xp, resource_yield_xp, last_tick_time
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -115,7 +122,7 @@ class DatabaseTestCase(unittest.IsolatedAsyncioTestCase):
                 ),
             )
             await db.commit()
-            async with db.execute("SELECT id FROM villages WHERE guild_id = ?", (guild_id,)) as cursor:
+            async with db.execute("SELECT id FROM villages WHERE id = ?", (guild_id,)) as cursor:
                 row = await cursor.fetchone()
         return row[0]
 
@@ -123,13 +130,18 @@ class DatabaseTestCase(unittest.IsolatedAsyncioTestCase):
         self,
         village_id,
         *,
-        discord_id="player-1",
+        discord_id=None,
         status="idle",
         target_id=None,
         last_message_time=None,
         last_update_time=None,
         completion_time=None,
     ):
+        if discord_id is None:
+            discord_id = self.next_player_discord_id
+            self.next_player_discord_id += 1
+        discord_id = int(discord_id)
+
         if last_message_time is None:
             last_message_time = ""
         async with schema.get_connection() as db:
@@ -143,7 +155,7 @@ class DatabaseTestCase(unittest.IsolatedAsyncioTestCase):
                 """,
                 (
                     discord_id,
-                    village_id,
+                    int(village_id),
                     last_message_time.isoformat() if isinstance(last_message_time, datetime) else last_message_time,
                     status,
                     target_id,
@@ -153,8 +165,8 @@ class DatabaseTestCase(unittest.IsolatedAsyncioTestCase):
             )
             await db.commit()
             async with db.execute(
-                "SELECT id FROM players WHERE discord_id = ? AND village_id = ?",
-                (discord_id, village_id),
+                "SELECT discord_id FROM players WHERE discord_id = ? AND village_id = ?",
+                (discord_id, int(village_id)),
             ) as cursor:
                 row = await cursor.fetchone()
         return row[0]

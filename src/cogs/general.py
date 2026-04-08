@@ -34,24 +34,24 @@ class General(commands.Cog):
             await inter.response.send_message("This command must be run in a server.", ephemeral=True)
             return
 
-        guild_id_str = str(inter.guild.id)
+        village_id = int(inter.guild.id)
 
         async with get_connection() as db:
-            async with db.execute('SELECT id FROM villages WHERE guild_id = ?', (guild_id_str,)) as cursor:
+            async with db.execute('SELECT id FROM villages WHERE id = ?', (village_id,)) as cursor:
                 village_min = await cursor.fetchone()
 
             if village_min:
-                log_event(req_id, inter.author.id, "RESP", f"Village already exists for guild {guild_id_str}")
+                log_event(req_id, inter.author.id, "RESP", f"Village already exists for guild {village_id}")
                 await inter.response.send_message("A village already exists for this server. Resetting existing villages is not allowed via this command.", ephemeral=True)
                 return
 
             await db.execute('''
-                INSERT INTO villages (guild_id, food, wood, stone, food_efficiency_xp, storage_capacity_xp, resource_yield_xp)
+                INSERT INTO villages (id, food, wood, stone, food_efficiency_xp, storage_capacity_xp, resource_yield_xp)
                 VALUES (?, 100, 0, 0, 0, 0, 0)
-            ''', (guild_id_str,))
+            ''', (village_id,))
             await db.commit()
 
-        log_event(req_id, inter.author.id, "RESP", f"Village initialized for guild {guild_id_str}")
+        log_event(req_id, inter.author.id, "RESP", f"Village initialized for guild {village_id}")
         await inter.response.send_message("Village successfully initialized for this server with 100 food, 0 wood, 0 stone, and Lv 0 buildings.", ephemeral=True)
 
     @commands.slash_command(name="idlevillage-announcement", description="[Owner Only] Publish or refresh the public village dashboard")
@@ -69,19 +69,18 @@ class General(commands.Cog):
             await inter.response.send_message("This command must be run in a server channel.", ephemeral=True)
             return
 
-        guild_id_str = str(inter.guild.id)
+        village_id = int(inter.guild.id)
         channel_id_str = str(inter.channel.id)
 
         async with get_connection() as db:
-            async with db.execute("SELECT id FROM villages WHERE guild_id = ?", (guild_id_str,)) as cursor:
+            async with db.execute("SELECT id FROM villages WHERE id = ?", (village_id,)) as cursor:
                 village_row = await cursor.fetchone()
 
             if not village_row:
-                log_event(req_id, inter.author.id, "ERROR", f"No village found for guild {guild_id_str}")
+                log_event(req_id, inter.author.id, "ERROR", f"No village found for guild {village_id}")
                 await inter.response.send_message("Village not initialized for this server. Run `/idlevillage-initial` first.", ephemeral=True)
                 return
 
-            village_id = village_row[0]
             await db.execute(
                 """
                 UPDATE villages
@@ -102,7 +101,7 @@ class General(commands.Cog):
             )
 
         if message is None:
-            log_event(req_id, inter.author.id, "ERROR", f"Failed to publish announcement for village {guild_id_str}")
+            log_event(req_id, inter.author.id, "ERROR", f"Failed to publish announcement for village {village_id}")
             await inter.response.send_message("Failed to publish the village announcement. Check bot channel permissions and try again.", ephemeral=True)
             return
 
