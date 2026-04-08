@@ -41,10 +41,13 @@
 5. 資源 / XP 結算:
    - `idle`: 依 PER + KNO 產出村莊糧食, 品質固定 50%.
    - `gathering`: 依節點類型與玩家素質結算食物或木石產出, 並扣除節點儲量.
-   - `building`: 依 KNO + END 增加目標建築 XP.
+   - `building`: 
+     - **升級偵測**: 紀錄結算前等級 $L_{pre}$, 增加 XP 後紀錄等級 $L_{post}$. 若 $L_{post} > L_{pre}$, 觸發慶祝公告.
    - `exploring`: 依目前活躍節點數做 Inverse-Square 成功判定, 成功時建立高斯品質的新節點.
    - 村莊資源入庫時, 受 `Storage Capacity` 與 `Resource Yield` 建築效果影響.
-6. 資料更新:
+6. 村莊損耗結算 (Village Settlement):
+   - 損耗公式採用 **動態指數模型**: $D = f(N_{active}, XP_{current})$. 詳見 `docs/modules/buildings.md`.
+7. 資料更新:
    - 檢查玩家是否符合 `missing` 條件 (7 天未發言且 7 天未執行 `/idlevillage`).
    - 若玩家主動中斷, 狀態改為 `idle`.
    - 若完整循環結束且資源足夠, 以該循環結束時間作為下一個 Lease 的起點, 嘗試自動啟動下一個 Action Cycle; 否則改為 `idle`.
@@ -61,12 +64,16 @@
   - 更新 `status`, `target_id`, `last_update_time`.
   - 設定 `completion_time = now + ACTION_CYCLE_MINUTES`.
 
-### 4. 公告同步與發現通知 (Announcement Sync)
+### 4. 公告同步與通知機制 (Announcement & Notifications)
 
 - 村莊公告資料保存在 `villages.announcement_channel_id`, `villages.announcement_message_id`, `villages.last_announcement_updated`.
 - `/idlevillage-announcement` 會在觸發頻道建立或刷新單一公開儀表板訊息.
-- 若公告訊息遺失, 下次更新時需要清除舊的 `announcement_message_id` 並重建.
-- 任一探索新節點發現成功時, 系統會額外發送一則 discovery 訊息到已設定的公告頻道.
+- **即時通知事件**:
+  - 資源發現 (`exploring` 成功).
+  - 資源耗盡 (Stock 為 0 或 Expiry 到期).
+  - 建築升級 ($L_{post} > L_{pre}$).
+  - 玩家閒置 (由 Active 轉為 `idle`).
+- 若公告訊息 ID 遺失, 下次更新時需要清除舊的 `announcement_message_id` 並重建.
 
 ### 5. 日誌格式 (Structured Logging)
 
@@ -75,5 +82,6 @@
 - 常用類別: `CMD`, `RESP`, `COST`, `SETTLE`, `STATUS`, `ERROR`.
 
 ## Changelog
-- 2026.04.07.00: Updated to reflect the 1-hour lease engine, settlement flow, and removal of satiety/travel logic. See [2026.04.07.00.md](../../changelogs/2026.04.07.00.md)
-- 2026.04.08.00: Updated to configurable Action Cycles, 150-entry stat recalculation, structured logging, and public announcement sync behavior. See [2026.04.08.00.md](../../changelogs/2026.04.08.00.md)
+- 2026.04.07.00: Updated to reflect the 1-hour lease engine settlement flow. See [2026.04.07.00.md](../changelogs/2026.04.07.00.md)
+- 2026.04.08.00: Updated to configurable Action Cycles and 150-entry stat recalculation. See [2026.04.08.00.md](../changelogs/2026.04.08.00.md)
+- 2026.04.08.03: Implemented dynamic exponential building decay and building upgrade notifications. See [2026.04.08.03.md](../changelogs/2026.04.08.03.md)

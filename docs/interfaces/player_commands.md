@@ -7,7 +7,7 @@
 - `/idlevillage-help`: [暫不實作] 顯示遊戲指南.
 - `/idlevillage-announcement`: [管理員] 在當前頻道發布村莊公告訊息 (Public).
 - `/idlevillage-initial`: [管理員] 初始化村莊.
-- `/idlevillage-admin`: [管理員] 管理村莊資源與節點.
+- `/idlevillage-manage`: [管理員] 互動式管理村莊資源與節點.
 
 ### 2. 個人主介面 (/idlevillage)
 這是一個包含 Embed 與多個互動組件的隱藏訊息 (Ephemeral).
@@ -41,11 +41,28 @@
 - **Button: Submit** (Green, Start Action)
 - **Button: Refresh** (Gray, 🔄 Refresh Status, 設有 5 秒冷卻)
 
-### 3. 管理員指令 (/idlevillage-admin)
-[僅限管理員] 用於手動調整村莊狀態.
-- 目前透過參數組合執行:
-  - `mode=resource set`, `target=food|wood|stone`, `amount=<數值>`: 設定資源數值.
-  - `mode=node remove`, `target=<node_id>`: 移除指定的資源節點.
+### 3. 管理員管理介面 (/idlevillage-manage)
+這是為管理員設計的互動式選單 (Ephemeral), 用於更直觀地維護村莊狀態.
+
+#### 3.1 資源調整 (Resource Management)
+- **Step 1: 下拉選單 (Action Selector)**
+  - 選項: `Manage Resources`, `Manage Nodes`.
+- **Step 2: 下拉選單 (Resource Type)**
+  - 僅在選擇 `Manage Resources` 後顯示.
+  - 選項: `Food`, `Wood`, `Stone`.
+- **Step 3: 狀態顯示與按鈕**
+  - Embed 顯示當前選定資源的數量.
+  - 快速調整按鈕: `+100`, `+1,000`, `-100`, `-1,000`.
+  - **Set Custom 按鈕**: 點擊後彈出 Modal 視窗, 提供一個文字輸入欄位輸入絕對數值.
+
+#### 3.2 節點管理 (Node Management)
+- **Step 1: 下拉選單 (Action Selector)**
+  - 選項: `Manage Nodes`.
+- **Step 2: 下拉選單 (Node List)**
+  - 列出村莊內所有活躍節點.
+  - 格式: `#{id} {Type} (Stock: {stock}, Q: {quality}%)`.
+- **Step 3: 移除按鈕**
+  - **Remove Node 按鈕**: 紅色樣式, 點擊後直接從資料庫移除該節點並重新渲染介面.
 
 ### 4. 間隔控制規範 (Interval Control)
 - **Action Cycle Duration**: 由環境變數 `ACTION_CYCLE_MINUTES` 定義.
@@ -56,3 +73,4 @@
 ## Changelog
 - 2026.04.08.00: Initial specification for modernized /idlevillage interface and interval controls. - See [2026.04.08.00.md](../changelogs/2026.04.08.00.md)
 - 2026.04.08.02: Added /idlevillage-admin command and fixed next check display for idle players. - See [2026.04.08.02.md](../changelogs/2026.04.08.02.md)
+- 2026.04.08.03: Replaced /idlevillage-admin with interactive /idlevillage-manage UI. - See [2026.04.08.03.md](../changelogs/2026.04.08.03.md)
