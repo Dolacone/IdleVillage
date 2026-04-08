@@ -134,6 +134,7 @@ class DatabaseTestCase(unittest.IsolatedAsyncioTestCase):
         status="idle",
         target_id=None,
         last_message_time=None,
+        last_command_time=None,
         last_update_time=None,
         completion_time=None,
     ):
@@ -144,19 +145,22 @@ class DatabaseTestCase(unittest.IsolatedAsyncioTestCase):
 
         if last_message_time is None:
             last_message_time = ""
+        if last_command_time is None:
+            last_command_time = ""
         async with schema.get_connection() as db:
             await db.execute(
                 """
                 INSERT INTO players (
-                    discord_id, village_id, last_message_time,
+                    discord_id, village_id, last_message_time, last_command_time,
                     status, target_id, last_update_time, completion_time
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     discord_id,
                     int(village_id),
                     last_message_time.isoformat() if isinstance(last_message_time, datetime) else last_message_time,
+                    last_command_time.isoformat() if isinstance(last_command_time, datetime) else last_command_time,
                     status,
                     target_id,
                     (last_update_time or datetime.utcnow()).isoformat(),

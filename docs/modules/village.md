@@ -4,6 +4,8 @@
 
 ### 1. 伺服器綁定 (Guild Binding)
 - 一個 Discord 伺服器 (Guild ID) 對應一個唯一的村莊資料實例.
+- `villages.id` 直接使用 Discord Guild ID 作為主鍵.
+- 玩家資料以 `(discord_id, village_id)` 為識別鍵, 因此同一 Discord 使用者可以在不同伺服器持有彼此獨立的村民狀態.
 - 需透過指令 `/idlevillage-initial` 進行初始化綁定.
 
 ### 2. 行動週期與租賃模型 (Action Cycle & Lease Model)
@@ -30,7 +32,7 @@
 - 觸發時機: 任何涉及村莊狀態的指令或 Watcher 掃描.
 - 演算法:
   1. 時差 (Delta): 現在時間 - last_tick_time.
-  2. 總損耗: (Delta/3600) * (10 + 活躍玩家數).
+  2. 總損耗: `(Delta_Minutes / ACTION_CYCLE_MINUTES) * (10 + 活躍玩家數)`.
   3. 套用: 將 villages 表中所有 XP 欄位減去總損耗 (最小為 0).
   4. 更新: last_tick_time = 現在時間.
 

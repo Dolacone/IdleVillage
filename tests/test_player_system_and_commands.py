@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from cogs.actions import _build_embed
+from cogs.actions import ActionsCog, _build_embed
 from support import DatabaseTestCase
 from cogs.events import EventsCog
 from cogs.general import ALLOWED_OWNER_ID, General
@@ -101,7 +101,12 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
 
     async def test_player_system_message_activity_updates_last_message_time(self):
         village_id = await self.create_village(guild_id=42)
-        player_discord_id = await self.create_player(village_id, discord_id=123, last_message_time="2000-01-01T00:00:00")
+        player_discord_id = await self.create_player(
+            village_id,
+            discord_id=123,
+            last_message_time="2000-01-01T00:00:00",
+            last_command_time="2001-01-01T00:00:00",
+        )
         cog = EventsCog(bot=None)
         message = SimpleNamespace(
             author=SimpleNamespace(bot=False, id=123),
@@ -111,10 +116,38 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         await cog.on_message(message)
 
         player = await self.fetchone(
-            "SELECT last_message_time FROM players WHERE discord_id = ? AND village_id = ?",
+            "SELECT last_message_time, last_command_time FROM players WHERE discord_id = ? AND village_id = ?",
             (player_discord_id, village_id),
         )
         self.assertNotEqual(player[0], "2000-01-01T00:00:00")
+        self.assertEqual(player[1], "2001-01-01T00:00:00")
+
+    async def test_idlevillage_command_updates_last_command_time_only(self):
+        village_id = await self.create_village(guild_id=42)
+        player_discord_id = await self.create_player(
+            village_id,
+            discord_id=123,
+            last_message_time="2000-01-01T00:00:00",
+            last_command_time="2001-01-01T00:00:00",
+        )
+        bot = _FakeBot()
+        bot.register_guild(42)
+        cog = ActionsCog(bot=bot)
+        inter = SimpleNamespace(
+            author=SimpleNamespace(id=123),
+            guild=SimpleNamespace(id=42, name="Village 42"),
+            response=_FakeResponse(),
+            bot=bot,
+        )
+
+        await cog.idlevillage.callback(cog, inter)
+
+        player = await self.fetchone(
+            "SELECT last_message_time, last_command_time FROM players WHERE discord_id = ? AND village_id = ?",
+            (player_discord_id, village_id),
+        )
+        self.assertEqual(player[0], "2000-01-01T00:00:00")
+        self.assertNotEqual(player[1], "2001-01-01T00:00:00")
 
     async def test_village_binding_owner_can_initialize_once(self):
         cog = General(bot=_FakeBot())

@@ -30,21 +30,21 @@ async def _get_or_create_player(db, village_id: int, discord_id: int):
     now = datetime.datetime.utcnow().isoformat()
     await db.execute(
         """
-        INSERT INTO players (discord_id, village_id, last_message_time)
-        VALUES (?, ?, ?)
+        INSERT INTO players (discord_id, village_id, last_message_time, last_command_time)
+        VALUES (?, ?, ?, ?)
         """,
-        (discord_id, village_id, now),
+        (discord_id, village_id, "", now),
     )
     await db.commit()
     return discord_id
 
 
-async def _update_player_activity(db, player_discord_id: int, village_id: int):
+async def _update_player_command_time(db, player_discord_id: int, village_id: int):
     now = datetime.datetime.utcnow().isoformat()
     await db.execute(
         """
         UPDATE players
-        SET last_message_time = ?
+        SET last_command_time = ?
         WHERE discord_id = ?
           AND village_id = ?
         """,
@@ -180,6 +180,7 @@ async def _render_interface(
     view=None,
     req_id: str = None,
     user_id=None,
+    update_command_activity: bool = False,
 ):
     if not inter.guild:
         if create_response:
@@ -202,7 +203,8 @@ async def _render_interface(
 
         await Engine.settle_village(village_id, db, req_id=req_id, user_id=user_id)
         player_discord_id = await _get_or_create_player(db, village_id, player_discord_id)
-        await _update_player_activity(db, player_discord_id, village_id)
+        if update_command_activity:
+            await _update_player_command_time(db, player_discord_id, village_id)
         await Engine.settle_player(player_discord_id, village_id, db, is_ui_refresh=True, req_id=req_id, user_id=user_id)
         embed = await _build_embed(inter, db, village_id, player_discord_id)
         await Engine.sync_announcement(village_id, db=db, bot=getattr(inter, "bot", None), req_id=req_id, user_id=user_id)
@@ -254,7 +256,6 @@ class ActionSubmitButton(disnake.ui.Button):
                 return
 
             player_discord_id = await _get_or_create_player(db, village_id, player_discord_id)
-            await _update_player_activity(db, player_discord_id, village_id)
             await Engine.settle_village(village_id, db, req_id=req_id, user_id=inter.author.id)
 
             async with db.execute(
@@ -411,6 +412,7 @@ class ActionsCog(commands.Cog):
             view=VillageView(),
             req_id=req_id,
             user_id=inter.author.id,
+            update_command_activity=True,
         )
         log_event(req_id, inter.author.id, "RESP", "/idlevillage rendered")
 

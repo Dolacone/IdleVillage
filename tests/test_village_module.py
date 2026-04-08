@@ -55,6 +55,29 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         )
         self.assertEqual(village, (78, 78, 78))
 
+    async def test_village_decay_uses_cycle_units_for_short_heartbeat(self):
+        os.environ["ACTION_CYCLE_MINUTES"] = "1"
+        last_tick = datetime.utcnow() - timedelta(seconds=60)
+        village_id = await self.create_village(
+            food_efficiency_xp=100,
+            storage_capacity_xp=100,
+            resource_yield_xp=100,
+            last_tick_time=last_tick,
+        )
+        await self.create_player(village_id, last_message_time=datetime.utcnow(), status="idle")
+
+        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+            await Engine.settle_village(village_id, db)
+
+        village = await self.fetchone(
+            """
+            SELECT food_efficiency_xp, storage_capacity_xp, resource_yield_xp
+            FROM villages WHERE id = ?
+            """,
+            (village_id,),
+        )
+        self.assertEqual(village, (89, 89, 89))
+
     async def test_village_interrupted_action_settles_partial_progress(self):
         village_id = await self.create_village(food=0)
         node_id = await self.create_resource_node(village_id, node_type="food", quality=100, remaining_amount=100)
@@ -136,3 +159,104 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         self.assertEqual(player[0], "building")
         self.assertEqual(player[1], 1)
         self.assertIsNotNone(player[2])
+
+    async def test_settlement_backfills_multiple_completed_cycles(self):
+        os.environ["ACTION_CYCLE_MINUTES"] = "1"
+        village_id = await self.create_village(food=100, wood=100, stone=100)
+        player_discord_id = await self.create_player(village_id)
+
+        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+            started = await Engine.start_action(player_discord_id, village_id, "building", 1, db=db)
+            self.assertTrue(started)
+
+            now = datetime.utcnow()
+            await db.execute(
+                """
+                UPDATE players
+                SET last_update_time = ?, completion_time = ?
+                WHERE discord_id = ? AND village_id = ?
+                """,
+                (
+                    (now - timedelta(minutes=5)).isoformat(),
+                    (now - timedelta(minutes=4)).isoformat(),
+                    player_discord_id,
+                    village_id,
+                ),
+            )
+            await db.commit()
+
+            await Engine.settle_player(player_discord_id, village_id, db)
+
+        village = await self.fetchone(
+            "SELECT food, wood, stone, food_efficiency_xp FROM villages WHERE id = ?",
+            (village_id,),
+        )
+        player = await self.fetchone(
+            """
+            SELECT status, target_id, completion_time
+            FROM players
+            WHERE discord_id = ? AND village_id = ?
+            """,
+            (player_discord_id, village_id),
+        )
+        logs = await self.fetchone(
+            """
+            SELECT count(*)
+            FROM player_actions_log
+            WHERE player_discord_id = ? AND village_id = ? AND action_type = 'building'
+            """,
+            (player_discord_id, village_id),
+        )
+
+        self.assertEqual(village, (40, 40, 70, 50))
+        self.assertEqual(player[0], "building")
+        self.assertEqual(player[1], 1)
+        self.assertIsNotNone(player[2])
+        self.assertEqual(logs[0], 5)
+
+    async def test_settlement_recalculates_stats_during_backfill(self):
+        os.environ["ACTION_CYCLE_MINUTES"] = "1"
+        village_id = await self.create_village(food=100, wood=100, stone=100)
+        player_discord_id = await self.create_player(village_id)
+        now = datetime.utcnow()
+
+        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+            entries = []
+            for index in range(49):
+                end_time = now - timedelta(minutes=50 - index)
+                start_time = end_time - timedelta(minutes=1)
+                entries.append((player_discord_id, village_id, "building", start_time.isoformat(), end_time.isoformat()))
+            await db.executemany(
+                """
+                INSERT INTO player_actions_log (player_discord_id, village_id, action_type, start_time, end_time)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                entries,
+            )
+            await db.commit()
+
+            started = await Engine.start_action(player_discord_id, village_id, "building", 1, db=db)
+            self.assertTrue(started)
+
+            await db.execute(
+                """
+                UPDATE players
+                SET last_update_time = ?, completion_time = ?
+                WHERE discord_id = ? AND village_id = ?
+                """,
+                (
+                    (now - timedelta(minutes=5)).isoformat(),
+                    (now - timedelta(minutes=4)).isoformat(),
+                    player_discord_id,
+                    village_id,
+                ),
+            )
+            await db.commit()
+
+            await Engine.settle_player(player_discord_id, village_id, db)
+
+        village = await self.fetchone(
+            "SELECT food_efficiency_xp FROM villages WHERE id = ?",
+            (village_id,),
+        )
+        self.assertEqual(village[0], 99)

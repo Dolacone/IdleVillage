@@ -88,6 +88,7 @@ async def _create_current_tables(db):
             discord_id INTEGER NOT NULL,
             village_id INTEGER NOT NULL,
             last_message_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_command_time TIMESTAMP DEFAULT '',
             status TEXT DEFAULT 'idle',
             target_id INTEGER,
             last_update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -197,12 +198,13 @@ async def _migrate_identity_schema(db):
         await db.execute(
             """
             INSERT INTO players (
-                discord_id, village_id, last_message_time,
+                discord_id, village_id, last_message_time, last_command_time,
                 status, target_id, last_update_time, completion_time
             )
             SELECT
                 CAST(p.discord_id AS INTEGER),
                 CAST(v.guild_id AS INTEGER),
+                p.last_message_time,
                 p.last_message_time,
                 p.status,
                 p.target_id,
@@ -294,6 +296,8 @@ async def init_db():
     async with aiosqlite.connect(DB_PATH) as db:
         await _create_current_tables(db)
         await _migrate_identity_schema(db)
+        await _ensure_column(db, "players", "last_command_time", "TIMESTAMP DEFAULT ''")
+        await db.execute("UPDATE players SET last_command_time = last_message_time WHERE last_command_time IS NULL")
         await _migrate_resource_nodes_drop_level(db)
 
         await db.commit()

@@ -25,15 +25,16 @@
 - 對象: `completion_time <= Now` 的玩家.
 - 邏輯:
   1. 清理過期或已耗盡的資源節點.
-  2. 對 `completion_time <= Now` 的玩家強制執行標準結算流程.
-  3. 對所有村莊執行建築損耗結算.
+  2. 先執行全域 inactivity scan, 將 7 天未發言且 7 天未執行 `/idlevillage` 的玩家標記為 `missing`.
+  3. 對 `completion_time <= Now` 的玩家強制執行標準結算流程.
+  4. 對所有村莊執行建築損耗結算.
 
 ### 2. 標準結算流程 (Settlement Steps)
 
 所有的結算必須精確到秒, 並遵循以下順序:
-1. 計算邊界: `TargetTime = min(Now, completion_time)`.
-2. 重算玩家素質: 依 `player_actions_log` 最新 150 筆紀錄更新 `player_stats`.
-3. 計算 Delta: `TargetTime - last_update_time`.
+1. 若玩家存在已逾期的完整循環, 必須以 while-loop 逐個循環回補, 不可直接跳到 `Now`.
+2. 每個循環切片都先重算玩家素質: 依 `player_actions_log` 最新 150 筆紀錄更新 `player_stats`.
+3. 計算 Delta: `SliceEnd - SliceStart`.
 4. 紀錄行動片段:
    - 若 `delta > 0` 且玩家不是 `missing`, 依 `ACTION_CYCLE_MINUTES` 切割片段並寫入 `player_actions_log`.
    - `gathering` 會依節點類型寫為 `gathering_food`, `gathering_wood`, `gathering_stone`.
@@ -44,9 +45,9 @@
    - `exploring`: 依目前活躍節點數做 Inverse-Square 成功判定, 成功時建立高斯品質的新節點.
    - 村莊資源入庫時, 受 `Storage Capacity` 與 `Resource Yield` 建築效果影響.
 6. 資料更新:
-   - 檢查玩家是否符合 `missing` 條件 (7 天未發言且 7 天未完成循環).
+   - 檢查玩家是否符合 `missing` 條件 (7 天未發言且 7 天未執行 `/idlevillage`).
    - 若玩家主動中斷, 狀態改為 `idle`.
-   - 若完整循環結束且資源足夠, 嘗試自動啟動下一個 Action Cycle; 否則改為 `idle`.
+   - 若完整循環結束且資源足夠, 以該循環結束時間作為下一個 Lease 的起點, 嘗試自動啟動下一個 Action Cycle; 否則改為 `idle`.
    - 若循環尚未結束, 保留原本的 `completion_time`.
    - 更新 `status`, `target_id`, `last_update_time`, `completion_time`.
 

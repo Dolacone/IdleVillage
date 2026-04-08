@@ -52,12 +52,69 @@ class EngineWatcherBehaviorTests(DatabaseTestCase):
             status="building",
             target_id=1,
             last_message_time=now - timedelta(days=8),
+            last_command_time=now - timedelta(days=8),
             last_update_time=now - timedelta(days=8),
             completion_time=now - timedelta(days=7, minutes=1),
         )
 
         async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
             await Engine.settle_player(player_discord_id, village_id, db)
+
+        player = await self.fetchone(
+            "SELECT status, target_id FROM players WHERE discord_id = ? AND village_id = ?",
+            (player_discord_id, village_id),
+        )
+        self.assertEqual(player, ("missing", None))
+
+    async def test_watcher_marks_idle_inactive_players_missing_before_decay_count(self):
+        village_id = await self.create_village(
+            food_efficiency_xp=100,
+            storage_capacity_xp=100,
+            resource_yield_xp=100,
+            last_tick_time=datetime.utcnow() - timedelta(hours=1),
+        )
+        player_discord_id = await self.create_player(
+            village_id,
+            status="idle",
+            last_message_time=datetime.utcnow() - timedelta(days=8),
+            last_command_time=datetime.utcnow() - timedelta(days=8),
+            last_update_time=datetime.utcnow(),
+            completion_time=None,
+        )
+
+        await Engine.process_watcher(req_id="WATCHER")
+
+        player = await self.fetchone(
+            "SELECT status, target_id FROM players WHERE discord_id = ? AND village_id = ?",
+            (player_discord_id, village_id),
+        )
+        village = await self.fetchone(
+            """
+            SELECT food_efficiency_xp, storage_capacity_xp, resource_yield_xp
+            FROM villages
+            WHERE id = ?
+            """,
+            (village_id,),
+        )
+
+        self.assertEqual(player, ("missing", None))
+        self.assertEqual(village, (90, 90, 90))
+
+    async def test_in_game_actions_do_not_prevent_missing_when_message_and_command_are_stale(self):
+        village_id = await self.create_village()
+        now = datetime.utcnow()
+        player_discord_id = await self.create_player(
+            village_id,
+            status="building",
+            target_id=1,
+            last_message_time=now - timedelta(days=8),
+            last_command_time=now - timedelta(days=8),
+            last_update_time=now - timedelta(minutes=10),
+            completion_time=now + timedelta(minutes=50),
+        )
+
+        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+            await Engine.settle_player(player_discord_id, village_id, db, is_ui_refresh=True)
 
         player = await self.fetchone(
             "SELECT status, target_id FROM players WHERE discord_id = ? AND village_id = ?",

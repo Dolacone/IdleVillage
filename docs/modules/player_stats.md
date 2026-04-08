@@ -26,7 +26,8 @@
 
 | 欄位名 | 型別 | 說明 | 初始值 |
 | :--- | :--- | :--- | :--- |
-| player_id | INTEGER (PK/FK) | 關聯至 players.id | |
+| player_discord_id | INTEGER (PK/FK) | 關聯至 players.discord_id | |
+| village_id | INTEGER (PK/FK) | 關聯至 villages.id, 讓同一 Discord 使用者可在不同伺服器維持獨立狀態 | |
 | strength | INTEGER | 力量 | 50 |
 | agility | INTEGER | 敏捷 | 50 |
 | perception | INTEGER | 觀察 | 50 |
@@ -38,7 +39,8 @@
 | 欄位名 | 型別 | 說明 |
 | :--- | :--- | :--- |
 | id | INTEGER (PK) | |
-| player_id | INTEGER (FK) | |
+| player_discord_id | INTEGER (FK) | |
+| village_id | INTEGER (FK) | |
 | action_type | TEXT | idle, gathering, exploring, building |
 | start_time | TIMESTAMP | |
 | end_time | TIMESTAMP | |
