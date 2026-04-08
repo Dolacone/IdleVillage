@@ -3,7 +3,7 @@
 定義伺服器公開頻道中的村莊公告看板格式.
 
 ### 1. 顯示規則
-- **訊息類型:** 混合格式訊息 (純文字標題與內容區塊, 搭配 Code Block 村民列表).
+- **訊息類型:** 混合格式訊息 (純文字資源區塊, 搭配建築與村民的 Code Block).
 - **更新機制:** 當村莊中有玩家執行 `/idlevillage`、Watcher 完成結算, 或管理員執行 `/idlevillage-announcement` 時嘗試觸發更新.
 - **節流控制 (Throttling)**: 每次公告更新後需冷卻 60 秒 (由資料庫 `last_announcement_updated` 紀錄).
 - **排序邏輯:** 村民列表依據「最後行動開始時間 (start_time)」降序排列 (Latest at top).
@@ -15,9 +15,11 @@ Village Resources
 🍎 {food} | 🪵 {wood} | 🪨 {stone} (Cap: {max})
 
 Village Buildings
+```text
 廚房: Lv.{lv} [XP: {curr} / {next}]
 倉庫: Lv.{lv} [XP: {curr} / {next}]
 加工: Lv.{lv} [XP: {curr} / {next}]
+```
 
 --- ACTIVE VILLAGERS (Sorted by latest action) ---
 ```text
@@ -28,9 +30,13 @@ Village Buildings
 ```
 
 ### 3. 區塊樣式規範
-- **Resources & Buildings**:
+- **Resources**:
   - 不使用 Code Block.
   - 使用純文字標題與表情符號, 不使用 Markdown emphasis.
+  - XP 以外的數值需包含千分位撇號.
+- **Village Buildings**:
+  - 建築內容必須包裹在單一 Code Block (` ```text `) 中.
+  - 標題 `Village Buildings` 保持純文字, 不使用 Markdown emphasis.
   - XP 數值需包含千分位撇號.
 - **Active Villagers**:
   - **必須包裹在單一 Code Block (` ```text `) 中**.

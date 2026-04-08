@@ -1158,11 +1158,11 @@ class Engine:
                 f"🍎 {food:,} | 🪵 {wood:,} | 🪨 {stone:,} (Cap: {storage_capacity:,})",
                 "",
                 "Village Buildings",
+            ]
+            building_lines = [
                 Engine._building_progress_line(1, food_xp),
                 Engine._building_progress_line(2, storage_xp),
                 Engine._building_progress_line(3, yield_xp),
-                "",
-                "--- ACTIVE VILLAGERS (Sorted by latest action) ---",
             ]
 
             async with db.execute(
@@ -1212,6 +1212,10 @@ class Engine:
                 announcement = (
                     "\n".join(rich_text_lines)
                     + "\n```text\n"
+                    + "\n".join(building_lines)
+                    + "\n```"
+                    + "\n\n--- ACTIVE VILLAGERS (Sorted by latest action) ---"
+                    + "\n```text\n"
                     + "\n".join(villager_lines)
                     + "\n```"
                 )
@@ -1244,6 +1248,10 @@ class Engine:
 
             return (
                 "\n".join(rich_text_lines)
+                + "\n```text\n"
+                + "\n".join(building_lines)
+                + "\n```"
+                + "\n\n--- ACTIVE VILLAGERS (Sorted by latest action) ---"
                 + "\n```text\n"
                 + "\n".join(villager_lines)
                 + "\n```"

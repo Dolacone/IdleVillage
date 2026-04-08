@@ -372,7 +372,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         self.assertIn("廚房: Lv.0 [XP: 0 / 1,000]", announcement)
         self.assertIn("User 999", announcement)
         self.assertIn("[Idle]", announcement)
-        self.assertIn("```text", announcement)
+        self.assertGreaterEqual(announcement.count("```text"), 2)
         self.assertNotIn("STR", announcement)
         self.assertNotIn("AGI", announcement)
         self.assertNotIn("**", announcement)
