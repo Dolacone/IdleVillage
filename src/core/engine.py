@@ -59,6 +59,18 @@ class Engine:
         return 1000 * (2 ** level)
 
     @staticmethod
+    def _building_level_base_xp(level: int):
+        total_required = 0
+        next_required = 1000
+        current_level = max(0, int(level or 0))
+
+        for _ in range(current_level):
+            total_required += next_required
+            next_required *= 2
+
+        return total_required
+
+    @staticmethod
     def _action_cycle_minutes():
         return get_action_cycle_minutes()
 
@@ -99,8 +111,10 @@ class Engine:
     @staticmethod
     def _building_progress_line(building_id: int, xp: int):
         level = Engine._building_level_from_xp(xp)
+        level_base_xp = Engine._building_level_base_xp(level)
+        current_level_xp = max(0, (xp or 0) - level_base_xp)
         next_threshold = Engine._next_building_threshold(level)
-        return f"{Engine.BUILDING_NAMES[building_id]}: Lv.{level} [XP: {xp:,} / {next_threshold:,}]"
+        return f"{Engine.BUILDING_NAMES[building_id]}: Lv.{level} [XP: {current_level_xp:,} / {next_threshold:,}]"
 
     @staticmethod
     def _format_remaining_short(target_time: datetime, reference_time: datetime = None):
@@ -171,8 +185,10 @@ class Engine:
         req_id: str = None,
         user_id=None,
     ):
-        reason_text = "out of stock" if reason == "out_of_stock" else "expired"
-        message = f"{node_type.title()} node #{node_id} has been removed from the village board ({reason_text})."
+        if reason == "out_of_stock":
+            message = f"{node_type.title()} node #{node_id} is now out of stock."
+        else:
+            message = f"{node_type.title()} node #{node_id} is no longer available."
         return await Engine._announce_channel_message(
             village_id,
             message,
@@ -387,11 +403,10 @@ class Engine:
                 if actual_gathered > 0:
                     new_remaining_amount = remaining_amount - actual_gathered
                     await db.execute(
-                        "UPDATE resource_nodes SET remaining_amount = remaining_amount - ? WHERE id = ?",
-                        (actual_gathered, target_id),
+                        "UPDATE resource_nodes SET remaining_amount = ? WHERE id = ?",
+                        (max(0, new_remaining_amount), target_id),
                     )
                     if new_remaining_amount <= 0:
-                        await db.execute("DELETE FROM resource_nodes WHERE id = ?", (target_id,))
                         depleted_nodes.append(
                             {
                                 "node_id": target_id,
@@ -444,41 +459,65 @@ class Engine:
                     )
 
         elif status == "exploring" and time_ratio > 0:
-            async with db.execute(
-                """
-                SELECT count(*)
-                FROM resource_nodes
-                WHERE village_id = ?
-                  AND remaining_amount > 0
-                  AND expiry_time > ?
-                """,
-                (village_id, end_time.isoformat()),
-            ) as cursor:
-                active_nodes_row = await cursor.fetchone()
-
-            active_nodes = active_nodes_row[0] if active_nodes_row else 0
-            discovery_chance = min(1.0, time_ratio) * (1.0 / (1.0 + (active_nodes ** 2)))
+            discovery_chance = min(1.0, time_ratio * ((p_per + p_kno) / 400.0))
             if random.random() < discovery_chance:
                 perception_knowledge = p_per + p_kno
                 node_type = random.choice(["food", "wood", "stone"])
                 quality = max(75, int(random.gauss((p_per + p_kno) / 2.0, 50)))
-                stock = random.randint(perception_knowledge * 10, perception_knowledge * 20)
-                expiry = end_time + timedelta(hours=48)
+                stock = random.randint(perception_knowledge * 5, perception_knowledge * 10)
 
-                await db.execute(
+                async with db.execute(
                     """
-                    INSERT INTO resource_nodes (
-                        village_id, type, quality, remaining_amount, expiry_time
-                    )
-                    VALUES (?, ?, ?, ?, ?)
+                    SELECT id, quality, remaining_amount
+                    FROM resource_nodes
+                    WHERE village_id = ?
+                      AND type = ?
+                    ORDER BY id DESC
+                    LIMIT 1
                     """,
-                    (village_id, node_type, quality, stock, expiry.isoformat()),
-                )
+                    (village_id, node_type),
+                ) as cursor:
+                    existing_node = await cursor.fetchone()
+
+                if existing_node:
+                    node_id, old_quality, old_stock = existing_node
+                    cap_was_full = old_stock >= 8000
+                    if old_stock <= 0:
+                        new_quality = quality
+                    else:
+                        new_quality = math.floor(
+                            ((old_quality * old_stock) + (quality * stock)) / (old_stock + stock)
+                        )
+                    new_stock = min(8000, old_stock + stock)
+                    await db.execute(
+                        """
+                        UPDATE resource_nodes
+                        SET quality = ?, remaining_amount = ?, expiry_time = NULL
+                        WHERE id = ?
+                        """,
+                        (new_quality, new_stock, node_id),
+                    )
+                else:
+                    new_quality = quality
+                    new_stock = min(8000, stock)
+                    await db.execute(
+                        """
+                        INSERT INTO resource_nodes (
+                            village_id, type, quality, remaining_amount, expiry_time
+                        )
+                        VALUES (?, ?, ?, ?, NULL)
+                        """,
+                        (village_id, node_type, new_quality, new_stock),
+                    )
+
                 discoveries.append(
                     {
                         "type": node_type,
-                        "quality": quality,
-                        "remaining_amount": stock,
+                        "quality": new_quality,
+                        "remaining_amount": new_stock,
+                        "stock_added": stock,
+                        "is_new_node": existing_node is None,
+                        "cap_was_full": existing_node is not None and cap_was_full,
                     }
                 )
 
@@ -779,27 +818,26 @@ class Engine:
                     if next_completion is None:
                         if current_status == "gathering" and current_target:
                             async with db.execute(
-                                "SELECT type, remaining_amount, expiry_time FROM resource_nodes WHERE id = ?",
+                                "SELECT type, remaining_amount FROM resource_nodes WHERE id = ?",
                                 (current_target,),
                             ) as cursor:
                                 node_row = await cursor.fetchone()
                             if node_row:
-                                node_type, remaining_amount, expiry_time_str = node_row
-                                expiry_time = Engine._parse_timestamp(expiry_time_str)
-                                expiry_reason = None
+                                node_type, remaining_amount = node_row
                                 if remaining_amount <= 0:
-                                    expiry_reason = "out_of_stock"
-                                elif expiry_time and current_last_update >= expiry_time:
-                                    expiry_reason = "expired"
-                                if expiry_reason:
-                                    await db.execute("DELETE FROM resource_nodes WHERE id = ?", (current_target,))
-                                    expired_nodes.append(
-                                        {
-                                            "node_id": current_target,
-                                            "node_type": node_type,
-                                            "reason": expiry_reason,
-                                        }
+                                    already_recorded = any(
+                                        expired_node["node_id"] == current_target
+                                        and expired_node["reason"] == "out_of_stock"
+                                        for expired_node in expired_nodes
                                     )
+                                    if not already_recorded:
+                                        expired_nodes.append(
+                                            {
+                                                "node_id": current_target,
+                                                "node_type": node_type,
+                                                "reason": "out_of_stock",
+                                            }
+                                        )
                         current_status = "idle"
                         current_target = None
                         current_completion = None
@@ -869,15 +907,6 @@ class Engine:
                     user_id,
                     "STATUS",
                     f"Player {player_discord_id} status changed from {status} to {new_status}",
-                )
-
-            for discovery in discoveries:
-                await Engine.send_discovery_announcement(
-                    village_id,
-                    player_discord_id,
-                    discovery,
-                    bot=Engine.bot,
-                    req_id=req_id,
                 )
 
             for expired_node in expired_nodes:
@@ -977,17 +1006,14 @@ class Engine:
                 if not target_id:
                     return None
                 async with db.execute(
-                    "SELECT remaining_amount, expiry_time FROM resource_nodes WHERE id = ?",
+                    "SELECT remaining_amount FROM resource_nodes WHERE id = ?",
                     (target_id,),
                 ) as cursor:
                     node = await cursor.fetchone()
                 if not node:
                     return None
-                remaining_amount, expiry_time_str = node
+                remaining_amount = node[0]
                 if remaining_amount <= 0:
-                    return None
-                expiry_time = Engine._parse_timestamp(expiry_time_str)
-                if expiry_time and (cycle_start_time or datetime.utcnow()) >= expiry_time:
                     return None
 
             if action == "building" and not target_id:
@@ -1128,7 +1154,7 @@ class Engine:
         return f"Village {guild_id}"
 
     @staticmethod
-    async def render_announcement(village_id: int, db=None, bot=None):
+    async def render_announcement(village_id: int, db=None, bot=None, rendered_at: datetime = None):
         close_db = False
         if db is None:
             db = await get_connection()
@@ -1137,7 +1163,7 @@ class Engine:
         try:
             async with db.execute(
                 """
-                SELECT id, food, wood, stone, food_efficiency_xp, storage_capacity_xp, resource_yield_xp
+                SELECT food, wood, stone, food_efficiency_xp, storage_capacity_xp, resource_yield_xp, last_announcement_updated
                 FROM villages
                 WHERE id = ?
                 """,
@@ -1148,14 +1174,14 @@ class Engine:
             if not village:
                 return None
 
-            guild_id, food, wood, stone, food_xp, storage_xp, yield_xp = village
-            village_name = await Engine._resolve_village_name(bot or Engine.bot, guild_id)
+            food, wood, stone, food_xp, storage_xp, yield_xp, last_updated_str = village
             storage_capacity = Engine._storage_capacity(storage_xp)
+            last_updated = rendered_at or Engine._parse_timestamp(last_updated_str) or datetime.utcnow()
             rich_text_lines = [
-                village_name,
+                f"(Last Update: <t:{Engine._to_discord_unix(last_updated)}:R>)",
                 "",
-                "Village Resources",
-                f"🍎 {food:,} | 🪵 {wood:,} | 🪨 {stone:,} (Cap: {storage_capacity:,})",
+                f"Village Resources (Cap: {storage_capacity:,})",
+                f"🍎 {food:,} | 🪵 {wood:,} | 🪨 {stone:,}",
                 "",
                 "Village Buildings",
             ]
@@ -1168,16 +1194,13 @@ class Engine:
             async with db.execute(
                 """
                 SELECT
-                    p.discord_id,
                     p.status,
                     p.target_id,
-                    p.last_update_time,
-                    p.completion_time
+                    COUNT(*)
                 FROM players p
                 WHERE p.village_id = ?
                   AND p.status != 'missing'
-                ORDER BY p.last_update_time DESC
-                LIMIT 20
+                GROUP BY p.status, p.target_id
                 """,
                 (village_id,),
             ) as cursor:
@@ -1185,75 +1208,21 @@ class Engine:
 
             villager_lines = []
 
-            for row in players:
-                (
-                    discord_id,
-                    status,
-                    target_id,
-                    last_update_time_str,
-                    completion_time_str,
-                ) = row
-                name = await Engine._resolve_player_name(bot or Engine.bot, guild_id, discord_id)
-                display_name = name[:12]
-                last_update = Engine._parse_timestamp(last_update_time_str)
-                completion_time = Engine._parse_timestamp(completion_time_str)
-                status_text = await Engine._build_villager_status_summary(
-                    db,
-                    status,
-                    target_id,
-                    last_update,
-                    completion_time,
-                )
-                villager_lines.append(f"{display_name:<12} | {status_text}")
+            for status, target_id, count in players:
+                action_name = await Engine._get_target_description(db, status, target_id)
+                villager_lines.append((action_name, int(count)))
 
-            villager_lines.append(f"(Last Update: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC)")
-
-            while players:
-                announcement = (
-                    "\n".join(rich_text_lines)
-                    + "\n```text\n"
-                    + "\n".join(building_lines)
-                    + "\n```"
-                    + "\n\n--- ACTIVE VILLAGERS (Sorted by latest action) ---"
-                    + "\n```text\n"
-                    + "\n".join(villager_lines)
-                    + "\n```"
-                )
-                if len(announcement) <= 2000:
-                    return announcement
-
-                players = players[:-1]
-                villager_lines = []
-                for row in players:
-                    (
-                        discord_id,
-                        status,
-                        target_id,
-                        last_update_time_str,
-                        completion_time_str,
-                    ) = row
-                    name = await Engine._resolve_player_name(bot or Engine.bot, guild_id, discord_id)
-                    display_name = name[:12]
-                    last_update = Engine._parse_timestamp(last_update_time_str)
-                    completion_time = Engine._parse_timestamp(completion_time_str)
-                    status_text = await Engine._build_villager_status_summary(
-                        db,
-                        status,
-                        target_id,
-                        last_update,
-                        completion_time,
-                    )
-                    villager_lines.append(f"{display_name:<12} | {status_text}")
-                villager_lines.append(f"(Last Update: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC)")
+            villager_lines.sort(key=lambda item: (-item[1], item[0]))
+            villager_text = [f"{action_name}: {count:,}" for action_name, count in villager_lines] or ["(none)"]
 
             return (
                 "\n".join(rich_text_lines)
                 + "\n```text\n"
                 + "\n".join(building_lines)
                 + "\n```"
-                + "\n\n--- ACTIVE VILLAGERS (Sorted by latest action) ---"
+                + "\n\nActive Villagers"
                 + "\n```text\n"
-                + "\n".join(villager_lines)
+                + "\n".join(villager_text)
                 + "\n```"
             )
 
@@ -1295,7 +1264,12 @@ class Engine:
             if channel is None:
                 return None
 
-            announcement_text = await Engine.render_announcement(village_id, db=db, bot=bot or Engine.bot)
+            announcement_text = await Engine.render_announcement(
+                village_id,
+                db=db,
+                bot=bot or Engine.bot,
+                rendered_at=now,
+            )
             if not announcement_text:
                 return None
 
@@ -1357,54 +1331,6 @@ class Engine:
                 await db.close()
 
     @staticmethod
-    async def send_discovery_announcement(
-        village_id: int,
-        player_discord_id: int,
-        discovery: dict,
-        bot=None,
-        req_id: str = None,
-    ):
-        if not discovery:
-            return None
-
-        async with get_connection() as db:
-            async with db.execute(
-                """
-                SELECT id, announcement_channel_id
-                FROM villages
-                WHERE id = ?
-                """,
-                (village_id,),
-            ) as cursor:
-                village = await cursor.fetchone()
-
-            if not village:
-                return None
-
-            guild_id, channel_id = village
-            if not channel_id:
-                return None
-
-        channel = await Engine._resolve_channel(bot or Engine.bot, channel_id)
-        if channel is None:
-            return None
-
-        player_name = await Engine._resolve_player_name(bot or Engine.bot, guild_id, player_discord_id)
-
-        message = (
-            f"New discovery by {player_name}: "
-            f"{discovery['type'].title()} node "
-            f"(Quality {discovery['quality']}%, Stock {discovery['remaining_amount']})"
-        )
-        try:
-            sent_message = await channel.send(message)
-            log_event(req_id, "SYSTEM", "RESP", f"Discovery announcement sent for village {village_id}")
-            return sent_message
-        except Exception as exc:
-            log_event(req_id, "SYSTEM", "ERROR", f"Discovery announcement failed for village {village_id}: {exc}")
-            return None
-
-    @staticmethod
     async def process_watcher(req_id: str = None):
         watcher_req_id = req_id or new_request_id()
         log_event(watcher_req_id, "SYSTEM", "STATUS", "Watcher sweep started")
@@ -1412,20 +1338,6 @@ class Engine:
         async with get_connection() as db:
             now = datetime.utcnow()
             now_iso = now.isoformat()
-            async with db.execute(
-                """
-                SELECT id, village_id, type,
-                       CASE
-                           WHEN remaining_amount <= 0 THEN 'out_of_stock'
-                           ELSE 'expired'
-                       END
-                FROM resource_nodes
-                WHERE expiry_time <= ? OR remaining_amount <= 0
-                """,
-                (now_iso,),
-            ) as cursor:
-                expired_node_rows = await cursor.fetchall()
-            await db.execute("DELETE FROM resource_nodes WHERE expiry_time <= ? OR remaining_amount <= 0", (now_iso,))
             await Engine._mark_missing_players(db, now, req_id=watcher_req_id, user_id="SYSTEM")
 
             async with db.execute(
@@ -1448,17 +1360,6 @@ class Engine:
                 await Engine.settle_village(village[0], db, req_id=watcher_req_id, user_id="SYSTEM")
 
             await db.commit()
-
-        for node_id, village_id, node_type, reason in expired_node_rows:
-            await Engine.send_node_expiry_announcement(
-                village_id,
-                node_id,
-                node_type,
-                reason,
-                bot=Engine.bot,
-                req_id=watcher_req_id,
-                user_id="SYSTEM",
-            )
 
         log_event(watcher_req_id, "SYSTEM", "STATUS", "Watcher sweep completed")
 

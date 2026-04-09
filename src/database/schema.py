@@ -1,6 +1,7 @@
 import os
 import aiosqlite
 import asyncio
+import math
 
 DB_PATH = os.getenv("DATABASE_PATH", "data/village.db")
 
@@ -44,6 +45,119 @@ async def _migrate_resource_nodes_drop_level(db):
     )
     await db.execute("DROP TABLE resource_nodes")
     await db.execute("ALTER TABLE resource_nodes_new RENAME TO resource_nodes")
+
+
+async def _migrate_resource_nodes_to_singletons(db):
+    async with db.execute(
+        """
+        SELECT id, remaining_amount
+        FROM resource_nodes
+        """
+    ) as cursor:
+        all_nodes = await cursor.fetchall()
+
+    for node_id, remaining_amount in all_nodes:
+        normalized_amount = max(0, min(8000, int(remaining_amount or 0)))
+        await db.execute(
+            """
+            UPDATE resource_nodes
+            SET remaining_amount = ?, expiry_time = NULL
+            WHERE id = ?
+            """,
+            (normalized_amount, node_id),
+        )
+
+    async with db.execute(
+        """
+        SELECT village_id, type
+        FROM resource_nodes
+        GROUP BY village_id, type
+        HAVING COUNT(*) > 1
+        """
+    ) as cursor:
+        duplicate_groups = await cursor.fetchall()
+
+    for village_id, node_type in duplicate_groups:
+        async with db.execute(
+            """
+            SELECT id, quality, remaining_amount
+            FROM resource_nodes
+            WHERE village_id = ?
+              AND type = ?
+            ORDER BY id ASC
+            """,
+            (village_id, node_type),
+        ) as cursor:
+            nodes = await cursor.fetchall()
+
+        if len(nodes) <= 1:
+            continue
+
+        node_ids = [node_id for node_id, _quality, _remaining_amount in nodes]
+        placeholders = ", ".join("?" for _ in node_ids)
+        async with db.execute(
+            f"""
+            SELECT target_id, COUNT(*)
+            FROM players
+            WHERE village_id = ?
+              AND status = 'gathering'
+              AND target_id IN ({placeholders})
+            GROUP BY target_id
+            ORDER BY COUNT(*) DESC, target_id ASC
+            LIMIT 1
+            """,
+            (village_id, *node_ids),
+        ) as cursor:
+            targeted_node = await cursor.fetchone()
+
+        keeper_id = targeted_node[0] if targeted_node else node_ids[0]
+        keeper_quality = next(
+            int(quality or 0)
+            for node_id, quality, _remaining_amount in nodes
+            if node_id == keeper_id
+        )
+
+        total_stock = sum(max(0, int(remaining_amount or 0)) for _node_id, _quality, remaining_amount in nodes)
+        if total_stock > 0:
+            weighted_quality = math.floor(
+                sum(
+                    int(quality or 0) * max(0, int(remaining_amount or 0))
+                    for _node_id, quality, remaining_amount in nodes
+                ) / total_stock
+            )
+        else:
+            weighted_quality = keeper_quality
+
+        merged_stock = min(8000, total_stock)
+        await db.execute(
+            """
+            UPDATE resource_nodes
+            SET quality = ?, remaining_amount = ?, expiry_time = NULL
+            WHERE id = ?
+            """,
+            (weighted_quality, merged_stock, keeper_id),
+        )
+
+        duplicate_ids = [node_id for node_id in node_ids if node_id != keeper_id]
+        if duplicate_ids:
+            duplicate_placeholders = ", ".join("?" for _ in duplicate_ids)
+            await db.execute(
+                f"""
+                UPDATE players
+                SET target_id = ?
+                WHERE village_id = ?
+                  AND status = 'gathering'
+                  AND target_id IN ({duplicate_placeholders})
+                """,
+                (keeper_id, village_id, *duplicate_ids),
+            )
+            await db.execute(
+                f"""
+                DELETE FROM resource_nodes
+                WHERE id IN ({duplicate_placeholders})
+                """,
+                tuple(duplicate_ids),
+            )
 
 
 async def _table_columns(db, table_name: str):
@@ -299,6 +413,7 @@ async def init_db():
         await _ensure_column(db, "players", "last_command_time", "TIMESTAMP DEFAULT ''")
         await db.execute("UPDATE players SET last_command_time = last_message_time WHERE last_command_time IS NULL")
         await _migrate_resource_nodes_drop_level(db)
+        await _migrate_resource_nodes_to_singletons(db)
 
         await db.commit()
 

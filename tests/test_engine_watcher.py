@@ -5,7 +5,7 @@ from core.engine import Engine
 
 
 class EngineWatcherBehaviorTests(DatabaseTestCase):
-    async def test_engine_watcher_cleans_expired_nodes_and_settles_due_players(self):
+    async def test_engine_watcher_leaves_resource_nodes_intact_and_settles_due_players(self):
         village_id = await self.create_village(food=5)
         expired_node_id = await self.create_resource_node(
             village_id,
@@ -39,7 +39,7 @@ class EngineWatcherBehaviorTests(DatabaseTestCase):
             (player_discord_id, village_id),
         )
 
-        self.assertIsNone(expired_node)
+        self.assertEqual(expired_node[0], expired_node_id)
         self.assertEqual(active_node[0], active_node_id)
         self.assertEqual(village[0], 17)
         self.assertEqual(logs, [("idle",)])

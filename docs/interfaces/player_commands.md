@@ -21,10 +21,10 @@
   - 備註: 數值應包含千分位撇號 (e.g., 1,500).
 
 - **🏗️ Village Buildings** (使用 Code Block 排版)
-  - 廚房: `Lv.{lv} [XP: {curr} / {next}]`
-  - 倉庫: `Lv.{lv} [XP: {curr} / {next}]`
-  - 加工: `Lv.{lv} [XP: {curr} / {next}]`
-  - 備註: 建築名稱與 `Lv.` 之間僅保留單一空格, XP 數值需使用千分位格式 (例如 `1,000`).
+  - 廚房: `Lv.{lv} [XP: {curr_level_xp} / {next_level_required}]`
+  - 倉庫: `Lv.{lv} [XP: {curr_level_xp} / {next_level_required}]`
+  - 加工: `Lv.{lv} [XP: {curr_level_xp} / {next_level_required}]`
+  - 備註: 格式需與 Village Announcement 對齊, 使用當前等級內的 XP Progress (已扣除前面等級所需總和), XP 數值需使用千分位格式 (例如 `1,000`).
 
 - **👤 Player Status** (位於 Embed 最下方)
   - **Stats:** `💪 STR {val} | 🏃 AGI {val} | 👁️ PER {val} | 🧠 KNO {val} | 🔋 END {val}`

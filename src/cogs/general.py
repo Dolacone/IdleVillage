@@ -49,10 +49,9 @@ async def _fetch_active_nodes(village_id: int):
             FROM resource_nodes
             WHERE village_id = ?
               AND remaining_amount > 0
-              AND expiry_time > ?
             ORDER BY type, quality DESC, id DESC
             """,
-            (village_id, datetime.utcnow().isoformat()),
+            (village_id,),
         ) as cursor:
             return await cursor.fetchall()
 

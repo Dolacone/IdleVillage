@@ -23,24 +23,31 @@
 
 ### 3. 探索發現規則 (Exploring Discovery)
 - 判定頻率: 每個行動週期 (Cycle) 結算時執行一次.
-- 成功機率: $P(\text{Found}) = 1 / (1 + n^2)$.
-  - $n$: 當前村莊存在的活躍資源節點數量.
+- 節點限制: 每個村莊每種資源類型 (Food, Wood, Stone) 僅存在一個永久節點.
+- 成功機率: P(Found) = (PER + KNO) / 4 * 1%.
 - 資源類型: 糧食、木材、石材機率均等 (1/3).
-- 資源節點資料結構: 僅需保存 `type`, `quality`, `remaining_amount`, `expiry_time`, 不再保存 `level`.
-- 資源品質 (Quality): 
-  - 依據玩家素質 `(PER + KNO) / 2` 進行高斯分佈 (Gaussian) 隨機生成.
-  - 平均值 ($\mu$): 玩家素質平均值. (例如素質 100 則 $\mu=100$)
-  - 標準差 ($\sigma$): 50.
-  - 钳制處理 (Clamp): `max(75, Quality)`.
 - 資源存量 (Stock): 
-  - 公式: `random(min=(PER + KNO) * 10, max=(PER + KNO) * 20)`.
-- 發現通知: 任何新發現的節點皆必須發送訊息至村莊公告頻道 (Village Announcement Channel).
+  - 發現量: random(min=(PER + KNO) * 5, max=(PER + KNO) * 10).
+  - 最大上限 (Cap): 每個節點存量上限為 8,000.
+  - 溢出處理: 累積後的存量若超過 8,000, 溢出部分將被捨棄, 僅保留至 8,000.
+- 資源品質 (Quality): 
+  - 生成公式: 高斯分佈, 平均值 (mu) 為玩家素質平均值, 標準差 (sigma) 為 50, 鉗制於 75.
+  - 加權平均公式 (Weighted Average): New_Quality = floor((Old_Quality * Old_Stock + Found_Quality * Found_Stock) / (Old_Stock + Found_Stock)).
+  - 比例調整: 即使存量已滿 (8,000), 發現新資源時仍需使用完整的 Found_Stock 進行品質加權計算, 以反映新資源對現有資源池品質的影響.
+  - 備註: 若節點原先不存在 (或存量為 0), 則直接採用本次生成的品質.
+- 發現通知: 不發送公告頻道訊息. 探索成果僅更新資料庫中的節點存量與品質, 並在後續 UI / 查詢中反映.
 
 ### 4. 平衡性參數 (Balance Numbers)
 - 基礎產出速率: 50 / 週期 (Cycle).
-- 節點有效期: 發現後 48 小時.
+- 有效期: 無 (Permanent until depleted).
+- 存量為 0: 節點依然保留於資料庫, 但顯示為 Out of Stock 且無法執行 gather 行動.
+- 採集者處理 (Depletion Behavior):
+  - 結算判定: 當玩家執行結算時, 若目標節點存量已為 0, 該次行動產出為 0, 且玩家狀態強制轉變為 idle.
+  - 部分產出: 若目標節點存量小於玩家應得產出, 玩家僅獲得當前剩餘存量, 隨後節點轉為 Out of Stock, 玩家狀態轉變為 idle.
+  - 狀態轉變通知: 當玩家因資源耗盡而被迫轉為 idle 時, 系統應發送通知並標註該玩家.
 
 ## Changelog
 - 2026.04.07.00: Implemented 1-hour cycle gathering and exploring. - See [2026.04.07.00.md](../changelogs/2026.04.07.00.md)
 - 2026.04.08.00: Updated to Cycle-based logic, Gaussian discovery quality, and refined stock formulas. - See [2026.04.08.00.md](../changelogs/2026.04.08.00.md)
 - 2026.04.08.02: Increased base output from 20 to 50. - See [2026.04.08.02.md](../changelogs/2026.04.08.02.md)
+- 2026.04.09.00: Switched to permanent singleton resource nodes with weighted average quality and stock accumulation. - See [2026.04.09.00.md](../changelogs/2026.04.09.00.md)

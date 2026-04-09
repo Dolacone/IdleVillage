@@ -234,7 +234,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         self.assertIsNotNone(village[1])
         self.assertEqual(inter.response.calls[-1]["ephemeral"], True)
 
-    async def test_exploring_discovery_posts_to_announcement_channel(self):
+    async def test_exploring_discovery_does_not_post_to_announcement_channel(self):
         village_id = await self.create_village(guild_id=55)
         now = datetime.utcnow()
         player_discord_id = await self.create_player(
@@ -264,15 +264,10 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
                 await Engine.settle_player(player_discord_id, village_id, db, interrupted=True)
 
         channel = bot.get_channel(456)
-        self.assertEqual(len(channel.messages), 1)
-        only_message = next(iter(channel.messages.values()))
-        self.assertIn("New discovery", only_message.content)
-        self.assertIn("User 123", only_message.content)
-        self.assertIn("Quality 130%", only_message.content)
-        self.assertNotIn("Lv", only_message.content)
+        self.assertEqual(len(channel.messages), 0)
 
     async def test_idlevillage_embed_uses_localized_building_names_and_compact_status_line(self):
-        village_id = await self.create_village(guild_id=66)
+        village_id = await self.create_village(guild_id=66, food_efficiency_xp=1500)
         now = datetime.utcnow()
         player_discord_id = await self.create_player(
             village_id,
@@ -297,7 +292,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         self.assertIn("廚房", village_buildings_field.value)
         self.assertIn("倉庫", village_buildings_field.value)
         self.assertIn("加工", village_buildings_field.value)
-        self.assertIn("1,000", village_buildings_field.value)
+        self.assertIn("廚房: Lv.1 [XP: 500 / 2,000]", village_buildings_field.value)
         self.assertIn("Status: Building 廚房 (Last activity:", player_status_field.value)
         self.assertIn("Next check:", player_status_field.value)
 
@@ -351,27 +346,39 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         self.assertNotIn("Manual refresh", player_status_field.value)
 
     async def test_village_announcement_uses_mixed_rich_text_and_villager_code_block(self):
-        village_id = await self.create_village(guild_id=88)
-        player_discord_id = await self.create_player(village_id, discord_id=999, status="idle")
+        village_id = await self.create_village(
+            guild_id=88,
+            food=1234,
+            wood=5678,
+            stone=90,
+            food_efficiency_xp=1500,
+            storage_capacity_xp=1000,
+        )
+        node_id = await self.create_resource_node(village_id, node_type="wood", quality=100, remaining_amount=200)
+        fixed_render_time = datetime(2026, 4, 8, 0, 15, 0)
+        for discord_id, status, target_id in (
+            (999, "idle", None),
+            (1001, "idle", None),
+            (1002, "building", 1),
+            (1003, "gathering", node_id),
+        ):
+            await self.create_player(village_id, discord_id=discord_id, status=status, target_id=target_id)
         bot = _FakeBot()
         bot.register_guild(88)
         Engine.bot = bot
 
         async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
-            await db.execute(
-                "INSERT INTO player_stats (player_discord_id, village_id) VALUES (?, ?)",
-                (player_discord_id, village_id),
-            )
-            await db.commit()
-            announcement = await Engine.render_announcement(village_id, db=db, bot=bot)
+            announcement = await Engine.render_announcement(village_id, db=db, bot=bot, rendered_at=fixed_render_time)
 
-        self.assertIn("Village 88", announcement)
-        self.assertIn("Village Resources", announcement)
-        self.assertIn("🍎 0 | 🪵 0 | 🪨 0", announcement)
+        self.assertTrue(announcement.startswith(f"(Last Update: <t:{Engine._to_discord_unix(fixed_render_time)}:R>)"))
+        self.assertIn("Village Resources (Cap: 2,000)", announcement)
+        self.assertIn("🍎 1,234 | 🪵 5,678 | 🪨 90", announcement)
         self.assertIn("Village Buildings", announcement)
-        self.assertIn("廚房: Lv.0 [XP: 0 / 1,000]", announcement)
-        self.assertIn("User 999", announcement)
-        self.assertIn("[Idle]", announcement)
+        self.assertIn("廚房: Lv.1 [XP: 500 / 2,000]", announcement)
+        self.assertIn("Active Villagers", announcement)
+        self.assertIn("Idle: 2", announcement)
+        self.assertIn("Building 廚房: 1", announcement)
+        self.assertIn("Gathering Wood: 1", announcement)
         self.assertGreaterEqual(announcement.count("```text"), 2)
         self.assertNotIn("STR", announcement)
         self.assertNotIn("AGI", announcement)
@@ -529,9 +536,11 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
 
         messages = [message.content for message in bot.get_channel(456).messages.values()]
         event_messages = [message for message in messages if "Village Resources" not in message]
+        node = await self.fetchone("SELECT remaining_amount FROM resource_nodes WHERE id = ?", (node_id,))
         self.assertEqual(len(event_messages), 2)
         self.assertTrue(any("out of stock" in message for message in event_messages))
         self.assertTrue(any("<@987>" in message and "now idle" in message for message in event_messages))
+        self.assertEqual(node[0], 0)
 
     async def test_building_level_up_posts_upgrade_announcement(self):
         village_id = await self.create_village(guild_id=93, food_efficiency_xp=990)

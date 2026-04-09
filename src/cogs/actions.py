@@ -61,10 +61,9 @@ async def _load_submenu_options(db, village_id: int, action: str):
             FROM resource_nodes
             WHERE village_id = ?
               AND remaining_amount > 0
-              AND expiry_time > ?
             ORDER BY type, quality DESC, id DESC
             """,
-            (village_id, datetime.datetime.utcnow().isoformat()),
+            (village_id,),
         ) as cursor:
             nodes = await cursor.fetchall()
 
@@ -130,11 +129,11 @@ async def _build_embed(inter, db, village_id: int, player_discord_id: int):
     p_str, p_agi, p_per, p_kno, p_end = stats if stats else (50, 50, 50, 50, 50)
 
     storage_capacity = Engine._storage_capacity(storage_xp)
-    building_rows = []
-    for building_id, xp in ((1, food_xp), (2, storage_xp), (3, yield_xp)):
-        level = Engine._building_level_from_xp(xp)
-        next_threshold = Engine._next_building_threshold(level)
-        building_rows.append(f"{Engine.BUILDING_NAMES[building_id]} Lv.{level} [XP: {xp:,} / {next_threshold:,}]")
+    building_rows = [
+        Engine._building_progress_line(1, food_xp),
+        Engine._building_progress_line(2, storage_xp),
+        Engine._building_progress_line(3, yield_xp),
+    ]
 
     last_update = Engine._parse_timestamp(last_update_str)
     completion_time = Engine._parse_timestamp(completion_time_str)

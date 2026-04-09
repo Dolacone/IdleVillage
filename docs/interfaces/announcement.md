@@ -6,50 +6,62 @@
 - **訊息類型:** 混合格式訊息 (純文字資源區塊, 搭配建築與村民的 Code Block).
 - **更新機制:** 當村莊中有玩家執行 `/idlevillage`、Watcher 完成結算, 或管理員執行 `/idlevillage-announcement` 時嘗試觸發更新.
 - **節流控制 (Throttling)**: 每次公告更新後需冷卻 60 秒 (由資料庫 `last_announcement_updated` 紀錄).
-- **排序邏輯:** 村民列表依據「最後行動開始時間 (start_time)」降序排列 (Latest at top).
+- 排序邏輯: Active Villagers 依據彙整後的人數 (Count) 降序排列; 若人數相同, 按動作名稱 (Action Name) 升序排列.
 - **活躍定義:** 僅列出目前非 `missing` 狀態的玩家.
 
 ### 2. 訊息格式模板 (Template)
 
-Village Resources
-🍎 {food} | 🪵 {wood} | 🪨 {stone} (Cap: {max})
+(Last Update: <t:{unix_timestamp}:R>)
+
+Village Resources (Cap: {max})
+🍎 {food} | 🪵 {wood} | 🪨 {stone}
 
 Village Buildings
 ```text
-廚房: Lv.{lv} [XP: {curr} / {next}]
-倉庫: Lv.{lv} [XP: {curr} / {next}]
-加工: Lv.{lv} [XP: {curr} / {next}]
+廚房: Lv.{lv} [XP: {curr_level_xp} / {next_level_required}]
+倉庫: Lv.{lv} [XP: {curr_level_xp} / {next_level_required}]
+加工: Lv.{lv} [XP: {curr_level_xp} / {next_level_required}]
 ```
 
---- ACTIVE VILLAGERS (Sorted by latest action) ---
+Active Villagers
 ```text
-{Player_Name} | {Status_Summary}
-{Player_Name} | {Status_Summary}
+{Action_Name}: {Count}
+{Action_Name}: {Count}
 ...
-(Last Update: {YYYY-MM-DD HH:MM:SS} UTC)
 ```
 
 ### 3. 區塊樣式規範
+- **Header**:
+  - (Last Update: <t:{unix_timestamp}:R>) 位於訊息最上方.
+  - 使用 Discord 的動態時間格式 (Relative Time), 自動適應使用者時區.
 - **Resources**:
   - 不使用 Code Block.
   - 使用純文字標題與表情符號, 不使用 Markdown emphasis.
   - XP 以外的數值需包含千分位撇號.
 - **Village Buildings**:
-  - 建築內容必須包裹在單一 Code Block (` ```text `) 中.
-  - 標題 `Village Buildings` 保持純文字, 不使用 Markdown emphasis.
+  - 建築內容必須包裹在單一 Code Block (```text) 中.
+  - 標題 Village Buildings 保持純文字, 不使用 Markdown emphasis.
   - XP 數值需包含千分位撇號.
+  - XP Display: 顯示當前等級累積的經驗值 (已扣除前一等級所需總和) 與升至下一級所需的經驗值差距.
 - **Active Villagers**:
-  - **必須包裹在單一 Code Block (` ```text `) 中**.
-  - 確保玩家名稱與狀態資訊等寬對齊.
-  - **Player Name**: 截斷至 12 字元.
-  - **Status Summary**: 包含當前動作與剩餘時間 (e.g., `[Gathering Stone] (12m)`).
+  - 必須包裹在單一 Code Block (```text) 中.
+  - 標題 Active Villagers 保持純文字, 不使用 Markdown emphasis.
+  - 彙整邏輯: 不再列出個別玩家名稱, 改為按動作類型分組並顯示參與人數.
+  - 動作名稱映射:
+    - idle -> Idle
+    - exploring -> Exploring
+    - gathering -> Gathering {Resource_Type}
+    - building -> Building {Building_Name}
+  - 排序規則:
+    1. 按人數 (Count) 降序排列.
+    2. 若人數相同, 按動作名稱 (Action Name) 升序排列 (A-Z).
 
 ### 4. 通知機制 (Notifications)
 除公告看板外, 系統會在以下事件發生時於公告頻道發送即時訊息:
-- **探索通知**: 若探索發現新節點, 發送一則純文字 discovery 訊息.
-- **資源耗盡通知**: 當資源節點因庫存耗盡 (Out of Stock) 或到期 (Timeout) 而消失時, 發送通知並說明原因.
-- **建築升級通知**: 當村莊建築等級提升時, 發送慶祝訊息 (例如: `The village has successfully upgraded the Kitchen to Level 3! 🎉`).
-- **閒置標註通知**: 當玩家完成目前行動且未排定下一個行動而進入 `Idle` 狀態時, 發送訊息標註 (@tag) 該玩家.
+- 資源耗盡通知: 當資源節點存量歸零 (Out of Stock) 時, 發送通知提醒村莊已無該項產出.
+- 建築升級通知: 當村莊建築等級提升時, 發送慶祝訊息.
+- 閒置標註通知: 當玩家完成目前行動且未排定下一個行動而進入 Idle 狀態時, 發送訊息標註 (@tag) 該玩家.
+
 
 ### 5. 錯誤處理
 - 若公告訊息 ID 遺失或被刪除, 系統應在下次更新嘗試時檢測到 404 錯誤, 並清除資料庫紀錄.
@@ -58,3 +70,4 @@ Village Buildings
 - 2026.04.08.00: Initial specification for Village Announcement dashboard. - See [2026.04.08.00.md](../changelogs/2026.04.08.00.md)
 - 2026.04.08.02: Simplified active villagers UI (removed stats) and added automated notifications for node expiry and player idle states. - See [2026.04.08.02.md](../changelogs/2026.04.08.02.md)
 - 2026.04.08.03: Aligned Resource and Building sections with /idlevillage style. Clarified code block usage for villagers list only. - See [2026.04.08.03.md](../changelogs/2026.04.08.03.md)
+- 2026.04.09.00: Moved Last Update to header, simplified building XP display, and aggregated active villagers count. - See [2026.04.09.00.md](../changelogs/2026.04.09.00.md)
