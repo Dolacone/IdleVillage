@@ -74,3 +74,4 @@
 - 2026.04.08.00: Initial specification for modernized /idlevillage interface and interval controls. - See [2026.04.08.00.md](../changelogs/2026.04.08.00.md)
 - 2026.04.08.02: Added /idlevillage-admin command and fixed next check display for idle players. - See [2026.04.08.02.md](../changelogs/2026.04.08.02.md)
 - 2026.04.08.03: Replaced /idlevillage-admin with interactive /idlevillage-manage UI. - See [2026.04.08.03.md](../changelogs/2026.04.08.03.md)
+- 2026.04.09.01: Aligned /idlevillage resource/building wording with normalized village resources and the shared building progress renderer. - See [2026.04.09.01.md](../changelogs/2026.04.09.01.md)

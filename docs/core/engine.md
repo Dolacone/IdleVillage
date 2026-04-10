@@ -24,26 +24,28 @@
 - 頻率: 每 300 秒.
 - 對象: `completion_time <= Now` 的玩家.
 - 邏輯:
-  1. 清理過期或已耗盡的資源節點.
-  2. 先執行全域 inactivity scan, 將 7 天未發言且 7 天未執行 `/idlevillage` 的玩家標記為 `missing`.
-  3. 對 `completion_time <= Now` 的玩家強制執行標準結算流程.
-  4. 對所有村莊執行建築損耗結算.
+  1. 先執行全域 inactivity scan, 將 7 天未發言且 7 天未執行 `/idlevillage` 的玩家標記為 `missing`.
+  2. 對 `completion_time <= Now` 的玩家強制執行標準結算流程.
+  3. 對所有村莊執行建築損耗結算.
+  4. 資源節點採永久 singleton 模型, 不再依 `expiry_time` 進行清理.
 
 ### 2. 標準結算流程 (Settlement Steps)
 
 所有的結算必須精確到秒, 並遵循以下順序:
 1. 若玩家存在已逾期的完整循環, 必須以 while-loop 逐個循環回補, 不可直接跳到 `Now`.
-2. 每個循環切片都先重算玩家素質: 依 `player_actions_log` 最新 150 筆紀錄更新 `player_stats`.
+2. 每個循環切片都先重算玩家素質: 依 `player_actions_log` 最近 150 筆紀錄更新 `player_stats`.
 3. 計算 Delta: `SliceEnd - SliceStart`.
 4. 紀錄行動片段:
    - 若 `delta > 0` 且玩家不是 `missing`, 依 `ACTION_CYCLE_MINUTES` 切割片段並寫入 `player_actions_log`.
    - `gathering` 會依節點類型寫為 `gathering_food`, `gathering_wood`, `gathering_stone`.
-5. 資源 / XP 結算:
+5. 資源 / XP 結算 (v2026.04.09.01):
    - `idle`: 依 PER + KNO 產出村莊糧食, 品質固定 50%.
-   - `gathering`: 依節點類型與玩家素質結算食物或木石產出, 並扣除節點儲量.
+   - `gathering`: 依節點類型與玩家素質結算產出, 並扣除節點儲量. 產出存入 `village_resources`, 並在入庫前套用 `Resource Yield` 增益.
    - `building`: 
-     - **升級偵測**: 紀錄結算前等級 $L_{pre}$, 增加 XP 後紀錄等級 $L_{post}$. 若 $L_{post} > L_{pre}$, 觸發慶祝公告.
-   - `exploring`: 依目前活躍節點數做 Inverse-Square 成功判定, 成功時建立高斯品質的新節點.
+     - **升級與降級偵測**: 紀錄結算前等級 $L_{pre}$, 結算後等級 $L_{post}$.
+     - 若 $L_{post} > L_{pre}$, 觸發慶祝公告.
+     - 若 $L_{post} < L_{pre}$ (由損耗引起), 觸發降級通知.
+   - `exploring`: 以 `(AGI + PER) / 2 / 100` 作為效率係數進行成功判定; 成功時建立對應 singleton 節點或補充現有節點的庫存 / 品質.
    - 村莊資源入庫時, 受 `Storage Capacity` 與 `Resource Yield` 建築效果影響.
 6. 村莊損耗結算 (Village Settlement):
    - 損耗公式採用 **動態指數模型**: $D = f(N_{active}, XP_{current})$. 詳見 `docs/modules/buildings.md`.
@@ -54,12 +56,12 @@
    - 若循環尚未結束, 保留原本的 `completion_time`.
    - 更新 `status`, `target_id`, `last_update_time`, `completion_time`.
 
-### 3. Action Cycle 啟動 (Lease Start)
+### 3. Action Cycle 啟動 (Lease Start) (v2026.04.09.01)
 
 - 任何非 `idle` 行動在啟動時先執行資源預扣.
-- `gathering` / `exploring`: 扣除 `max(1, 10 - FoodEfficiencyLevel)` 糧食.
-- `building`: 扣除 `max(1, 10 - FoodEfficiencyLevel)` 糧食, `10` 木材, `5` 石材.
-- 若目標無效、節點過期、節點儲量不足或村莊資源不足, 啟動失敗且不變更玩家狀態.
+- `gathering` / `exploring`: 扣除 `max(2, 20 - 2 * KitchenLevel)` 糧食.
+- `building`: 扣除 `max(2, 20 - 2 * KitchenLevel)` 糧食, `50` 木材, `50` 石材.
+- 若目標無效、節點儲量不足或村莊資源不足, 啟動失敗且不變更玩家狀態.
 - 成功啟動後:
   - 更新 `status`, `target_id`, `last_update_time`.
   - 設定 `completion_time = now + ACTION_CYCLE_MINUTES`.
@@ -69,10 +71,11 @@
 - 村莊公告資料保存在 `villages.announcement_channel_id`, `villages.announcement_message_id`, `villages.last_announcement_updated`.
 - `/idlevillage-announcement` 會在觸發頻道建立或刷新單一公開儀表板訊息.
 - **即時通知事件**:
-  - 資源發現 (`exploring` 成功).
-  - 資源耗盡 (Stock 為 0 或 Expiry 到期).
+  - 資源耗盡 (Stock 為 0).
   - 建築升級 ($L_{post} > L_{pre}$).
+  - 建築降級 ($L_{post} < L_{pre}$).
   - 玩家閒置 (由 Active 轉為 `idle`).
+- 資源發現 (`exploring` 成功) 不再發送獨立公告訊息, 僅更新資料並在下次 dashboard 同步時反映.
 - 若公告訊息 ID 遺失, 下次更新時需要清除舊的 `announcement_message_id` 並重建.
 
 ### 5. 日誌格式 (Structured Logging)
@@ -85,3 +88,4 @@
 - 2026.04.07.00: Updated to reflect the 1-hour lease engine settlement flow. See [2026.04.07.00.md](../changelogs/2026.04.07.00.md)
 - 2026.04.08.00: Updated to configurable Action Cycles and 150-entry stat recalculation. See [2026.04.08.00.md](../changelogs/2026.04.08.00.md)
 - 2026.04.08.03: Implemented dynamic exponential building decay and building upgrade notifications. See [2026.04.08.03.md](../changelogs/2026.04.08.03.md)
+- 2026.04.09.01: Normalized resource/buff settlement and rebalanced Action Cycle costs. Added level-down notification logic. See [2026.04.09.01.md](../changelogs/2026.04.09.01.md)

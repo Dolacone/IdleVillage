@@ -40,3 +40,4 @@
 - 2026.04.06.00: Updated setup instructions for the flat `src/` runtime layout and `.env.example` flow. - See [2026.04.06.00.md](changelogs/2026.04.06.00.md)
 - 2026.04.07.00: Updated to reflect 1-hour lease model and stats recalculation logic. - See [2026.04.07.00.md](changelogs/2026.04.07.00.md)
 - 2026.04.08.00: Added ADMIN_IDS and ACTION_CYCLE_MINUTES configuration details. - See [2026.04.08.00.md](changelogs/2026.04.08.00.md)
+- 2026.04.09.01: Performed numerical rebalance and normalized core data structures. - See [2026.04.09.01.md](changelogs/2026.04.09.01.md)

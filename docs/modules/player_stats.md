@@ -3,18 +3,19 @@
 定義素質計算規則、加成係數以及 150 週期滑動窗口機制.
 
 ### 1. 150 週期滑動窗口 (150 Cycles Sliding Window)
-- 計算: 基礎 50 點 + 過去 150 次行動紀錄所獲得的點數.
-- 紀錄方式: `player_actions_log` 在每一次行動週期 (Cycle) 結束時寫入一筆紀錄, 記錄該行動的 `action_type`, `start_time`, `end_time`.
+- 計算: `基礎素質值 (STATS_BASE_VALUE) + 過去 150 次行動紀錄所獲得的點數`.
+- 基礎素質值 (STATS_BASE_VALUE): 50. (v2026.04.09.01)
+- 紀錄方式: `player_actions_log` 在每一次行動週期 (Cycle) 結束時寫入一筆紀錄.
 - 行動分配權重 (每行動 1 週期獲得之點數):
   - `idle`: 觀察 (PER) +1, 知識 (KNO) +1.
-  - `gathering` (Food): 觀察 (PER) +1, 知識 (KNO) +1.
-  - `gathering` (Wood/Stone): 力量 (STR) +1, 耐力 (END) +1.
+  - `gathering_food`: 觀察 (PER) +1, 知識 (KNO) +1.
+  - `gathering_wood`: 力量 (STR) +1, 耐力 (END) +1.
+  - `gathering_stone`: 力量 (STR) +1, 耐力 (END) +1.
   - `exploring`: 敏捷 (AGI) +1, 觀察 (PER) +1.
   - `building`: 知識 (KNO) +1, 耐力 (END) +1.
 
 ### 2. 素質加成公式 (Modifiers)
-- 通用效率係數 (Efficiency): `(StatA + StatB) / 2 / 100`.
-- 權重計算: 系統抓取 `player_actions_log` 中該玩家最近的 150 筆紀錄進行統計.
+- 通用效率係數 (Efficiency Invariant): `(StatA + StatB) / 2 / 100`.
 - 力量 (STR): 影響 `Wood/Stone` 採集效率.
 - 敏捷 (AGI): 影響 `Exploring` 判定效率.
 - 觀察 (PER): 影響 `Food` 採集、`Exploring` 與 `Idle` 效率.
@@ -27,7 +28,7 @@
 | 欄位名 | 型別 | 說明 | 初始值 |
 | :--- | :--- | :--- | :--- |
 | player_discord_id | INTEGER (PK/FK) | 關聯至 players.discord_id | |
-| village_id | INTEGER (PK/FK) | 關聯至 villages.id, 讓同一 Discord 使用者可在不同伺服器維持獨立狀態 | |
+| village_id | INTEGER (PK/FK) | 關聯至 villages.id | |
 | strength | INTEGER | 力量 | 50 |
 | agility | INTEGER | 敏捷 | 50 |
 | perception | INTEGER | 觀察 | 50 |
@@ -41,15 +42,16 @@
 | id | INTEGER (PK) | |
 | player_discord_id | INTEGER (FK) | |
 | village_id | INTEGER (FK) | |
-| action_type | TEXT | idle, gathering, exploring, building |
+| action_type | TEXT | idle, gathering_food/wood/stone, exploring, building |
 | start_time | TIMESTAMP | |
 | end_time | TIMESTAMP | |
 
 ### 5. 平衡性參數 (Balance Numbers)
 - 素質計算視窗: 最近 150 次行動週期.
-- 基礎值: 50.
+- 基礎值 (STATS_BASE_VALUE): 50.
 - 每個行動週期點數: 2 點 (依權重分配).
 
 ## Changelog
-- 2026.04.07.00: Aligned stats with 1-hour cycle. Removed weight and satiety modifiers. - See [2026.04.07.00.md](../changelogs/2026.04.07.00.md)
+- 2026.04.07.00: Aligned stats with 1-hour cycle. - See [2026.04.07.00.md](../changelogs/2026.04.07.00.md)
 - 2026.04.08.00: Transitioned from 150h window to 150 cycles window. - See [2026.04.08.00.md](../changelogs/2026.04.08.00.md)
+- 2026.04.09.01: Introduced STATS_BASE_VALUE constant and standardized action log types. - See [2026.04.09.01.md](../changelogs/2026.04.09.01.md)

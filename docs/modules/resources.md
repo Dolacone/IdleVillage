@@ -1,53 +1,49 @@
-# Module: Resources and Exploration
+# Module: Resources
 
-定義資源獲取、探索機制以及行動週期 (Action Cycle) 採集機制.
+定義資源獲取效率、正規化村莊倉庫管理與探索機制.
 
-### 1. 閒置狀態 (Idle State)
-- 觸發: 玩家狀態為 `idle`.
-- 消耗: 無 (不消耗村莊資源).
-- 品質 (Quality): 固定為 50%.
-- 產出公式: `int(50 * Stats_Eff * 0.5 * Building_Eff * Time_Ratio)`.
-- 屬性掛鉤: 觀察 (PER) + 知識 (KNO).
+### 1. 資源節點 (Resource Nodes)
+- 單一節點模型 (Singleton Model):
+  - 每個村莊每種資源類型 (糧食, 木材, 石材) 同時僅存在一個永久節點. (v2026.04.09.00)
+  - 庫存上限 (Stock Cap): 每個節點庫存上限為 8,000 單位. (v2026.04.09.00)
+  - 永久性: 資源節點不再具有過期時間, 會持續存在直到被採集至 0 (缺貨).
+- 資源品質 (Node Quality):
+  - 基礎品質為 100.
+  - 若探索發現新資源且該類型已存在, 則採用加權平均計算新品質.
+  - 品質公式: `New_Quality = floor((Old_Quality * Old_Stock + Found_Quality * Found_Stock) / (Old_Stock + Found_Stock))`. (v2026.04.09.00)
+- 探索機制 (Exploring) (v2026.04.09.01):
+  - 探索效率: 敏捷 (AGI) + 觀察 (PER).
+  - 探索機率 (Exploring Probability): `效率係數 * 20%`. (例如效率 0.5 則機率為 10%).
+  - 探索產出 (Exploring Output): `基礎產出 (50) * random(20, 40) * 效率係數`.
+  - 探索結果: 若該資源類型的 singleton 節點已存在, 則補充庫存並重算品質; 若不存在, 則建立該類型節點.
+  - 發現公告: 不另外發送 discovery 訊息, 僅更新資料與後續 dashboard 顯示.
+- 採集效率 (Gathering Efficiency):
+  - 糧食採集: 感知 (PER) + 知識 (KNO).
+  - 木材/石材採集: 力量 (STR) + 耐力 (END).
+  - 效率公式 (Invariant): `(StatA + StatB) / 2 / 100`.
+  - 產出公式 (v2026.04.09.01): `基礎產出 (50) * 效率係數 * (品質修正) * (實際持續分鐘 / ACTION_CYCLE_MINUTES)`.
+  - 品質修正: `max(75, Node_Quality) / 100`.
+  - 加工增益: 採集產出在入庫前再乘上 `1.0 + (Resource_Yield_Level * 0.1)`.
 
-### 2. 資源採集 (Gathering)
-- 觸發: 玩家選擇一個有效資源節點並提交 `gather` 指令.
-- 行動週期 (Action Cycle):
-  - 啟動預扣: 週期開始時, 立即從村莊倉庫扣除糧食 (數量: `max(1, 10 - Food_Eff_Level)`).
-  - 產出結算: 週期結束後計算產出並直接存入村莊倉庫.
-- 產出公式: `int(50 * Stats_Eff * Quality_Eff * Building_Eff * Time_Ratio)`.
-  - 基礎速率 (Base): 50 / 週期.
-  - 素質係數 (Stats_Eff): `(屬性 A + 屬性 B) / 2 / 100`.
-  - 品質係數 (Quality_Eff): `max(75, 節點品質) / 100`. (品質採百分比制, 例如 120 代表 120%)
-  - 建築加成 (Building_Eff): `1.0 + (加工等級 * 0.1)`.
-  - 時間占比 (Time_Ratio): `實際持續分鐘 / ACTION_CYCLE_MINUTES`.
+### 2. 正規化資源管理 (Normalized Resources) (v2026.04.09.01)
+村莊資源存儲於 `village_resources` 表, 支援動態資源類型擴充:
+- **糧食 (food)**: 初始化 1,000 單位, 行動基礎消耗 20.
+- **木材 (wood)**: 初始化 1,000 單位, 建設基礎消耗 50.
+- **石材 (stone)**: 初始化 1,000 單位, 建設基礎消耗 50.
 
-### 3. 探索發現規則 (Exploring Discovery)
-- 判定頻率: 每個行動週期 (Cycle) 結算時執行一次.
-- 節點限制: 每個村莊每種資源類型 (Food, Wood, Stone) 僅存在一個永久節點.
-- 成功機率: P(Found) = (PER + KNO) / 4 * 1%.
-- 資源類型: 糧食、木材、石材機率均等 (1/3).
-- 資源存量 (Stock): 
-  - 發現量: random(min=(PER + KNO) * 5, max=(PER + KNO) * 10).
-  - 最大上限 (Cap): 每個節點存量上限為 8,000.
-  - 溢出處理: 累積後的存量若超過 8,000, 溢出部分將被捨棄, 僅保留至 8,000.
-- 資源品質 (Quality): 
-  - 生成公式: 高斯分佈, 平均值 (mu) 為玩家素質平均值, 標準差 (sigma) 為 50, 鉗制於 75.
-  - 加權平均公式 (Weighted Average): New_Quality = floor((Old_Quality * Old_Stock + Found_Quality * Found_Stock) / (Old_Stock + Found_Stock)).
-  - 比例調整: 即使存量已滿 (8,000), 發現新資源時仍需使用完整的 Found_Stock 進行品質加權計算, 以反映新資源對現有資源池品質的影響.
-  - 備註: 若節點原先不存在 (或存量為 0), 則直接採用本次生成的品質.
-- 發現通知: 不發送公告頻道訊息. 探索成果僅更新資料庫中的節點存量與品質, 並在後續 UI / 查詢中反映.
+### 3. 資源採集流程 (Gathering Process)
+- 庫存檢查: 行動週期開始前, 若目標節點庫存為 0, 玩家無法啟動採集.
+- 行動期間耗損: 每週期結束結算時, 從節點扣除實際獲得量.
+- 缺貨處理 (Out of Stock):
+  - 若結算時節點庫存歸零, 玩家會獲得剩餘庫存的所有資源, 並自動切換為 idle 狀態.
+  - 系統會在公告頻道發送節點缺貨通知.
 
-### 4. 平衡性參數 (Balance Numbers)
-- 基礎產出速率: 50 / 週期 (Cycle).
-- 有效期: 無 (Permanent until depleted).
-- 存量為 0: 節點依然保留於資料庫, 但顯示為 Out of Stock 且無法執行 gather 行動.
-- 採集者處理 (Depletion Behavior):
-  - 結算判定: 當玩家執行結算時, 若目標節點存量已為 0, 該次行動產出為 0, 且玩家狀態強制轉變為 idle.
-  - 部分產出: 若目標節點存量小於玩家應得產出, 玩家僅獲得當前剩餘存量, 隨後節點轉為 Out of Stock, 玩家狀態轉變為 idle.
-  - 狀態轉變通知: 當玩家因資源耗盡而被迫轉為 idle 時, 系統應發送通知並標註該玩家.
+### 4. 資源倉儲限制 (Storage Limits)
+- 倉儲上限: `1,000 * (2 ^ 倉庫增益等級)`. (v2026.04.09.01)
+- 溢出處理: 超過上限的產出將直接被捨棄 (Discarded).
 
 ## Changelog
-- 2026.04.07.00: Implemented 1-hour cycle gathering and exploring. - See [2026.04.07.00.md](../changelogs/2026.04.07.00.md)
-- 2026.04.08.00: Updated to Cycle-based logic, Gaussian discovery quality, and refined stock formulas. - See [2026.04.08.00.md](../changelogs/2026.04.08.00.md)
-- 2026.04.08.02: Increased base output from 20 to 50. - See [2026.04.08.02.md](../changelogs/2026.04.08.02.md)
-- 2026.04.09.00: Switched to permanent singleton resource nodes with weighted average quality and stock accumulation. - See [2026.04.09.00.md](../changelogs/2026.04.09.00.md)
+- 2026.04.07.00: Defined gathering efficiency and base output values. - See [2026.04.07.00.md](../changelogs/2026.04.07.00.md)
+- 2026.04.08.00: Aligned gathering with 1-hour cycle and storage limits. - See [2026.04.08.00.md](../changelogs/2026.04.08.00.md)
+- 2026.04.09.00: Implemented singleton resource nodes, 8,000 stock cap, and weighted quality. Removed node expiry. - See [2026.04.09.00.md](../changelogs/2026.04.09.00.md)
+- 2026.04.09.01: Transitioned resource storage to village_resources table, rebalanced exploring probability (20% base) and discovery output (BASE * 20-40 * EFF). - See [2026.04.09.01.md](../changelogs/2026.04.09.01.md)

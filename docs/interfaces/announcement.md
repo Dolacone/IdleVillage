@@ -60,7 +60,9 @@ Active Villagers
 除公告看板外, 系統會在以下事件發生時於公告頻道發送即時訊息:
 - 資源耗盡通知: 當資源節點存量歸零 (Out of Stock) 時, 發送通知提醒村莊已無該項產出.
 - 建築升級通知: 當村莊建築等級提升時, 發送慶祝訊息.
+- 建築降級通知: 當建築因 XP 損耗而降級時, 發送提醒訊息.
 - 閒置標註通知: 當玩家完成目前行動且未排定下一個行動而進入 Idle 狀態時, 發送訊息標註 (@tag) 該玩家.
+- 資源發現靜默規則: `exploring` 成功時只更新資料與公告看板內容, 不另外發送 discovery 訊息.
 
 
 ### 5. 錯誤處理
@@ -71,3 +73,4 @@ Active Villagers
 - 2026.04.08.02: Simplified active villagers UI (removed stats) and added automated notifications for node expiry and player idle states. - See [2026.04.08.02.md](../changelogs/2026.04.08.02.md)
 - 2026.04.08.03: Aligned Resource and Building sections with /idlevillage style. Clarified code block usage for villagers list only. - See [2026.04.08.03.md](../changelogs/2026.04.08.03.md)
 - 2026.04.09.00: Moved Last Update to header, simplified building XP display, and aggregated active villagers count. - See [2026.04.09.00.md](../changelogs/2026.04.09.00.md)
+- 2026.04.09.01: Added building level-down notifications and clarified that exploration discoveries stay silent outside the dashboard refresh. - See [2026.04.09.01.md](../changelogs/2026.04.09.01.md)
