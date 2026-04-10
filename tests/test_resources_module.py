@@ -7,7 +7,7 @@ from core.engine import Engine
 
 
 class ResourcesModuleBehaviorTests(DatabaseTestCase):
-    async def test_resources_migration_preserves_existing_normalized_rows_during_legacy_cleanup(self):
+    async def test_init_db_does_not_rewrite_legacy_village_schema(self):
         async with schema.get_connection() as db:
             await db.execute("PRAGMA foreign_keys = OFF")
             await db.execute("DROP TABLE villages")
@@ -70,9 +70,9 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
 
         self.assertEqual(resources, {"food": 700, "stone": 900, "wood": 800})
         self.assertEqual(buffs, {1: 111, 2: 222, 3: 333})
-        self.assertNotIn("food", {column[1] for column in village_columns})
+        self.assertIn("food", {column[1] for column in village_columns})
 
-    async def test_resources_migration_merges_duplicate_nodes_and_retargets_gatherers(self):
+    async def test_init_db_does_not_merge_duplicate_resource_nodes(self):
         village_id = await self.create_village(wood=0)
         keeper_id = await self.create_resource_node(
             village_id,
@@ -112,37 +112,41 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
             (player_discord_id, village_id),
         )
 
-        self.assertEqual(nodes, [(duplicate_id, "wood", 116, 150, None)])
+        self.assertEqual(
+            nodes,
+            [
+                (keeper_id, "wood", 100, 100, nodes[0][4]),
+                (duplicate_id, "wood", 150, 50, nodes[1][4]),
+            ],
+        )
         self.assertEqual(player, ("gathering", duplicate_id))
         self.assertNotEqual(keeper_id, duplicate_id)
 
-    async def test_resources_migration_is_safe_to_run_multiple_times(self):
+    async def test_init_db_does_not_normalize_resource_node_fields_on_restart(self):
         village_id = await self.create_village()
-        await self.create_resource_node(
+        node_id = await self.create_resource_node(
             village_id,
             node_type="stone",
             quality=100,
-            remaining_amount=7950,
-        )
-        await self.create_resource_node(
-            village_id,
-            node_type="stone",
-            quality=400,
-            remaining_amount=100,
+            remaining_amount=9001,
+            expiry_time=datetime.utcnow() + timedelta(hours=12),
         )
 
         await schema.init_db()
         await schema.init_db()
 
-        nodes = await self.fetchall(
+        node = await self.fetchone(
             """
             SELECT type, quality, remaining_amount, expiry_time
             FROM resource_nodes
-            WHERE village_id = ?
+            WHERE id = ?
             """,
-            (village_id,),
+            (node_id,),
         )
-        self.assertEqual(nodes, [("stone", 103, 8000, None)])
+        self.assertEqual(node[0], "stone")
+        self.assertEqual(node[1], 100)
+        self.assertEqual(node[2], 9001)
+        self.assertIsNotNone(node[3])
 
     async def test_resources_idle_state_produces_food_without_food_cost(self):
         village_id = await self.create_village(food=0)
