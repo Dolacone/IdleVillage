@@ -14,6 +14,13 @@ class Engine:
     """Core game engine handling settlements, announcements, and watcher triggers."""
 
     bot = None
+    BASE_OUTCOME = 50
+    BASE_BUILD_COST = 50
+    BASE_FOOD_COST = 20
+    STATS_BASE_VALUE = 50
+    EXPLORING_BASE_CHANCE = 0.2
+    RESOURCE_TYPES = ("food", "wood", "stone")
+    BUFF_IDS = (1, 2, 3)
 
     BUILDING_NAMES = {
         1: "廚房",
@@ -85,8 +92,16 @@ class Engine:
         return seconds / Engine._action_cycle_seconds()
 
     @staticmethod
+    def calculate_efficiency(stat_a: int, stat_b: int):
+        return (float(stat_a or 0) + float(stat_b or 0)) / 2.0 / 100.0
+
+    @staticmethod
+    def calculate_outcome(multiplier: float, time_ratio: float):
+        return int(Engine.BASE_OUTCOME * max(0.0, multiplier) * max(0.0, time_ratio))
+
+    @staticmethod
     def _food_cost(food_efficiency_xp: int):
-        return max(1, 10 - Engine._building_level_from_xp(food_efficiency_xp))
+        return max(10, Engine.BASE_FOOD_COST - Engine._building_level_from_xp(food_efficiency_xp))
 
     @staticmethod
     def _storage_capacity(storage_capacity_xp: int):
@@ -95,6 +110,72 @@ class Engine:
     @staticmethod
     def _yield_multiplier(resource_yield_xp: int):
         return 1.0 + (Engine._building_level_from_xp(resource_yield_xp) * 0.1)
+
+    @staticmethod
+    async def _fetch_village_resources(db, village_id: int):
+        resources = {resource_type: 0 for resource_type in Engine.RESOURCE_TYPES}
+        async with db.execute(
+            """
+            SELECT resource_type, amount
+            FROM village_resources
+            WHERE village_id = ?
+            """,
+            (village_id,),
+        ) as cursor:
+            rows = await cursor.fetchall()
+
+        for resource_type, amount in rows:
+            if resource_type in resources:
+                resources[resource_type] = int(amount or 0)
+
+        return resources
+
+    @staticmethod
+    async def _fetch_village_buffs(db, village_id: int):
+        buffs = {buff_id: 0 for buff_id in Engine.BUFF_IDS}
+        async with db.execute(
+            """
+            SELECT buff_id, xp
+            FROM buffs
+            WHERE village_id = ?
+            """,
+            (village_id,),
+        ) as cursor:
+            rows = await cursor.fetchall()
+
+        for buff_id, xp in rows:
+            if buff_id in buffs:
+                buffs[int(buff_id)] = int(xp or 0)
+
+        return buffs
+
+    @staticmethod
+    async def _write_village_resources(db, village_id: int, resources: dict):
+        await db.executemany(
+            """
+            INSERT INTO village_resources (village_id, resource_type, amount)
+            VALUES (?, ?, ?)
+            ON CONFLICT(village_id, resource_type) DO UPDATE SET amount = excluded.amount
+            """,
+            [
+                (village_id, resource_type, int(resources.get(resource_type, 0)))
+                for resource_type in Engine.RESOURCE_TYPES
+            ],
+        )
+
+    @staticmethod
+    async def _write_village_buffs(db, village_id: int, buffs: dict):
+        await db.executemany(
+            """
+            INSERT INTO buffs (village_id, buff_id, xp)
+            VALUES (?, ?, ?)
+            ON CONFLICT(village_id, buff_id) DO UPDATE SET xp = excluded.xp
+            """,
+            [
+                (village_id, buff_id, int(buffs.get(buff_id, 0)))
+                for buff_id in Engine.BUFF_IDS
+            ],
+        )
 
     @staticmethod
     def _next_idle_completion(last_update: datetime):
@@ -216,8 +297,26 @@ class Engine:
         bot=None,
         req_id: str = None,
         user_id=None,
-    ):
+        ):
         message = f"The village has successfully upgraded the {building_name} to Level {new_level}! 🎉"
+        return await Engine._announce_channel_message(
+            village_id,
+            message,
+            bot=bot,
+            req_id=req_id,
+            user_id=user_id,
+        )
+
+    @staticmethod
+    async def send_downgrade_announcement(
+        village_id: int,
+        building_name: str,
+        new_level: int,
+        bot=None,
+        req_id: str = None,
+        user_id=None,
+    ):
+        message = f"The village {building_name} has decayed to Level {new_level}."
         return await Engine._announce_channel_message(
             village_id,
             message,
@@ -358,7 +457,7 @@ class Engine:
 
         async with db.execute(
             """
-            SELECT food, wood, stone, food_efficiency_xp, storage_capacity_xp, resource_yield_xp
+            SELECT 1
             FROM villages
             WHERE id = ?
             """,
@@ -371,17 +470,18 @@ class Engine:
 
         discoveries = []
         upgrades = []
-        v_food, v_wood, v_stone, _food_eff_xp, v_storage_xp, v_yield_xp = village_row
-        storage_capacity = Engine._storage_capacity(v_storage_xp)
-        yield_mult = Engine._yield_multiplier(v_yield_xp)
+        resources = await Engine._fetch_village_resources(db, village_id)
+        buffs = await Engine._fetch_village_buffs(db, village_id)
+        storage_capacity = Engine._storage_capacity(buffs[2])
+        yield_mult = Engine._yield_multiplier(buffs[3])
 
         food_gained, wood_gained, stone_gained = 0, 0, 0
 
         depleted_nodes = []
 
         if status == "idle":
-            efficiency = (p_per + p_kno) / 2.0 / 100.0
-            food_gained = int(50 * efficiency * 0.5 * yield_mult * time_ratio)
+            efficiency = Engine.calculate_efficiency(p_per, p_kno)
+            food_gained = Engine.calculate_outcome(efficiency * 0.5, time_ratio)
 
         elif status == "gathering" and target_id:
             async with db.execute(
@@ -393,11 +493,14 @@ class Engine:
             if node:
                 node_type, remaining_amount, quality = node
                 if node_type == "food":
-                    efficiency = (p_per + p_kno) / 2.0 / 100.0
+                    efficiency = Engine.calculate_efficiency(p_per, p_kno)
                 else:
-                    efficiency = (p_str + p_end) / 2.0 / 100.0
+                    efficiency = Engine.calculate_efficiency(p_str, p_end)
 
-                gathered = int(50 * efficiency * (max(75, quality) / 100.0) * yield_mult * time_ratio)
+                gathered = Engine.calculate_outcome(
+                    efficiency * (max(75, quality) / 100.0) * yield_mult,
+                    time_ratio,
+                )
                 actual_gathered = min(gathered, remaining_amount)
 
                 if actual_gathered > 0:
@@ -422,33 +525,15 @@ class Engine:
                         stone_gained = actual_gathered
 
         elif status == "building" and target_id:
-            efficiency = (p_kno + p_end) / 2.0 / 100.0
-            xp_gained = int(50 * efficiency * time_ratio)
+            efficiency = Engine.calculate_efficiency(p_kno, p_end)
+            xp_gained = Engine.calculate_outcome(efficiency, time_ratio)
             if xp_gained > 0:
-                xp_by_building = {
-                    1: _food_eff_xp,
-                    2: v_storage_xp,
-                    3: v_yield_xp,
-                }
-                previous_xp = xp_by_building.get(target_id, 0)
+                previous_xp = buffs.get(target_id, 0)
                 previous_level = Engine._building_level_from_xp(previous_xp)
                 new_xp = previous_xp + xp_gained
                 new_level = Engine._building_level_from_xp(new_xp)
-                if target_id == 1:
-                    await db.execute(
-                        "UPDATE villages SET food_efficiency_xp = food_efficiency_xp + ? WHERE id = ?",
-                        (xp_gained, village_id),
-                    )
-                elif target_id == 2:
-                    await db.execute(
-                        "UPDATE villages SET storage_capacity_xp = storage_capacity_xp + ? WHERE id = ?",
-                        (xp_gained, village_id),
-                    )
-                elif target_id == 3:
-                    await db.execute(
-                        "UPDATE villages SET resource_yield_xp = resource_yield_xp + ? WHERE id = ?",
-                        (xp_gained, village_id),
-                    )
+                buffs[target_id] = new_xp
+                await Engine._write_village_buffs(db, village_id, buffs)
                 if new_level > previous_level:
                     upgrades.append(
                         {
@@ -459,12 +544,15 @@ class Engine:
                     )
 
         elif status == "exploring" and time_ratio > 0:
-            discovery_chance = min(1.0, time_ratio * ((p_per + p_kno) / 400.0))
+            exploring_efficiency = Engine.calculate_efficiency(p_agi, p_per)
+            discovery_chance = min(1.0, time_ratio * exploring_efficiency * Engine.EXPLORING_BASE_CHANCE)
             if random.random() < discovery_chance:
-                perception_knowledge = p_per + p_kno
                 node_type = random.choice(["food", "wood", "stone"])
-                quality = max(75, int(random.gauss((p_per + p_kno) / 2.0, 50)))
-                stock = random.randint(perception_knowledge * 5, perception_knowledge * 10)
+                quality = max(75, int(random.gauss((p_agi + p_per) / 2.0, 50)))
+                stock = max(
+                    1,
+                    int(Engine.BASE_OUTCOME * random.randint(20, 40) * exploring_efficiency),
+                )
 
                 async with db.execute(
                     """
@@ -521,14 +609,19 @@ class Engine:
                     }
                 )
 
-        new_food = min(storage_capacity, v_food + food_gained)
-        new_wood = min(storage_capacity, v_wood + wood_gained)
-        new_stone = min(storage_capacity, v_stone + stone_gained)
+        new_food = min(storage_capacity, resources["food"] + food_gained)
+        new_wood = min(storage_capacity, resources["wood"] + wood_gained)
+        new_stone = min(storage_capacity, resources["stone"] + stone_gained)
 
         if food_gained > 0 or wood_gained > 0 or stone_gained > 0:
-            await db.execute(
-                "UPDATE villages SET food = ?, wood = ?, stone = ? WHERE id = ?",
-                (new_food, new_wood, new_stone, village_id),
+            await Engine._write_village_resources(
+                db,
+                village_id,
+                {
+                    "food": new_food,
+                    "wood": new_wood,
+                    "stone": new_stone,
+                },
             )
             log_event(
                 req_id,
@@ -554,7 +647,7 @@ class Engine:
         try:
             async with db.execute(
                 """
-                SELECT last_tick_time, food_efficiency_xp, storage_capacity_xp, resource_yield_xp
+                SELECT last_tick_time
                 FROM villages
                 WHERE id = ?
                 """,
@@ -565,7 +658,11 @@ class Engine:
             if not village:
                 return
 
-            last_tick_time_str, food_xp, storage_xp, yield_xp = village
+            last_tick_time_str = village[0]
+            buffs = await Engine._fetch_village_buffs(db, village_id)
+            food_xp = buffs[1]
+            storage_xp = buffs[2]
+            yield_xp = buffs[3]
             now = datetime.utcnow()
             await Engine._mark_missing_players(db, now, village_id=village_id, req_id=req_id, user_id=user_id)
             try:
@@ -591,24 +688,26 @@ class Engine:
             food_decay = int(cycle_units * Engine._building_decay_per_cycle(active_count, food_xp))
             storage_decay = int(cycle_units * Engine._building_decay_per_cycle(active_count, storage_xp))
             yield_decay = int(cycle_units * Engine._building_decay_per_cycle(active_count, yield_xp))
+            previous_levels = {
+                1: Engine._building_level_from_xp(food_xp),
+                2: Engine._building_level_from_xp(storage_xp),
+                3: Engine._building_level_from_xp(yield_xp),
+            }
 
             if food_decay > 0 or storage_decay > 0 or yield_decay > 0:
+                new_buffs = {
+                    1: max(0, food_xp - food_decay),
+                    2: max(0, storage_xp - storage_decay),
+                    3: max(0, yield_xp - yield_decay),
+                }
+                await Engine._write_village_buffs(db, village_id, new_buffs)
                 await db.execute(
                     """
                     UPDATE villages
-                    SET food_efficiency_xp = ?,
-                        storage_capacity_xp = ?,
-                        resource_yield_xp = ?,
-                        last_tick_time = ?
+                    SET last_tick_time = ?
                     WHERE id = ?
                     """,
-                    (
-                        max(0, food_xp - food_decay),
-                        max(0, storage_xp - storage_decay),
-                        max(0, yield_xp - yield_decay),
-                        now.isoformat(),
-                        village_id,
-                    ),
+                    (now.isoformat(), village_id),
                 )
                 await db.commit()
                 log_event(
@@ -620,6 +719,27 @@ class Engine:
                         f"food={food_decay}, storage={storage_decay}, yield={yield_decay}"
                     ),
                 )
+                for buff_id, new_xp in new_buffs.items():
+                    new_level = Engine._building_level_from_xp(new_xp)
+                    if new_level < previous_levels[buff_id]:
+                        await Engine.send_downgrade_announcement(
+                            village_id,
+                            Engine.BUILDING_NAMES.get(buff_id, f"Building {buff_id}"),
+                            new_level,
+                            bot=Engine.bot,
+                            req_id=req_id,
+                            user_id=user_id,
+                        )
+            else:
+                await db.execute(
+                    """
+                    UPDATE villages
+                    SET last_tick_time = ?
+                    WHERE id = ?
+                    """,
+                    (now.isoformat(), village_id),
+                )
+                await db.commit()
 
         finally:
             if close_db:
@@ -642,7 +762,8 @@ class Engine:
         ) as cursor:
             logs = await cursor.fetchall()
 
-        p_str, p_agi, p_per, p_kno, p_end = 50.0, 50.0, 50.0, 50.0, 50.0
+        base = float(Engine.STATS_BASE_VALUE)
+        p_str, p_agi, p_per, p_kno, p_end = base, base, base, base, base
 
         for action_type, start_str, end_str in reversed(logs):
             try:
@@ -980,7 +1101,7 @@ class Engine:
                 return None
             async with db.execute(
                 """
-                SELECT food, wood, stone, food_efficiency_xp
+                SELECT 1
                 FROM villages
                 WHERE id = ?
                 """,
@@ -991,16 +1112,17 @@ class Engine:
             if not village:
                 return None
 
-            v_food, v_wood, v_stone, v_food_xp = village
+            resources = await Engine._fetch_village_resources(db, village_id)
+            buffs = await Engine._fetch_village_buffs(db, village_id)
             food_cost = 0
             wood_cost = 0
             stone_cost = 0
 
             if action in ("gathering", "exploring", "building"):
-                food_cost = Engine._food_cost(v_food_xp)
+                food_cost = Engine._food_cost(buffs[1])
             if action == "building":
-                wood_cost = 10
-                stone_cost = 5
+                wood_cost = Engine.BASE_BUILD_COST
+                stone_cost = Engine.BASE_BUILD_COST
 
             if action == "gathering":
                 if not target_id:
@@ -1019,26 +1141,27 @@ class Engine:
             if action == "building" and not target_id:
                 return None
 
-            if v_food < food_cost or v_wood < wood_cost or v_stone < stone_cost:
+            if resources["food"] < food_cost or resources["wood"] < wood_cost or resources["stone"] < stone_cost:
                 log_event(
                     req_id,
                     user_id,
                     "ERROR",
                     (
                         f"Player {player_discord_id} could not start {action}: "
-                        f"food={v_food}/{food_cost}, wood={v_wood}/{wood_cost}, stone={v_stone}/{stone_cost}"
+                        f"food={resources['food']}/{food_cost}, wood={resources['wood']}/{wood_cost}, stone={resources['stone']}/{stone_cost}"
                     ),
                 )
                 return None
 
             if food_cost > 0 or wood_cost > 0 or stone_cost > 0:
-                await db.execute(
-                    """
-                    UPDATE villages
-                    SET food = food - ?, wood = wood - ?, stone = stone - ?
-                    WHERE id = ?
-                    """,
-                    (food_cost, wood_cost, stone_cost, village_id),
+                await Engine._write_village_resources(
+                    db,
+                    village_id,
+                    {
+                        "food": resources["food"] - food_cost,
+                        "wood": resources["wood"] - wood_cost,
+                        "stone": resources["stone"] - stone_cost,
+                    },
                 )
                 log_event(
                     req_id,
@@ -1163,7 +1286,7 @@ class Engine:
         try:
             async with db.execute(
                 """
-                SELECT food, wood, stone, food_efficiency_xp, storage_capacity_xp, resource_yield_xp, last_announcement_updated
+                SELECT last_announcement_updated
                 FROM villages
                 WHERE id = ?
                 """,
@@ -1174,21 +1297,23 @@ class Engine:
             if not village:
                 return None
 
-            food, wood, stone, food_xp, storage_xp, yield_xp, last_updated_str = village
-            storage_capacity = Engine._storage_capacity(storage_xp)
+            last_updated_str = village[0]
+            resources = await Engine._fetch_village_resources(db, village_id)
+            buffs = await Engine._fetch_village_buffs(db, village_id)
+            storage_capacity = Engine._storage_capacity(buffs[2])
             last_updated = rendered_at or Engine._parse_timestamp(last_updated_str) or datetime.utcnow()
             rich_text_lines = [
                 f"(Last Update: <t:{Engine._to_discord_unix(last_updated)}:R>)",
                 "",
                 f"Village Resources (Cap: {storage_capacity:,})",
-                f"🍎 {food:,} | 🪵 {wood:,} | 🪨 {stone:,}",
+                f"🍎 {resources['food']:,} | 🪵 {resources['wood']:,} | 🪨 {resources['stone']:,}",
                 "",
                 "Village Buildings",
             ]
             building_lines = [
-                Engine._building_progress_line(1, food_xp),
-                Engine._building_progress_line(2, storage_xp),
-                Engine._building_progress_line(3, yield_xp),
+                Engine._building_progress_line(1, buffs[1]),
+                Engine._building_progress_line(2, buffs[2]),
+                Engine._building_progress_line(3, buffs[3]),
             ]
 
             async with db.execute(

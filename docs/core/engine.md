@@ -59,8 +59,8 @@
 ### 3. Action Cycle 啟動 (Lease Start) (v2026.04.09.01)
 
 - 任何非 `idle` 行動在啟動時先執行資源預扣.
-- `gathering` / `exploring`: 扣除 `max(2, 20 - 2 * KitchenLevel)` 糧食.
-- `building`: 扣除 `max(2, 20 - 2 * KitchenLevel)` 糧食, `50` 木材, `50` 石材.
+- `gathering` / `exploring`: 扣除 `max(10, 20 - KitchenLevel)` 糧食.
+- `building`: 扣除 `max(10, 20 - KitchenLevel)` 糧食, `50` 木材, `50` 石材.
 - 若目標無效、節點儲量不足或村莊資源不足, 啟動失敗且不變更玩家狀態.
 - 成功啟動後:
   - 更新 `status`, `target_id`, `last_update_time`.

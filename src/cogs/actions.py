@@ -91,7 +91,7 @@ async def _load_submenu_options(db, village_id: int, action: str):
 async def _build_embed(inter, db, village_id: int, player_discord_id: int):
     async with db.execute(
         """
-        SELECT food, wood, stone, food_efficiency_xp, storage_capacity_xp, resource_yield_xp
+        SELECT 1
         FROM villages
         WHERE id = ?
         """,
@@ -124,15 +124,16 @@ async def _build_embed(inter, db, village_id: int, player_discord_id: int):
     if not village or not player:
         return None
 
-    food, wood, stone, food_xp, storage_xp, yield_xp = village
+    resources = await Engine._fetch_village_resources(db, village_id)
+    buffs = await Engine._fetch_village_buffs(db, village_id)
     status, target_id, last_update_str, completion_time_str = player
     p_str, p_agi, p_per, p_kno, p_end = stats if stats else (50, 50, 50, 50, 50)
 
-    storage_capacity = Engine._storage_capacity(storage_xp)
+    storage_capacity = Engine._storage_capacity(buffs[2])
     building_rows = [
-        Engine._building_progress_line(1, food_xp),
-        Engine._building_progress_line(2, storage_xp),
-        Engine._building_progress_line(3, yield_xp),
+        Engine._building_progress_line(1, buffs[1]),
+        Engine._building_progress_line(2, buffs[2]),
+        Engine._building_progress_line(3, buffs[3]),
     ]
 
     last_update = Engine._parse_timestamp(last_update_str)
@@ -156,7 +157,7 @@ async def _build_embed(inter, db, village_id: int, player_discord_id: int):
     embed = disnake.Embed(title=f"Idle Village - {guild_name}", color=disnake.Color.green())
     embed.add_field(
         name="Village Resources",
-        value=f"🍎 {food:,} | 🪵 {wood:,} | 🪨 {stone:,} (Cap: {storage_capacity:,})",
+        value=f"🍎 {resources['food']:,} | 🪵 {resources['wood']:,} | 🪨 {resources['stone']:,} (Cap: {storage_capacity:,})",
         inline=False,
     )
     embed.add_field(

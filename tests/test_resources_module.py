@@ -8,7 +8,7 @@ from database import schema
 
 class ResourcesModuleBehaviorTests(DatabaseTestCase):
     async def test_resources_migration_merges_duplicate_nodes_and_retargets_gatherers(self):
-        village_id = await self.create_village()
+        village_id = await self.create_village(wood=0)
         keeper_id = await self.create_resource_node(
             village_id,
             node_type="wood",
@@ -92,11 +92,11 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
         async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
             await Engine.settle_player(player_discord_id, village_id, db)
 
-        village = await self.fetchone("SELECT food FROM villages WHERE id = ?", (village_id,))
-        self.assertEqual(village[0], 25)
+        resources = await self.fetch_resources(village_id)
+        self.assertEqual(resources["food"], 25)
 
     async def test_resources_gathering_food_uses_node_quality_and_yield_bonus(self):
-        village_id = await self.create_village(resource_yield_xp=1000)
+        village_id = await self.create_village(food=0, resource_yield_xp=1000)
         node_id = await self.create_resource_node(village_id, node_type="food", quality=150, remaining_amount=50)
         now = datetime.utcnow()
         player_discord_id = await self.create_player(
@@ -110,13 +110,13 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
         async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
             await Engine.settle_player(player_discord_id, village_id, db, interrupted=True)
 
-        village = await self.fetchone("SELECT food FROM villages WHERE id = ?", (village_id,))
+        resources = await self.fetch_resources(village_id)
         node = await self.fetchone("SELECT remaining_amount FROM resource_nodes WHERE id = ?", (node_id,))
-        self.assertEqual(village[0], 41)
+        self.assertEqual(resources["food"], 41)
         self.assertEqual(node[0], 9)
 
-    async def test_buildings_resource_yield_bonus_increases_idle_output(self):
-        village_id = await self.create_village(resource_yield_xp=1000)
+    async def test_buildings_resource_yield_bonus_does_not_modify_idle_output(self):
+        village_id = await self.create_village(food=0, resource_yield_xp=1000)
         now = datetime.utcnow()
         player_discord_id = await self.create_player(
             village_id,
@@ -127,11 +127,11 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
         async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
             await Engine.settle_player(player_discord_id, village_id, db)
 
-        village = await self.fetchone("SELECT food FROM villages WHERE id = ?", (village_id,))
-        self.assertEqual(village[0], 27)
+        resources = await self.fetch_resources(village_id)
+        self.assertEqual(resources["food"], 25)
 
     async def test_resources_exploring_creates_a_node_from_successful_roll(self):
-        village_id = await self.create_village()
+        village_id = await self.create_village(wood=0)
         now = datetime.utcnow()
         player_discord_id = await self.create_player(
             village_id,
@@ -140,7 +140,7 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
             completion_time=now,
         )
 
-        with patch("core.engine.random.random", return_value=0.0), patch("core.engine.random.choice", return_value="stone"), patch("core.engine.random.gauss", return_value=140), patch("core.engine.random.randint", return_value=700):
+        with patch("core.engine.random.random", return_value=0.0), patch("core.engine.random.choice", return_value="stone"), patch("core.engine.random.gauss", return_value=140), patch("core.engine.random.randint", return_value=28):
             async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
                 await Engine.settle_player(player_discord_id, village_id, db, interrupted=True)
 
@@ -161,7 +161,7 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
             completion_time=now,
         )
 
-        with patch("core.engine.random.random", return_value=0.0), patch("core.engine.random.choice", return_value="wood"), patch("core.engine.random.gauss", return_value=150), patch("core.engine.random.randint", return_value=50):
+        with patch("core.engine.random.random", return_value=0.0), patch("core.engine.random.choice", return_value="wood"), patch("core.engine.random.gauss", return_value=150), patch("core.engine.random.randint", return_value=20):
             async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
                 await Engine.settle_player(player_discord_id, village_id, db, interrupted=True)
 
@@ -169,7 +169,7 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
             "SELECT type, quality, remaining_amount FROM resource_nodes WHERE village_id = ? ORDER BY id",
             (village_id,),
         )
-        self.assertEqual(nodes, [("wood", 116, 150)])
+        self.assertEqual(nodes, [("wood", 141, 600)])
 
     async def test_resources_exploring_caps_singleton_stock_but_still_updates_quality(self):
         village_id = await self.create_village()
@@ -182,7 +182,7 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
             completion_time=now,
         )
 
-        with patch("core.engine.random.random", return_value=0.0), patch("core.engine.random.choice", return_value="wood"), patch("core.engine.random.gauss", return_value=400), patch("core.engine.random.randint", return_value=100):
+        with patch("core.engine.random.random", return_value=0.0), patch("core.engine.random.choice", return_value="wood"), patch("core.engine.random.gauss", return_value=400), patch("core.engine.random.randint", return_value=20):
             async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
                 await Engine.settle_player(player_discord_id, village_id, db, interrupted=True)
 
@@ -190,10 +190,10 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
             "SELECT type, quality, remaining_amount FROM resource_nodes WHERE village_id = ?",
             (village_id,),
         )
-        self.assertEqual(node, ("wood", 103, 8000))
+        self.assertEqual(node, ("wood", 117, 8000))
 
     async def test_resources_gathering_clamps_quality_to_seventy_five_percent(self):
-        village_id = await self.create_village()
+        village_id = await self.create_village(wood=0)
         node_id = await self.create_resource_node(village_id, node_type="wood", quality=20, remaining_amount=100)
         now = datetime.utcnow()
         player_discord_id = await self.create_player(
@@ -207,8 +207,8 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
         async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
             await Engine.settle_player(player_discord_id, village_id, db, interrupted=True)
 
-        village = await self.fetchone("SELECT wood FROM villages WHERE id = ?", (village_id,))
-        self.assertEqual(village[0], 18)
+        resources = await self.fetch_resources(village_id)
+        self.assertEqual(resources["wood"], 18)
 
     async def test_resources_exploring_uses_stats_based_discovery_probability(self):
         village_id = await self.create_village()

@@ -29,7 +29,7 @@ class EngineWatcherBehaviorTests(DatabaseTestCase):
 
         expired_node = await self.fetchone("SELECT id FROM resource_nodes WHERE id = ?", (expired_node_id,))
         active_node = await self.fetchone("SELECT id FROM resource_nodes WHERE id = ?", (active_node_id,))
-        village = await self.fetchone("SELECT food FROM villages WHERE id = ?", (village_id,))
+        resources = await self.fetch_resources(village_id)
         logs = await self.fetchall(
             """
             SELECT action_type
@@ -41,7 +41,7 @@ class EngineWatcherBehaviorTests(DatabaseTestCase):
 
         self.assertEqual(expired_node[0], expired_node_id)
         self.assertEqual(active_node[0], active_node_id)
-        self.assertEqual(village[0], 17)
+        self.assertEqual(resources["food"], 17)
         self.assertEqual(logs, [("idle",)])
 
     async def test_player_system_inactive_players_become_missing_after_7_days(self):
@@ -88,17 +88,10 @@ class EngineWatcherBehaviorTests(DatabaseTestCase):
             "SELECT status, target_id FROM players WHERE discord_id = ? AND village_id = ?",
             (player_discord_id, village_id),
         )
-        village = await self.fetchone(
-            """
-            SELECT food_efficiency_xp, storage_capacity_xp, resource_yield_xp
-            FROM villages
-            WHERE id = ?
-            """,
-            (village_id,),
-        )
+        buffs = await self.fetch_buffs(village_id)
 
         self.assertEqual(player, ("missing", None))
-        self.assertEqual(village, (100, 100, 100))
+        self.assertEqual(buffs, {1: 100, 2: 100, 3: 100})
 
     async def test_in_game_actions_do_not_prevent_missing_when_message_and_command_are_stale(self):
         village_id = await self.create_village()

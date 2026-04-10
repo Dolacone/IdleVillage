@@ -88,9 +88,9 @@ class DatabaseTestCase(unittest.IsolatedAsyncioTestCase):
         self,
         *,
         guild_id=None,
-        food=0,
-        wood=0,
-        stone=0,
+        food=1000,
+        wood=1000,
+        stone=1000,
         food_efficiency_xp=0,
         storage_capacity_xp=0,
         resource_yield_xp=0,
@@ -105,20 +105,35 @@ class DatabaseTestCase(unittest.IsolatedAsyncioTestCase):
             await db.execute(
                 """
                 INSERT INTO villages (
-                    id, food, wood, stone,
-                    food_efficiency_xp, storage_capacity_xp, resource_yield_xp, last_tick_time
+                    id, last_tick_time
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?)
                 """,
                 (
                     guild_id,
-                    food,
-                    wood,
-                    stone,
-                    food_efficiency_xp,
-                    storage_capacity_xp,
-                    resource_yield_xp,
                     (last_tick_time or datetime.utcnow()).isoformat(),
+                ),
+            )
+            await db.executemany(
+                """
+                INSERT INTO village_resources (village_id, resource_type, amount)
+                VALUES (?, ?, ?)
+                """,
+                (
+                    (guild_id, "food", food),
+                    (guild_id, "wood", wood),
+                    (guild_id, "stone", stone),
+                ),
+            )
+            await db.executemany(
+                """
+                INSERT INTO buffs (village_id, buff_id, xp)
+                VALUES (?, ?, ?)
+                """,
+                (
+                    (guild_id, 1, food_efficiency_xp),
+                    (guild_id, 2, storage_capacity_xp),
+                    (guild_id, 3, resource_yield_xp),
                 ),
             )
             await db.commit()
@@ -222,3 +237,27 @@ class DatabaseTestCase(unittest.IsolatedAsyncioTestCase):
         async with schema.get_connection() as db:
             async with db.execute(query, params) as cursor:
                 return await cursor.fetchall()
+
+    async def fetch_resources(self, village_id):
+        rows = await self.fetchall(
+            """
+            SELECT resource_type, amount
+            FROM village_resources
+            WHERE village_id = ?
+            ORDER BY resource_type
+            """,
+            (village_id,),
+        )
+        return {resource_type: amount for resource_type, amount in rows}
+
+    async def fetch_buffs(self, village_id):
+        rows = await self.fetchall(
+            """
+            SELECT buff_id, xp
+            FROM buffs
+            WHERE village_id = ?
+            ORDER BY buff_id
+            """,
+            (village_id,),
+        )
+        return {buff_id: xp for buff_id, xp in rows}

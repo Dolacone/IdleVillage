@@ -8,14 +8,14 @@ from core.engine import Engine
 class VillageModuleBehaviorTests(DatabaseTestCase):
     async def test_village_pre_deduction_uses_food_efficiency_and_cycle_minutes(self):
         os.environ["ACTION_CYCLE_MINUTES"] = "30"
-        village_id = await self.create_village(food=15, wood=20, stone=10, food_efficiency_xp=1000)
+        village_id = await self.create_village(food=20, wood=60, stone=60, food_efficiency_xp=1000)
         player_discord_id = await self.create_player(village_id)
 
         success = await Engine.start_action(player_discord_id, village_id, "building", 1)
 
         self.assertTrue(success)
-        village = await self.fetchone("SELECT food, wood, stone FROM villages WHERE id = ?", (village_id,))
-        self.assertEqual(village, (6, 10, 5))
+        resources = await self.fetch_resources(village_id)
+        self.assertEqual(resources, {"food": 1, "stone": 10, "wood": 10})
 
         player = await self.fetchone(
             """
@@ -47,14 +47,8 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
             await Engine.settle_village(village_id, db)
 
-        village = await self.fetchone(
-            """
-            SELECT food_efficiency_xp, storage_capacity_xp, resource_yield_xp
-            FROM villages WHERE id = ?
-            """,
-            (village_id,),
-        )
-        self.assertEqual(village, (2994, 2994, 2994))
+        buffs = await self.fetch_buffs(village_id)
+        self.assertEqual(buffs, {1: 2994, 2: 2994, 3: 2994})
 
     async def test_village_dynamic_decay_matches_mid_village_target(self):
         last_tick = datetime.utcnow() - timedelta(hours=1)
@@ -70,14 +64,8 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
             await Engine.settle_village(village_id, db)
 
-        village = await self.fetchone(
-            """
-            SELECT food_efficiency_xp, storage_capacity_xp, resource_yield_xp
-            FROM villages WHERE id = ?
-            """,
-            (village_id,),
-        )
-        self.assertEqual(village, (30772, 30772, 30772))
+        buffs = await self.fetch_buffs(village_id)
+        self.assertEqual(buffs, {1: 30772, 2: 30772, 3: 30772})
 
     async def test_village_dynamic_decay_matches_extreme_village_target(self):
         last_tick = datetime.utcnow() - timedelta(hours=1)
@@ -93,14 +81,8 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
             await Engine.settle_village(village_id, db)
 
-        village = await self.fetchone(
-            """
-            SELECT food_efficiency_xp, storage_capacity_xp, resource_yield_xp
-            FROM villages WHERE id = ?
-            """,
-            (village_id,),
-        )
-        self.assertEqual(village, (458213, 458213, 458213))
+        buffs = await self.fetch_buffs(village_id)
+        self.assertEqual(buffs, {1: 458213, 2: 458213, 3: 458213})
 
     async def test_village_dynamic_decay_uses_cycle_units_for_short_heartbeat(self):
         os.environ["ACTION_CYCLE_MINUTES"] = "1"
@@ -116,14 +98,8 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
             await Engine.settle_village(village_id, db)
 
-        village = await self.fetchone(
-            """
-            SELECT food_efficiency_xp, storage_capacity_xp, resource_yield_xp
-            FROM villages WHERE id = ?
-            """,
-            (village_id,),
-        )
-        self.assertEqual(village, (4995, 4995, 4995))
+        buffs = await self.fetch_buffs(village_id)
+        self.assertEqual(buffs, {1: 4995, 2: 4995, 3: 4995})
 
     async def test_village_interrupted_action_settles_partial_progress(self):
         village_id = await self.create_village(food=0)
@@ -141,7 +117,7 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
             await Engine.settle_player(player_discord_id, village_id, db, interrupted=True)
 
-        village = await self.fetchone("SELECT food FROM villages WHERE id = ?", (village_id,))
+        resources = await self.fetch_resources(village_id)
         player = await self.fetchone(
             """
             SELECT status, target_id, completion_time
@@ -161,7 +137,7 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
             (player_discord_id, village_id),
         )
 
-        self.assertEqual(village[0], 12)
+        self.assertEqual(resources["food"], 12)
         self.assertEqual(player, ("idle", None, None))
         self.assertEqual(node[0], 88)
         self.assertEqual(log_row[0], "gathering_food")
@@ -173,12 +149,12 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         success = await Engine.start_action(player_discord_id, village_id, "gathering", None)
 
         self.assertFalse(success)
-        village = await self.fetchone("SELECT food FROM villages WHERE id = ?", (village_id,))
+        resources = await self.fetch_resources(village_id)
         player = await self.fetchone(
             "SELECT status FROM players WHERE discord_id = ? AND village_id = ?",
             (player_discord_id, village_id),
         )
-        self.assertEqual(village[0], 3)
+        self.assertEqual(resources["food"], 3)
         self.assertEqual(player[0], "idle")
 
     async def test_ui_refresh_keeps_next_cycle_when_action_has_already_completed(self):
@@ -203,9 +179,9 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
             """,
             (player_discord_id, village_id),
         )
-        self.assertEqual(player[0], "building")
-        self.assertEqual(player[1], 1)
-        self.assertIsNotNone(player[2])
+        self.assertEqual(player[0], "idle")
+        self.assertIsNone(player[1])
+        self.assertIsNone(player[2])
 
     async def test_settlement_backfills_multiple_completed_cycles(self):
         os.environ["ACTION_CYCLE_MINUTES"] = "1"
@@ -234,10 +210,8 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
 
             await Engine.settle_player(player_discord_id, village_id, db)
 
-        village = await self.fetchone(
-            "SELECT food, wood, stone, food_efficiency_xp FROM villages WHERE id = ?",
-            (village_id,),
-        )
+        resources = await self.fetch_resources(village_id)
+        buffs = await self.fetch_buffs(village_id)
         player = await self.fetchone(
             """
             SELECT status, target_id, completion_time
@@ -255,11 +229,11 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
             (player_discord_id, village_id),
         )
 
-        self.assertEqual(village, (40, 40, 70, 129))
-        self.assertEqual(player[0], "building")
-        self.assertEqual(player[1], 1)
-        self.assertIsNotNone(player[2])
-        self.assertEqual(logs[0], 5)
+        self.assertEqual((resources["food"], resources["wood"], resources["stone"], buffs[1]), (98, 0, 0, 50))
+        self.assertEqual(player[0], "idle")
+        self.assertIsNone(player[1])
+        self.assertIsNone(player[2])
+        self.assertEqual(logs[0], 2)
 
     async def test_settlement_recalculates_stats_during_backfill(self):
         os.environ["ACTION_CYCLE_MINUTES"] = "1"
@@ -302,8 +276,5 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
 
             await Engine.settle_player(player_discord_id, village_id, db)
 
-        village = await self.fetchone(
-            "SELECT food_efficiency_xp FROM villages WHERE id = ?",
-            (village_id,),
-        )
-        self.assertEqual(village[0], 251)
+        buffs = await self.fetch_buffs(village_id)
+        self.assertEqual(buffs[1], 99)

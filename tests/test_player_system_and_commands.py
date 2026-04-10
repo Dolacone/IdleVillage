@@ -175,8 +175,10 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
 
         await cog.idlevillage_initial.callback(cog, inter)
 
-        village = await self.fetchone("SELECT food, wood, stone FROM villages WHERE id = ?", (77,))
-        self.assertEqual(village, (1000, 1000, 1000))
+        resources = await self.fetch_resources(77)
+        buffs = await self.fetch_buffs(77)
+        self.assertEqual(resources, {"food": 1000, "stone": 1000, "wood": 1000})
+        self.assertEqual(buffs, {1: 0, 2: 0, 3: 0})
         self.assertEqual(inter.response.calls[-1]["ephemeral"], True)
 
     async def test_village_binding_rejects_reuse_on_existing_server(self):
@@ -409,10 +411,10 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         new_amount = await _adjust_village_resource(90, "wood", 4315)
         removed_type = await _remove_village_node(village_id, node_id)
 
-        village = await self.fetchone("SELECT food, wood, stone FROM villages WHERE id = ?", (90,))
+        resources = await self.fetch_resources(90)
         node = await self.fetchone("SELECT id FROM resource_nodes WHERE id = ?", (node_id,))
         self.assertEqual(new_amount, 4321)
-        self.assertEqual(village, (5, 4321, 7))
+        self.assertEqual(resources, {"food": 5, "stone": 7, "wood": 4321})
         self.assertEqual(removed_type, "stone")
         self.assertIsNone(node)
 
@@ -453,10 +455,10 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
 
         await modal.callback(modal_inter)
 
-        village = await self.fetchone("SELECT food, wood, stone FROM villages WHERE id = ?", (village_id,))
+        resources = await self.fetch_resources(village_id)
         board_message = next(iter(bot.get_channel(456).messages.values()))
 
-        self.assertEqual(village, (4321, 6, 7))
+        self.assertEqual(resources, {"food": 4321, "stone": 7, "wood": 6})
         self.assertIn("Food set to 4,321.", modal_inter.response.calls[-1]["content"])
         self.assertIn("🍎 4,321", board_message.content)
 

@@ -18,7 +18,7 @@
   - 基礎產出 (BASE_OUTCOME): 50. (v2026.04.09.01)
   - 建設額外消耗 (BASE_BUILD_COST): 50 木材、50 石材. (v2026.04.09.01)
   - 糧食基礎消耗 (BASE_FOOD_COST): 20. (v2026.04.09.01)
-  - 實際糧食消耗: `max(2, 20 - 2 * Kitchen_Level)`. (v2026.04.09.01)
+  - 實際糧食消耗: `max(10, 20 - Kitchen_Level)`. (v2026.04.09.01)
   - 資源扣除採先結算者優先 (First-come, first-served).
   - 資源一經扣除概不退還 (Non-refundable).
 - 自動續期判定 (Auto-restart Check):
@@ -49,7 +49,7 @@
 ### 5. 村莊增益 (Buffs/Buildings)
 - 廚房 (Food Efficiency): 降低每次行動週期所需的糧食消耗.
   - Buff ID: 1
-  - 公式: 消耗 = `max(2, 20 - 2 * Level)`. (v2026.04.09.01)
+  - 公式: 消耗 = `max(10, 20 - Level)`. (v2026.04.09.01)
 - 儲存容量 (Storage Capacity): 
   - Buff ID: 2
   - 總容量 = 1000 * (2 ^ Level).

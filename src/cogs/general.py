@@ -30,15 +30,12 @@ MANAGE_MODE_LABELS = {
 
 async def _fetch_village_row(village_id: int):
     async with get_connection() as db:
-        async with db.execute(
-            """
-            SELECT id, food, wood, stone
-            FROM villages
-            WHERE id = ?
-            """,
-            (village_id,),
-        ) as cursor:
-            return await cursor.fetchone()
+        async with db.execute("SELECT id FROM villages WHERE id = ?", (village_id,)) as cursor:
+            village = await cursor.fetchone()
+        if not village:
+            return None
+        resources = await Engine._fetch_village_resources(db, village_id)
+        return (village[0], resources["food"], resources["wood"], resources["stone"])
 
 
 async def _fetch_active_nodes(village_id: int):
@@ -59,10 +56,9 @@ async def _fetch_active_nodes(village_id: int):
 async def _set_village_resource(village_id: int, resource_type: str, amount: int):
     normalized_amount = max(0, int(amount))
     async with get_connection() as db:
-        await db.execute(
-            f"UPDATE villages SET {resource_type} = ? WHERE id = ?",
-            (normalized_amount, village_id),
-        )
+        resources = await Engine._fetch_village_resources(db, village_id)
+        resources[resource_type] = normalized_amount
+        await Engine._write_village_resources(db, village_id, resources)
         await db.commit()
     return normalized_amount
 
@@ -423,11 +419,17 @@ class General(commands.Cog):
 
             await db.execute(
                 """
-                INSERT INTO villages (id, food, wood, stone, food_efficiency_xp, storage_capacity_xp, resource_yield_xp)
-                VALUES (?, 1000, 1000, 1000, 0, 0, 0)
+                INSERT INTO villages (id)
+                VALUES (?)
                 """,
                 (village_id,),
             )
+            await Engine._write_village_resources(
+                db,
+                village_id,
+                {"food": 1000, "wood": 1000, "stone": 1000},
+            )
+            await Engine._write_village_buffs(db, village_id, {1: 0, 2: 0, 3: 0})
             await db.commit()
 
         log_event(req_id, inter.author.id, "RESP", f"Village initialized for guild {village_id}")

@@ -1,31 +1,131 @@
-import os
-import aiosqlite
 import asyncio
 import math
+import os
+import shutil
+from datetime import datetime
+
+import aiosqlite
 
 DB_PATH = os.getenv("DATABASE_PATH", "data/village.db")
 
+RESOURCE_TYPES = ("food", "wood", "stone")
+BUFF_IDS = (1, 2, 3)
+STATS_BASE_VALUE = 50
+LEGACY_VILLAGE_COLUMNS = (
+    "food",
+    "wood",
+    "stone",
+    "food_efficiency_xp",
+    "storage_capacity_xp",
+    "resource_yield_xp",
+)
 
-async def _ensure_column(db, table_name: str, column_name: str, definition: str):
+
+async def _table_columns(db, table_name: str):
     async with db.execute(f"PRAGMA table_info({table_name})") as cursor:
-        columns = await cursor.fetchall()
-
-    existing_names = {column[1] for column in columns}
-    if column_name not in existing_names:
-        await db.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
+        return await cursor.fetchall()
 
 
-async def _migrate_resource_nodes_drop_level(db):
-    async with db.execute("PRAGMA table_info(resource_nodes)") as cursor:
-        columns = await cursor.fetchall()
+async def _table_exists(db, table_name: str):
+    async with db.execute(
+        """
+        SELECT 1
+        FROM sqlite_master
+        WHERE type = 'table' AND name = ?
+        """,
+        (table_name,),
+    ) as cursor:
+        return await cursor.fetchone() is not None
 
-    existing_names = {column[1] for column in columns}
-    if "level" not in existing_names:
-        return
+
+async def _create_current_tables(db):
+    await db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS villages (
+            id INTEGER PRIMARY KEY,
+            last_tick_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            announcement_channel_id TEXT,
+            announcement_message_id TEXT,
+            last_announcement_updated TIMESTAMP
+        )
+        """
+    )
 
     await db.execute(
         """
-        CREATE TABLE resource_nodes_new (
+        CREATE TABLE IF NOT EXISTS village_resources (
+            village_id INTEGER NOT NULL,
+            resource_type TEXT NOT NULL,
+            amount INTEGER DEFAULT 0,
+            PRIMARY KEY (village_id, resource_type),
+            FOREIGN KEY (village_id) REFERENCES villages(id)
+        )
+        """
+    )
+
+    await db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS buffs (
+            village_id INTEGER NOT NULL,
+            buff_id INTEGER NOT NULL,
+            xp INTEGER DEFAULT 0,
+            PRIMARY KEY (village_id, buff_id),
+            FOREIGN KEY (village_id) REFERENCES villages(id)
+        )
+        """
+    )
+
+    await db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS players (
+            discord_id INTEGER NOT NULL,
+            village_id INTEGER NOT NULL,
+            last_message_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_command_time TIMESTAMP DEFAULT '',
+            status TEXT DEFAULT 'idle',
+            target_id INTEGER,
+            last_update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completion_time TIMESTAMP,
+            PRIMARY KEY (discord_id, village_id),
+            FOREIGN KEY (village_id) REFERENCES villages(id)
+        )
+        """
+    )
+
+    await db.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS player_stats (
+            player_discord_id INTEGER NOT NULL,
+            village_id INTEGER NOT NULL,
+            strength INTEGER DEFAULT {STATS_BASE_VALUE},
+            agility INTEGER DEFAULT {STATS_BASE_VALUE},
+            perception INTEGER DEFAULT {STATS_BASE_VALUE},
+            knowledge INTEGER DEFAULT {STATS_BASE_VALUE},
+            endurance INTEGER DEFAULT {STATS_BASE_VALUE},
+            last_calc_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (player_discord_id, village_id),
+            FOREIGN KEY (player_discord_id, village_id) REFERENCES players(discord_id, village_id)
+        )
+        """
+    )
+
+    await db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS player_actions_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_discord_id INTEGER NOT NULL,
+            village_id INTEGER NOT NULL,
+            action_type TEXT,
+            start_time TIMESTAMP,
+            end_time TIMESTAMP,
+            FOREIGN KEY (player_discord_id, village_id) REFERENCES players(discord_id, village_id)
+        )
+        """
+    )
+
+    await db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS resource_nodes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             village_id INTEGER,
             type TEXT,
@@ -36,15 +136,71 @@ async def _migrate_resource_nodes_drop_level(db):
         )
         """
     )
-    await db.execute(
+
+
+async def _seed_village_defaults(
+    db,
+    village_id: int,
+    *,
+    food: int = 1000,
+    wood: int = 1000,
+    stone: int = 1000,
+    food_efficiency_xp: int = 0,
+    storage_capacity_xp: int = 0,
+    resource_yield_xp: int = 0,
+):
+    await db.executemany(
         """
-        INSERT INTO resource_nodes_new (id, village_id, type, quality, remaining_amount, expiry_time)
-        SELECT id, village_id, type, quality, remaining_amount, expiry_time
-        FROM resource_nodes
-        """
+        INSERT INTO village_resources (village_id, resource_type, amount)
+        VALUES (?, ?, ?)
+        ON CONFLICT(village_id, resource_type) DO NOTHING
+        """,
+        (
+            (village_id, "food", int(food)),
+            (village_id, "wood", int(wood)),
+            (village_id, "stone", int(stone)),
+        ),
     )
-    await db.execute("DROP TABLE resource_nodes")
-    await db.execute("ALTER TABLE resource_nodes_new RENAME TO resource_nodes")
+    await db.executemany(
+        """
+        INSERT INTO buffs (village_id, buff_id, xp)
+        VALUES (?, ?, ?)
+        ON CONFLICT(village_id, buff_id) DO NOTHING
+        """,
+        (
+            (village_id, 1, int(food_efficiency_xp)),
+            (village_id, 2, int(storage_capacity_xp)),
+            (village_id, 3, int(resource_yield_xp)),
+        ),
+    )
+
+
+async def _normalize_existing_villages(db):
+    async with db.execute("SELECT id FROM villages") as cursor:
+        village_rows = await cursor.fetchall()
+
+    for (village_id,) in village_rows:
+        await _seed_village_defaults(db, int(village_id))
+
+
+async def _needs_destructive_migration(db):
+    if not await _table_exists(db, "villages"):
+        return False
+
+    village_columns = await _table_columns(db, "villages")
+    village_names = {column[1] for column in village_columns}
+
+    return any(column_name in village_names for column_name in LEGACY_VILLAGE_COLUMNS)
+
+
+def _backup_database_file():
+    if not os.path.exists(DB_PATH):
+        return None
+
+    timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    backup_path = f"{DB_PATH}.{timestamp}.2026.04.09.01.bak"
+    shutil.copy2(DB_PATH, backup_path)
+    return backup_path
 
 
 async def _migrate_resource_nodes_to_singletons(db):
@@ -160,34 +316,113 @@ async def _migrate_resource_nodes_to_singletons(db):
             )
 
 
-async def _table_columns(db, table_name: str):
-    async with db.execute(f"PRAGMA table_info({table_name})") as cursor:
-        return await cursor.fetchall()
+async def _migrate_village_storage_schema(db):
+    if not await _table_exists(db, "villages"):
+        return
 
+    await _create_current_tables(db)
+    village_columns = await _table_columns(db, "villages")
+    existing_names = {column[1] for column in village_columns}
+    has_legacy_columns = any(column_name in existing_names for column_name in LEGACY_VILLAGE_COLUMNS)
 
-async def _table_exists(db, table_name: str):
+    if not has_legacy_columns:
+        await _normalize_existing_villages(db)
+        return
+
     async with db.execute(
         """
-        SELECT 1
-        FROM sqlite_master
-        WHERE type = 'table' AND name = ?
-        """,
-        (table_name,),
+        SELECT
+            id,
+            COALESCE(food, 1000),
+            COALESCE(wood, 1000),
+            COALESCE(stone, 1000),
+            COALESCE(food_efficiency_xp, 0),
+            COALESCE(storage_capacity_xp, 0),
+            COALESCE(resource_yield_xp, 0)
+        FROM villages
+        """
     ) as cursor:
-        return await cursor.fetchone() is not None
+        villages = await cursor.fetchall()
 
+    for village in villages:
+        await _seed_village_defaults(
+            db,
+            village[0],
+            food=village[1],
+            wood=village[2],
+            stone=village[3],
+            food_efficiency_xp=village[4],
+            storage_capacity_xp=village[5],
+            resource_yield_xp=village[6],
+        )
 
-async def _create_current_tables(db):
+    async with db.execute(
+        """
+        SELECT
+            v.id,
+            COALESCE(v.food, 1000),
+            COALESCE(v.wood, 1000),
+            COALESCE(v.stone, 1000),
+            COALESCE(v.food_efficiency_xp, 0),
+            COALESCE(v.storage_capacity_xp, 0),
+            COALESCE(v.resource_yield_xp, 0),
+            vr_food.amount,
+            vr_wood.amount,
+            vr_stone.amount,
+            b1.xp,
+            b2.xp,
+            b3.xp
+        FROM villages v
+        LEFT JOIN village_resources vr_food
+            ON vr_food.village_id = v.id AND vr_food.resource_type = 'food'
+        LEFT JOIN village_resources vr_wood
+            ON vr_wood.village_id = v.id AND vr_wood.resource_type = 'wood'
+        LEFT JOIN village_resources vr_stone
+            ON vr_stone.village_id = v.id AND vr_stone.resource_type = 'stone'
+        LEFT JOIN buffs b1
+            ON b1.village_id = v.id AND b1.buff_id = 1
+        LEFT JOIN buffs b2
+            ON b2.village_id = v.id AND b2.buff_id = 2
+        LEFT JOIN buffs b3
+            ON b3.village_id = v.id AND b3.buff_id = 3
+        """
+    ) as cursor:
+        verification_rows = await cursor.fetchall()
+
+    for row in verification_rows:
+        (
+            village_id,
+            legacy_food,
+            legacy_wood,
+            legacy_stone,
+            legacy_food_xp,
+            legacy_storage_xp,
+            legacy_yield_xp,
+            normalized_food,
+            normalized_wood,
+            normalized_stone,
+            normalized_food_xp,
+            normalized_storage_xp,
+            normalized_yield_xp,
+        ) = row
+        if (
+            normalized_food != legacy_food
+            or normalized_wood != legacy_wood
+            or normalized_stone != legacy_stone
+            or normalized_food_xp != legacy_food_xp
+            or normalized_storage_xp != legacy_storage_xp
+            or normalized_yield_xp != legacy_yield_xp
+        ):
+            raise RuntimeError(
+                f"Normalized village migration verification failed for village {village_id}"
+            )
+
+    await db.execute("PRAGMA foreign_keys = OFF")
+    await db.execute("DROP TABLE IF EXISTS villages_new")
     await db.execute(
         """
-        CREATE TABLE IF NOT EXISTS villages (
+        CREATE TABLE villages_new (
             id INTEGER PRIMARY KEY,
-            food INTEGER DEFAULT 100,
-            wood INTEGER DEFAULT 0,
-            stone INTEGER DEFAULT 0,
-            food_efficiency_xp INTEGER DEFAULT 0,
-            storage_capacity_xp INTEGER DEFAULT 0,
-            resource_yield_xp INTEGER DEFAULT 0,
             last_tick_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             announcement_channel_id TEXT,
             announcement_message_id TEXT,
@@ -195,224 +430,36 @@ async def _create_current_tables(db):
         )
         """
     )
-
     await db.execute(
         """
-        CREATE TABLE IF NOT EXISTS players (
-            discord_id INTEGER NOT NULL,
-            village_id INTEGER NOT NULL,
-            last_message_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            last_command_time TIMESTAMP DEFAULT '',
-            status TEXT DEFAULT 'idle',
-            target_id INTEGER,
-            last_update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            completion_time TIMESTAMP,
-            PRIMARY KEY (discord_id, village_id),
-            FOREIGN KEY (village_id) REFERENCES villages(id)
+        INSERT INTO villages_new (
+            id, last_tick_time, announcement_channel_id, announcement_message_id, last_announcement_updated
         )
+        SELECT
+            id,
+            last_tick_time,
+            announcement_channel_id,
+            announcement_message_id,
+            last_announcement_updated
+        FROM villages
         """
     )
-
-    await db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS player_stats (
-            player_discord_id INTEGER NOT NULL,
-            village_id INTEGER NOT NULL,
-            strength INTEGER DEFAULT 50,
-            agility INTEGER DEFAULT 50,
-            perception INTEGER DEFAULT 50,
-            knowledge INTEGER DEFAULT 50,
-            endurance INTEGER DEFAULT 50,
-            last_calc_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (player_discord_id, village_id),
-            FOREIGN KEY (player_discord_id, village_id) REFERENCES players(discord_id, village_id)
-        )
-        """
-    )
-
-    await db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS player_actions_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            player_discord_id INTEGER NOT NULL,
-            village_id INTEGER NOT NULL,
-            action_type TEXT,
-            start_time TIMESTAMP,
-            end_time TIMESTAMP,
-            FOREIGN KEY (player_discord_id, village_id) REFERENCES players(discord_id, village_id)
-        )
-        """
-    )
-
-    await db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS resource_nodes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            village_id INTEGER,
-            type TEXT,
-            quality INTEGER,
-            remaining_amount INTEGER,
-            expiry_time TIMESTAMP,
-            FOREIGN KEY (village_id) REFERENCES villages(id)
-        )
-        """
-    )
-
-
-async def _migrate_identity_schema(db):
-    village_columns = await _table_columns(db, "villages")
-    player_columns = await _table_columns(db, "players")
-
-    has_legacy_villages = any(column[1] == "guild_id" for column in village_columns)
-    has_legacy_players = any(column[1] == "id" for column in player_columns)
-
-    if not has_legacy_villages and not has_legacy_players:
-        return
-
-    await db.execute("PRAGMA foreign_keys = OFF")
-
-    table_names = (
-        "villages",
-        "players",
-        "player_stats",
-        "player_actions_log",
-        "resource_nodes",
-    )
-    for table_name in table_names:
-        if await _table_exists(db, table_name):
-            await db.execute(f"ALTER TABLE {table_name} RENAME TO {table_name}_legacy")
-
-    await _create_current_tables(db)
-
-    if await _table_exists(db, "villages_legacy"):
-        await db.execute(
-            """
-            INSERT INTO villages (
-                id, food, wood, stone,
-                food_efficiency_xp, storage_capacity_xp, resource_yield_xp,
-                last_tick_time, announcement_channel_id, announcement_message_id, last_announcement_updated
-            )
-            SELECT
-                CAST(guild_id AS INTEGER),
-                food,
-                wood,
-                stone,
-                food_efficiency_xp,
-                storage_capacity_xp,
-                resource_yield_xp,
-                last_tick_time,
-                announcement_channel_id,
-                announcement_message_id,
-                last_announcement_updated
-            FROM villages_legacy
-            """
-        )
-
-    if await _table_exists(db, "players_legacy") and await _table_exists(db, "villages_legacy"):
-        await db.execute(
-            """
-            INSERT INTO players (
-                discord_id, village_id, last_message_time, last_command_time,
-                status, target_id, last_update_time, completion_time
-            )
-            SELECT
-                CAST(p.discord_id AS INTEGER),
-                CAST(v.guild_id AS INTEGER),
-                p.last_message_time,
-                p.last_message_time,
-                p.status,
-                p.target_id,
-                p.last_update_time,
-                p.completion_time
-            FROM players_legacy p
-            JOIN villages_legacy v ON v.id = p.village_id
-            """
-        )
-
-    if (
-        await _table_exists(db, "player_stats_legacy")
-        and await _table_exists(db, "players_legacy")
-        and await _table_exists(db, "villages_legacy")
-    ):
-        await db.execute(
-            """
-            INSERT INTO player_stats (
-                player_discord_id, village_id,
-                strength, agility, perception, knowledge, endurance, last_calc_time
-            )
-            SELECT
-                CAST(p.discord_id AS INTEGER),
-                CAST(v.guild_id AS INTEGER),
-                ps.strength,
-                ps.agility,
-                ps.perception,
-                ps.knowledge,
-                ps.endurance,
-                ps.last_calc_time
-            FROM player_stats_legacy ps
-            JOIN players_legacy p ON p.id = ps.player_id
-            JOIN villages_legacy v ON v.id = p.village_id
-            """
-        )
-
-    if (
-        await _table_exists(db, "player_actions_log_legacy")
-        and await _table_exists(db, "players_legacy")
-        and await _table_exists(db, "villages_legacy")
-    ):
-        await db.execute(
-            """
-            INSERT INTO player_actions_log (
-                id, player_discord_id, village_id, action_type, start_time, end_time
-            )
-            SELECT
-                log.id,
-                CAST(p.discord_id AS INTEGER),
-                CAST(v.guild_id AS INTEGER),
-                log.action_type,
-                log.start_time,
-                log.end_time
-            FROM player_actions_log_legacy log
-            JOIN players_legacy p ON p.id = log.player_id
-            JOIN villages_legacy v ON v.id = p.village_id
-            """
-        )
-
-    if await _table_exists(db, "resource_nodes_legacy") and await _table_exists(db, "villages_legacy"):
-        await db.execute(
-            """
-            INSERT INTO resource_nodes (
-                id, village_id, type, quality, remaining_amount, expiry_time
-            )
-            SELECT
-                rn.id,
-                CAST(v.guild_id AS INTEGER),
-                rn.type,
-                rn.quality,
-                rn.remaining_amount,
-                rn.expiry_time
-            FROM resource_nodes_legacy rn
-            JOIN villages_legacy v ON v.id = rn.village_id
-            """
-        )
-
-    for table_name in table_names:
-        legacy_name = f"{table_name}_legacy"
-        if await _table_exists(db, legacy_name):
-            await db.execute(f"DROP TABLE {legacy_name}")
-
+    await db.execute("DROP TABLE villages")
+    await db.execute("ALTER TABLE villages_new RENAME TO villages")
     await db.execute("PRAGMA foreign_keys = ON")
+    await _normalize_existing_villages(db)
+
 
 async def init_db():
     """Initializes the SQLite database with the required schemas."""
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
     async with aiosqlite.connect(DB_PATH) as db:
+        if await _needs_destructive_migration(db):
+            _backup_database_file()
+
         await _create_current_tables(db)
-        await _migrate_identity_schema(db)
-        await _ensure_column(db, "players", "last_command_time", "TIMESTAMP DEFAULT ''")
-        await db.execute("UPDATE players SET last_command_time = last_message_time WHERE last_command_time IS NULL")
-        await _migrate_resource_nodes_drop_level(db)
+        await _migrate_village_storage_schema(db)
         await _migrate_resource_nodes_to_singletons(db)
 
         await db.commit()
@@ -426,6 +473,7 @@ def get_connection():
     db = await get_connection()
     """
     return aiosqlite.connect(DB_PATH)
+
 
 if __name__ == "__main__":
     asyncio.run(init_db())
