@@ -1,5 +1,5 @@
-import datetime
 import time
+from datetime import datetime, timezone
 
 import disnake
 from disnake.ext import commands
@@ -27,7 +27,7 @@ async def _get_or_create_player(db, village_id: int, discord_id: int):
     if player_row:
         return discord_id
 
-    now = datetime.datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     await db.execute(
         """
         INSERT INTO players (discord_id, village_id, last_message_time, last_command_time)
@@ -40,7 +40,7 @@ async def _get_or_create_player(db, village_id: int, discord_id: int):
 
 
 async def _update_player_command_time(db, player_discord_id: int, village_id: int):
-    now = datetime.datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     await db.execute(
         """
         UPDATE players
@@ -130,11 +130,7 @@ async def _build_embed(inter, db, village_id: int, player_discord_id: int):
     p_str, p_agi, p_per, p_kno, p_end = stats if stats else (50, 50, 50, 50, 50)
 
     storage_capacity = Engine._storage_capacity(buffs[2])
-    building_rows = [
-        Engine._building_progress_line(1, buffs[1]),
-        Engine._building_progress_line(2, buffs[2]),
-        Engine._building_progress_line(3, buffs[3]),
-    ]
+    building_rows = Engine._building_progress_lines(buffs)
 
     last_update = Engine._parse_timestamp(last_update_str)
     completion_time = Engine._parse_timestamp(completion_time_str)

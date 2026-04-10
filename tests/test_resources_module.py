@@ -2,11 +2,76 @@ from datetime import datetime, timedelta
 from unittest.mock import patch
 
 from support import DatabaseTestCase
-from core.engine import Engine
 from database import schema
+from core.engine import Engine
 
 
 class ResourcesModuleBehaviorTests(DatabaseTestCase):
+    async def test_resources_migration_preserves_existing_normalized_rows_during_legacy_cleanup(self):
+        async with schema.get_connection() as db:
+            await db.execute("PRAGMA foreign_keys = OFF")
+            await db.execute("DROP TABLE villages")
+            await db.execute(
+                """
+                CREATE TABLE villages (
+                    id INTEGER PRIMARY KEY,
+                    food INTEGER DEFAULT 1000,
+                    wood INTEGER DEFAULT 1000,
+                    stone INTEGER DEFAULT 1000,
+                    food_efficiency_xp INTEGER DEFAULT 0,
+                    storage_capacity_xp INTEGER DEFAULT 0,
+                    resource_yield_xp INTEGER DEFAULT 0,
+                    last_tick_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    announcement_channel_id TEXT,
+                    announcement_message_id TEXT,
+                    last_announcement_updated TIMESTAMP
+                )
+                """
+            )
+            await db.execute(
+                """
+                INSERT INTO villages (
+                    id, food, wood, stone, food_efficiency_xp, storage_capacity_xp, resource_yield_xp
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (100, 10, 20, 30, 40, 50, 60),
+            )
+            await db.executemany(
+                """
+                INSERT INTO village_resources (village_id, resource_type, amount)
+                VALUES (?, ?, ?)
+                """,
+                (
+                    (100, "food", 700),
+                    (100, "wood", 800),
+                    (100, "stone", 900),
+                ),
+            )
+            await db.executemany(
+                """
+                INSERT INTO buffs (village_id, buff_id, xp)
+                VALUES (?, ?, ?)
+                """,
+                (
+                    (100, 1, 111),
+                    (100, 2, 222),
+                    (100, 3, 333),
+                ),
+            )
+            await db.commit()
+            await db.execute("PRAGMA foreign_keys = ON")
+
+        await schema.init_db()
+
+        resources = await self.fetch_resources(100)
+        buffs = await self.fetch_buffs(100)
+        village_columns = await self.fetchall("PRAGMA table_info(villages)")
+
+        self.assertEqual(resources, {"food": 700, "stone": 900, "wood": 800})
+        self.assertEqual(buffs, {1: 111, 2: 222, 3: 333})
+        self.assertNotIn("food", {column[1] for column in village_columns})
+
     async def test_resources_migration_merges_duplicate_nodes_and_retargets_gatherers(self):
         village_id = await self.create_village(wood=0)
         keeper_id = await self.create_resource_node(
@@ -89,7 +154,7 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
             completion_time=None,
         )
 
-        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+        async with schema.get_connection() as db:
             await Engine.settle_player(player_discord_id, village_id, db)
 
         resources = await self.fetch_resources(village_id)
@@ -107,7 +172,7 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
             completion_time=now,
         )
 
-        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+        async with schema.get_connection() as db:
             await Engine.settle_player(player_discord_id, village_id, db, interrupted=True)
 
         resources = await self.fetch_resources(village_id)
@@ -124,7 +189,7 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
             last_update_time=now - timedelta(hours=2),
         )
 
-        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+        async with schema.get_connection() as db:
             await Engine.settle_player(player_discord_id, village_id, db)
 
         resources = await self.fetch_resources(village_id)
@@ -141,7 +206,7 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
         )
 
         with patch("core.engine.random.random", return_value=0.0), patch("core.engine.random.choice", return_value="stone"), patch("core.engine.random.gauss", return_value=140), patch("core.engine.random.randint", return_value=28):
-            async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+            async with schema.get_connection() as db:
                 await Engine.settle_player(player_discord_id, village_id, db, interrupted=True)
 
         nodes = await self.fetchall(
@@ -162,7 +227,7 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
         )
 
         with patch("core.engine.random.random", return_value=0.0), patch("core.engine.random.choice", return_value="wood"), patch("core.engine.random.gauss", return_value=150), patch("core.engine.random.randint", return_value=20):
-            async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+            async with schema.get_connection() as db:
                 await Engine.settle_player(player_discord_id, village_id, db, interrupted=True)
 
         nodes = await self.fetchall(
@@ -183,7 +248,7 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
         )
 
         with patch("core.engine.random.random", return_value=0.0), patch("core.engine.random.choice", return_value="wood"), patch("core.engine.random.gauss", return_value=400), patch("core.engine.random.randint", return_value=20):
-            async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+            async with schema.get_connection() as db:
                 await Engine.settle_player(player_discord_id, village_id, db, interrupted=True)
 
         node = await self.fetchone(
@@ -204,7 +269,7 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
             completion_time=now,
         )
 
-        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+        async with schema.get_connection() as db:
             await Engine.settle_player(player_discord_id, village_id, db, interrupted=True)
 
         resources = await self.fetch_resources(village_id)
@@ -223,7 +288,7 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
         )
 
         with patch("core.engine.random.random", return_value=0.3):
-            async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+            async with schema.get_connection() as db:
                 await Engine.settle_player(player_discord_id, village_id, db, interrupted=True)
 
         node_count = await self.fetchone("SELECT count(*) FROM resource_nodes WHERE village_id = ?", (village_id,))

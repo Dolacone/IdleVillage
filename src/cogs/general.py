@@ -1,14 +1,12 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 import disnake
 from disnake.ext import commands
 
-from core.config import get_primary_admin_id, is_admin
+from core.config import is_admin
 from core.engine import Engine
 from core.observability import log_event, new_request_id
 from database.schema import get_connection
-
-ALLOWED_OWNER_ID = get_primary_admin_id()
 
 RESOURCE_EMOJIS = {
     "food": "🍎",
@@ -64,17 +62,13 @@ async def _set_village_resource(village_id: int, resource_type: str, amount: int
 
 
 async def _adjust_village_resource(village_id: int, resource_type: str, delta: int):
-    village = await _fetch_village_row(village_id)
-    if not village:
-        return None
-
-    _, food, wood, stone = village
-    current_amount = {
-        "food": food,
-        "wood": wood,
-        "stone": stone,
-    }[resource_type]
-    return await _set_village_resource(village_id, resource_type, current_amount + delta)
+    async with get_connection() as db:
+        resources = await Engine._fetch_village_resources(db, village_id)
+        new_amount = max(0, resources[resource_type] + delta)
+        resources[resource_type] = new_amount
+        await Engine._write_village_resources(db, village_id, resources)
+        await db.commit()
+    return new_amount
 
 
 async def _remove_village_node(village_id: int, node_id: int):

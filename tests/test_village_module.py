@@ -2,6 +2,7 @@ import os
 from datetime import datetime, timedelta
 
 from support import DatabaseTestCase
+from database import schema
 from core.engine import Engine
 
 
@@ -44,7 +45,7 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         for _ in range(5):
             await self.create_player(village_id, last_message_time=datetime.utcnow(), status="idle")
 
-        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+        async with schema.get_connection() as db:
             await Engine.settle_village(village_id, db)
 
         buffs = await self.fetch_buffs(village_id)
@@ -61,7 +62,7 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         for _ in range(10):
             await self.create_player(village_id, last_message_time=datetime.utcnow(), status="idle")
 
-        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+        async with schema.get_connection() as db:
             await Engine.settle_village(village_id, db)
 
         buffs = await self.fetch_buffs(village_id)
@@ -78,7 +79,7 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         for _ in range(100):
             await self.create_player(village_id, last_message_time=datetime.utcnow(), status="idle")
 
-        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+        async with schema.get_connection() as db:
             await Engine.settle_village(village_id, db)
 
         buffs = await self.fetch_buffs(village_id)
@@ -95,7 +96,7 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         )
         await self.create_player(village_id, last_message_time=datetime.utcnow(), status="idle")
 
-        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+        async with schema.get_connection() as db:
             await Engine.settle_village(village_id, db)
 
         buffs = await self.fetch_buffs(village_id)
@@ -114,7 +115,7 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
             completion_time=now + timedelta(minutes=30),
         )
 
-        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+        async with schema.get_connection() as db:
             await Engine.settle_player(player_discord_id, village_id, db, interrupted=True)
 
         resources = await self.fetch_resources(village_id)
@@ -168,7 +169,7 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
             completion_time=now - timedelta(hours=1),
         )
 
-        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+        async with schema.get_connection() as db:
             await Engine.settle_player(player_discord_id, village_id, db, is_ui_refresh=True)
 
         player = await self.fetchone(
@@ -188,7 +189,7 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         village_id = await self.create_village(food=100, wood=100, stone=100)
         player_discord_id = await self.create_player(village_id)
 
-        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+        async with schema.get_connection() as db:
             started = await Engine.start_action(player_discord_id, village_id, "building", 1, db=db)
             self.assertTrue(started)
 
@@ -241,7 +242,7 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         player_discord_id = await self.create_player(village_id)
         now = datetime.utcnow()
 
-        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+        async with schema.get_connection() as db:
             entries = []
             for index in range(49):
                 end_time = now - timedelta(minutes=50 - index)

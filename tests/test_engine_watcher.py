@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
 from support import DatabaseTestCase
+from database import schema
 from core.engine import Engine
 
 
@@ -57,7 +58,7 @@ class EngineWatcherBehaviorTests(DatabaseTestCase):
             completion_time=now - timedelta(days=7, minutes=1),
         )
 
-        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+        async with schema.get_connection() as db:
             await Engine.settle_player(player_discord_id, village_id, db)
 
         player = await self.fetchone(
@@ -106,7 +107,7 @@ class EngineWatcherBehaviorTests(DatabaseTestCase):
             completion_time=now + timedelta(minutes=50),
         )
 
-        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+        async with schema.get_connection() as db:
             await Engine.settle_player(player_discord_id, village_id, db, is_ui_refresh=True)
 
         player = await self.fetchone(

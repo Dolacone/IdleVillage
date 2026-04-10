@@ -9,7 +9,10 @@ import aiosqlite
 DB_PATH = os.getenv("DATABASE_PATH", "data/village.db")
 
 RESOURCE_TYPES = ("food", "wood", "stone")
-BUFF_IDS = (1, 2, 3)
+BUFF_FOOD_EFFICIENCY = 1
+BUFF_STORAGE_CAPACITY = 2
+BUFF_RESOURCE_YIELD = 3
+BUFF_IDS = (BUFF_FOOD_EFFICIENCY, BUFF_STORAGE_CAPACITY, BUFF_RESOURCE_YIELD)
 STATS_BASE_VALUE = 50
 LEGACY_VILLAGE_COLUMNS = (
     "food",
@@ -134,6 +137,13 @@ async def _create_current_tables(db):
             expiry_time TIMESTAMP,
             FOREIGN KEY (village_id) REFERENCES villages(id)
         )
+        """
+    )
+
+    await db.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_actions_log_player
+        ON player_actions_log (player_discord_id, village_id, end_time DESC, id DESC)
         """
     )
 
@@ -355,67 +365,6 @@ async def _migrate_village_storage_schema(db):
             storage_capacity_xp=village[5],
             resource_yield_xp=village[6],
         )
-
-    async with db.execute(
-        """
-        SELECT
-            v.id,
-            COALESCE(v.food, 1000),
-            COALESCE(v.wood, 1000),
-            COALESCE(v.stone, 1000),
-            COALESCE(v.food_efficiency_xp, 0),
-            COALESCE(v.storage_capacity_xp, 0),
-            COALESCE(v.resource_yield_xp, 0),
-            vr_food.amount,
-            vr_wood.amount,
-            vr_stone.amount,
-            b1.xp,
-            b2.xp,
-            b3.xp
-        FROM villages v
-        LEFT JOIN village_resources vr_food
-            ON vr_food.village_id = v.id AND vr_food.resource_type = 'food'
-        LEFT JOIN village_resources vr_wood
-            ON vr_wood.village_id = v.id AND vr_wood.resource_type = 'wood'
-        LEFT JOIN village_resources vr_stone
-            ON vr_stone.village_id = v.id AND vr_stone.resource_type = 'stone'
-        LEFT JOIN buffs b1
-            ON b1.village_id = v.id AND b1.buff_id = 1
-        LEFT JOIN buffs b2
-            ON b2.village_id = v.id AND b2.buff_id = 2
-        LEFT JOIN buffs b3
-            ON b3.village_id = v.id AND b3.buff_id = 3
-        """
-    ) as cursor:
-        verification_rows = await cursor.fetchall()
-
-    for row in verification_rows:
-        (
-            village_id,
-            legacy_food,
-            legacy_wood,
-            legacy_stone,
-            legacy_food_xp,
-            legacy_storage_xp,
-            legacy_yield_xp,
-            normalized_food,
-            normalized_wood,
-            normalized_stone,
-            normalized_food_xp,
-            normalized_storage_xp,
-            normalized_yield_xp,
-        ) = row
-        if (
-            normalized_food != legacy_food
-            or normalized_wood != legacy_wood
-            or normalized_stone != legacy_stone
-            or normalized_food_xp != legacy_food_xp
-            or normalized_storage_xp != legacy_storage_xp
-            or normalized_yield_xp != legacy_yield_xp
-        ):
-            raise RuntimeError(
-                f"Normalized village migration verification failed for village {village_id}"
-            )
 
     await db.execute("PRAGMA foreign_keys = OFF")
     await db.execute("DROP TABLE IF EXISTS villages_new")

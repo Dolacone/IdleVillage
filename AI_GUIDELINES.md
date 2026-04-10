@@ -10,12 +10,12 @@
 ## Gameplay Logic Standards
 - 1-Hour Lease Model: Resources are pre-deducted at the start. Settlement at the end. (SSOT: `docs/modules/village.md`)
 - Efficiency Formula: `(StatA + StatB) / 2 / 100`. (SSOT: `docs/modules/player_stats.md`)
-- Stats Invariants: Stats are calculated using a 150h sliding window. (SSOT: `docs/modules/player_stats.md`)
+- Stats Invariants: Stats are calculated from the latest 150 action-log entries, using cycle-scaled progress for partial slices. (SSOT: `docs/modules/player_stats.md`)
 
 ## Command & UI Standards
 - Ephemeral First: All Slash Command responses MUST be `ephemeral=True`.
 - UI Persistence: Use `inter.response.edit_message()` to update the interface instead of sending new messages whenever possible.
-- Owner Only: `/idlevillage-initial` must check for `ALLOWED_OWNER_ID`.
+- Admin Gating: Admin-only slash commands must check `ADMIN_IDS` via `is_admin()`. `/idlevillage-initial` must remain admin-gated.
 
 ## Commit & Workflow Standards
 - Commit Format: `[YYYY.MM.DD.NN] type: description` (e.g., `[2026.04.07.00] feat: implement ...`).

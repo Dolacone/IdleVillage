@@ -2,11 +2,10 @@ from datetime import datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from cogs.actions import ActionsCog, _build_embed
 from support import DatabaseTestCase
+from cogs.actions import ActionsCog, _build_embed
 from cogs.events import EventsCog
 from cogs.general import (
-    ALLOWED_OWNER_ID,
     General,
     ManageView,
     NodeSelect,
@@ -16,7 +15,11 @@ from cogs.general import (
     _adjust_village_resource,
     _remove_village_node,
 )
+from database import schema
+from core.config import get_primary_admin_id
 from core.engine import Engine
+
+ADMIN_ID = get_primary_admin_id()
 
 
 class _FakeResponse:
@@ -168,7 +171,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
     async def test_village_binding_owner_can_initialize_once(self):
         cog = General(bot=_FakeBot())
         inter = SimpleNamespace(
-            author=SimpleNamespace(id=ALLOWED_OWNER_ID),
+            author=SimpleNamespace(id=ADMIN_ID),
             guild=SimpleNamespace(id=77),
             response=_FakeResponse(),
         )
@@ -185,7 +188,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         await self.create_village(guild_id=88)
         cog = General(bot=_FakeBot())
         inter = SimpleNamespace(
-            author=SimpleNamespace(id=ALLOWED_OWNER_ID),
+            author=SimpleNamespace(id=ADMIN_ID),
             guild=SimpleNamespace(id=88),
             response=_FakeResponse(),
         )
@@ -215,7 +218,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         bot.register_guild(77)
         cog = General(bot=bot)
         inter = SimpleNamespace(
-            author=SimpleNamespace(id=ALLOWED_OWNER_ID),
+            author=SimpleNamespace(id=ADMIN_ID),
             guild=SimpleNamespace(id=77),
             channel=bot.get_channel(456),
             response=_FakeResponse(),
@@ -250,7 +253,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         bot.register_guild(55)
         Engine.bot = bot
 
-        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+        async with schema.get_connection() as db:
             await db.execute(
                 """
                 UPDATE villages
@@ -262,7 +265,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
             await db.commit()
 
         with patch("core.engine.random.random", return_value=0.0), patch("core.engine.random.choice", return_value="wood"), patch("core.engine.random.gauss", return_value=130), patch("core.engine.random.randint", return_value=2100):
-            async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+            async with schema.get_connection() as db:
                 await Engine.settle_player(player_discord_id, village_id, db, interrupted=True)
 
         channel = bot.get_channel(456)
@@ -280,7 +283,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
             completion_time=now + timedelta(minutes=50),
         )
 
-        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+        async with schema.get_connection() as db:
             embed = await _build_embed(
                 SimpleNamespace(guild=SimpleNamespace(name="Village 66")),
                 db,
@@ -311,7 +314,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
             completion_time=completion_time,
         )
 
-        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+        async with schema.get_connection() as db:
             embed = await _build_embed(
                 SimpleNamespace(guild=SimpleNamespace(name="Village 67")),
                 db,
@@ -334,7 +337,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
             completion_time=None,
         )
 
-        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+        async with schema.get_connection() as db:
             embed = await _build_embed(
                 SimpleNamespace(guild=SimpleNamespace(name="Village 68")),
                 db,
@@ -369,7 +372,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         bot.register_guild(88)
         Engine.bot = bot
 
-        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+        async with schema.get_connection() as db:
             announcement = await Engine.render_announcement(village_id, db=db, bot=bot, rendered_at=fixed_render_time)
 
         self.assertTrue(announcement.startswith(f"(Last Update: <t:{Engine._to_discord_unix(fixed_render_time)}:R>)"))
@@ -392,7 +395,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         bot.register_guild(90)
         cog = General(bot=bot)
         inter = SimpleNamespace(
-            author=SimpleNamespace(id=ALLOWED_OWNER_ID),
+            author=SimpleNamespace(id=ADMIN_ID),
             guild=SimpleNamespace(id=90),
             response=_FakeResponse(),
             bot=bot,
@@ -424,7 +427,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         bot.register_guild(94)
         Engine.bot = bot
 
-        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+        async with schema.get_connection() as db:
             await db.execute(
                 """
                 UPDATE villages
@@ -438,7 +441,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         view = await ManageView(village_id, bot, "REQ-MODAL").refresh_state()
         set_custom_button = next(item for item in view.children if isinstance(item, SetCustomButton))
         button_inter = SimpleNamespace(
-            author=SimpleNamespace(id=ALLOWED_OWNER_ID),
+            author=SimpleNamespace(id=ADMIN_ID),
             response=_FakeResponse(),
         )
 
@@ -448,7 +451,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         self.assertIsInstance(modal, ResourceAmountModal)
 
         modal_inter = SimpleNamespace(
-            author=SimpleNamespace(id=ALLOWED_OWNER_ID),
+            author=SimpleNamespace(id=ADMIN_ID),
             text_values={"amount": "4321"},
             response=_FakeResponse(),
         )
@@ -469,7 +472,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         bot.register_guild(95)
         Engine.bot = bot
 
-        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+        async with schema.get_connection() as db:
             await db.execute(
                 """
                 UPDATE villages
@@ -489,7 +492,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         self.assertEqual(node_select.options[0].value, str(node_id))
 
         remove_inter = SimpleNamespace(
-            author=SimpleNamespace(id=ALLOWED_OWNER_ID),
+            author=SimpleNamespace(id=ADMIN_ID),
             response=_FakeResponse(),
         )
 
@@ -524,7 +527,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         bot.register_guild(92)
         Engine.bot = bot
 
-        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+        async with schema.get_connection() as db:
             await db.execute(
                 """
                 UPDATE villages
@@ -559,7 +562,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         bot.register_guild(93)
         Engine.bot = bot
 
-        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+        async with schema.get_connection() as db:
             await db.execute(
                 """
                 UPDATE villages

@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
 from support import DatabaseTestCase
+from database import schema
 from core.engine import Engine
 
 
@@ -16,7 +17,7 @@ class PlayerStatsModuleBehaviorTests(DatabaseTestCase):
             start_time = end_time - timedelta(hours=1)
             entries.append((player_discord_id, village_id, "building", start_time.isoformat(), end_time.isoformat()))
 
-        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+        async with schema.get_connection() as db:
             await db.executemany(
                 """
                 INSERT INTO player_actions_log (player_discord_id, village_id, action_type, start_time, end_time)
@@ -34,7 +35,7 @@ class PlayerStatsModuleBehaviorTests(DatabaseTestCase):
         player_discord_id = await self.create_player(village_id)
         now = datetime.utcnow()
 
-        async with __import__("database.schema", fromlist=["schema"]).get_connection() as db:
+        async with schema.get_connection() as db:
             await db.execute(
                 """
                 INSERT INTO player_actions_log (player_discord_id, village_id, action_type, start_time, end_time)

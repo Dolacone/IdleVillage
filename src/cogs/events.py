@@ -1,6 +1,8 @@
+from datetime import datetime, timezone
+
 import disnake
 from disnake.ext import commands
-import datetime
+
 from database.schema import get_connection
 
 class EventsCog(commands.Cog):
@@ -17,7 +19,7 @@ class EventsCog(commands.Cog):
         player_discord_id = int(message.author.id)
 
         async with get_connection() as db:
-            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
             await db.execute(
                 """
                 UPDATE players
