@@ -37,7 +37,7 @@ class Engine:
     BASE_BUILD_COST = 50
     BASE_FOOD_COST = 20
     STATS_BASE_VALUE = 50
-    EXPLORING_BASE_CHANCE = 1.0
+    EXPLORING_BASE_CHANCE = 0.2
     MONSTER_DISCOVERY_RATIO = 0.1
     MAX_RESOURCE_NODE_STOCK = 8000
     MAX_RESOURCE_QUALITY = 175
@@ -1662,11 +1662,11 @@ class Engine:
             storage_capacity = Engine._storage_capacity(buffs[BUFF_STORAGE_CAPACITY])
             last_updated = rendered_at or Engine._parse_timestamp(last_updated_str) or datetime.now(timezone.utc).replace(tzinfo=None)
             active_monster = await Engine._fetch_active_monster(db, village_id, now=last_updated)
-            threat_line = "Village Threat: None"
+            threat_line = "Village Threat:\nNone"
             if active_monster:
                 threat_line = (
-                    f"Village Threat: ACTIVE - {active_monster['name']} "
-                    f"(HP: {active_monster['hp']}/{active_monster['max_hp']}, Quality: {active_monster['quality']}%)"
+                    "Village Threat:\n"
+                    f"⚠️ {active_monster['name']} (HP: {active_monster['hp']:,})"
                 )
             rich_text_lines = [
                 f"(Last Update: <t:{Engine._to_discord_unix(last_updated)}:R>)",
@@ -1696,7 +1696,15 @@ class Engine:
 
             villager_lines = []
             for status, target_id, count in players:
-                action_name = await Engine._get_target_description(db, status, target_id)
+                if status == "attack" and target_id:
+                    async with db.execute("SELECT name FROM monsters WHERE id = ?", (target_id,)) as cursor:
+                        monster = await cursor.fetchone()
+                    if monster:
+                        action_name = f"Attacking {monster[0]}"
+                    else:
+                        action_name = "Attacking Monster"
+                else:
+                    action_name = await Engine._get_target_description(db, status, target_id)
                 villager_lines.append((action_name, int(count)))
 
             villager_lines.sort(key=lambda item: (-item[1], item[0]))

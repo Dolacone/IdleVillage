@@ -99,10 +99,10 @@ async def _load_submenu_options(db, village_id: int, action: str):
 
     if action == "building":
         return [
-            disnake.SelectOption(label="廚房", description="Food cost reduction", value="1"),
-            disnake.SelectOption(label="倉庫", description="Storage capacity", value="2"),
-            disnake.SelectOption(label="加工", description="Resource yield", value="3"),
-            disnake.SelectOption(label="狩獵", description="Attack damage bonus", value="4"),
+            disnake.SelectOption(label="廚房", description="Food cost reduction (materials: food & wood)", value="1"),
+            disnake.SelectOption(label="倉庫", description="Storage capacity (materials: wood & stone)", value="2"),
+            disnake.SelectOption(label="加工", description="Resource yield (materials: wood & stone)", value="3"),
+            disnake.SelectOption(label="狩獵", description="Attack damage bonus (materials: stone & gold)", value="4"),
         ]
 
     return []
