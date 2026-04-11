@@ -144,13 +144,8 @@ async def _build_embed(inter, db, village_id: int, player_discord_id: int):
     if not village or not player:
         return None
 
-    resources = await Engine._fetch_village_resources(db, village_id)
-    buffs = await Engine._fetch_village_buffs(db, village_id)
     status, target_id, last_update_str, completion_time_str = player
     p_str, p_agi, p_per, p_kno, p_end = stats if stats else (50, 50, 50, 50, 50)
-
-    storage_capacity = Engine._storage_capacity(buffs[2])
-    building_rows = Engine._building_progress_lines(buffs)
 
     last_update = Engine._parse_timestamp(last_update_str)
     completion_time = Engine._parse_timestamp(completion_time_str)
@@ -171,19 +166,17 @@ async def _build_embed(inter, db, village_id: int, player_discord_id: int):
 
     guild_name = inter.guild.name if inter.guild else f"Village {village_id}"
     embed = disnake.Embed(title=f"Idle Village - {guild_name}", color=disnake.Color.green())
-    embed.add_field(
-        name="Village Resources",
-        value=(
-            f"🍎 {resources['food']:,} | 🪵 {resources['wood']:,} | "
-            f"🪨 {resources['stone']:,} | 💰 {resources['gold']:,} (Cap: {storage_capacity:,})"
-        ),
-        inline=False,
+    
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    unified_description = await Engine.render_announcement(
+        village_id, 
+        db=db, 
+        bot=getattr(inter, "bot", None), 
+        rendered_at=now
     )
-    embed.add_field(
-        name="Village Buildings",
-        value="```text\n" + "\n".join(building_rows) + "\n```",
-        inline=False,
-    )
+    if unified_description:
+        embed.description = unified_description
+
     embed.add_field(
         name="Player Status",
         value=(

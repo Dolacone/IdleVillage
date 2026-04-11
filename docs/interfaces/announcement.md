@@ -27,7 +27,6 @@ Village Buildings
 加工: Lv.{lv} [XP: {curr_level_xp} / {next_level_required}]
 狩獵: Lv.{lv} [XP: {curr_level_xp} / {next_level_required}]
 ```
-
 Active Villagers
 ```text
 {Action_Name}: {Count}

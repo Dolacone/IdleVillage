@@ -291,13 +291,12 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
                 player_discord_id,
             )
 
-        village_buildings_field = next(field for field in embed.fields if field.name == "Village Buildings")
         player_status_field = next(field for field in embed.fields if field.name == "Player Status")
 
-        self.assertIn("廚房", village_buildings_field.value)
-        self.assertIn("倉庫", village_buildings_field.value)
-        self.assertIn("加工", village_buildings_field.value)
-        self.assertIn("廚房: Lv.1 [XP: 500 / 2,000]", village_buildings_field.value)
+        self.assertIn("廚房", embed.description)
+        self.assertIn("倉庫", embed.description)
+        self.assertIn("加工", embed.description)
+        self.assertIn("廚房: Lv.1 [XP: 500 / 2,000]", embed.description)
         self.assertIn("Status: Building 廚房 (Last activity:", player_status_field.value)
         self.assertIn("Next check:", player_status_field.value)
 

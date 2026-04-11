@@ -1714,9 +1714,9 @@ class Engine:
                 "\n".join(rich_text_lines)
                 + "\n```text\n"
                 + "\n".join(Engine._building_progress_lines(buffs))
-                + "\n```"
-                + "\n\nActive Villagers"
-                + "\n```text\n"
+                + "\n```\n"
+                + "Active Villagers\n"
+                + "```text\n"
                 + "\n".join(villager_text)
                 + "\n```"
             )
