@@ -3,24 +3,25 @@
 定義素質計算規則、加成係數以及 150 週期滑動窗口機制.
 
 ### 1. 150 週期滑動窗口 (150 Cycles Sliding Window)
-- 計算: `基礎素質值 (STATS_BASE_VALUE) + 過去 150 次行動紀錄所獲得的點數`.
-- 基礎素質值 (STATS_BASE_VALUE): 50. (v2026.04.09.01)
-- 紀錄方式: `player_actions_log` 在每一次行動週期 (Cycle) 結束時寫入一筆紀錄.
+- 計算: 基礎素質值 (STATS_BASE_VALUE) + 過去 150 次行動紀錄所獲得的點數.
+- 基礎素質值 (STATS_BASE_VALUE): 50.
+- 紀錄方式: player_actions_log 在每一次行動週期 (Cycle) 結束時寫入一筆紀錄.
 - 行動分配權重 (每行動 1 週期獲得之點數):
-  - `idle`: 觀察 (PER) +1, 知識 (KNO) +1.
-  - `gathering_food`: 觀察 (PER) +1, 知識 (KNO) +1.
-  - `gathering_wood`: 力量 (STR) +1, 耐力 (END) +1.
-  - `gathering_stone`: 力量 (STR) +1, 耐力 (END) +1.
-  - `exploring`: 敏捷 (AGI) +1, 觀察 (PER) +1.
-  - `building`: 知識 (KNO) +1, 耐力 (END) +1.
+  - idle: 觀察 (PER) +1, 知識 (KNO) +1.
+  - gathering_food: 觀察 (PER) +1, 知識 (KNO) +1.
+  - gathering_wood: 力量 (STR) +1, 耐力 (END) +1.
+  - gathering_stone: 力量 (STR) +1, 耐力 (END) +1.
+  - exploring: 敏捷 (AGI) +1, 觀察 (PER) +1.
+  - building: 知識 (KNO) +1, 耐力 (END) +1.
+  - attack (v2026.04.10.00): 力量 (STR) +1, 敏捷 (AGI) +1.
 
 ### 2. 素質加成公式 (Modifiers)
-- 通用效率係數 (Efficiency Invariant): `(StatA + StatB) / 2 / 100`.
-- 力量 (STR): 影響 `Wood/Stone` 採集效率.
-- 敏捷 (AGI): 影響 `Exploring` 判定效率.
-- 觀察 (PER): 影響 `Food` 採集、`Exploring` 與 `Idle` 效率.
-- 知識 (KNO): 影響 `Building` 建設與 `Idle` 效率.
-- 耐力 (END): 影響 `Wood/Stone` 採集與 `Building` 建設效率.
+- 通用效率係數 (Efficiency Invariant): (StatA + StatB) / 2 / 100.
+- 力量 (STR): 影響 Wood/Stone 採集效率與對怪物傷害 (Attack).
+- 敏捷 (AGI): 影響 Exploring 判定效率與對怪物傷害 (Attack).
+- 觀察 (PER): 影響 Food 採集、Exploring 與 Idle 效率.
+- 知識 (KNO): 影響 Building 建設與 Idle 效率.
+- 耐力 (END): 影響 Wood/Stone 採集與 Building 建設效率.
 
 ### 3. 屬性緩存與更新 (Table: player_stats)
 為了優化計算成本, 系統會維護此緩存表, 僅在玩家行動結算或提交時更新.
@@ -42,7 +43,7 @@
 | id | INTEGER (PK) | |
 | player_discord_id | INTEGER (FK) | |
 | village_id | INTEGER (FK) | |
-| action_type | TEXT | idle, gathering_food/wood/stone, exploring, building |
+| action_type | TEXT | idle, gathering_food/wood/stone, exploring, building, attack |
 | start_time | TIMESTAMP | |
 | end_time | TIMESTAMP | |
 
@@ -55,3 +56,4 @@
 - 2026.04.07.00: Aligned stats with 1-hour cycle. - See [2026.04.07.00.md](../changelogs/2026.04.07.00.md)
 - 2026.04.08.00: Transitioned from 150h window to 150 cycles window. - See [2026.04.08.00.md](../changelogs/2026.04.08.00.md)
 - 2026.04.09.01: Introduced STATS_BASE_VALUE constant and standardized action log types. - See [2026.04.09.01.md](../changelogs/2026.04.09.01.md)
+- 2026.04.10.00: Added attack action type and weights (STR + AGI). - See [2026.04.10.00.md](../changelogs/2026.04.10.00.md)

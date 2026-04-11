@@ -15,28 +15,22 @@
 #### 2.1 Embed 結構
 - **Title:** `Idle Village - [村莊名稱]`
 - **Color:** `Green`
+- **Description:** 採用與公開公告相同的 [統一模板](../interfaces/announcement.md#2-訊息格式模板-template), 包含資源、建築與活躍村民統計.
 
-- **🏘️ Village Resources**
-  - 格式: `🍎 {food} | 🪵 {wood} | 🪨 {stone} (Cap: {max})`
-  - 備註: 數值應包含千分位撇號 (e.g., 1,500).
-
-- **🏗️ Village Buildings** (使用 Code Block 排版)
-  - 廚房: `Lv.{lv} [XP: {curr_level_xp} / {next_level_required}]`
-  - 倉庫: `Lv.{lv} [XP: {curr_level_xp} / {next_level_required}]`
-  - 加工: `Lv.{lv} [XP: {curr_level_xp} / {next_level_required}]`
-  - 備註: 格式需與 Village Announcement 對齊, 使用當前等級內的 XP Progress (已扣除前面等級所需總和), XP 數值需使用千分位格式 (例如 `1,000`).
-
-- **👤 Player Status** (位於 Embed 最下方)
+- **👤 Player Status** (位於 Embed 最下方, 僅在個人介面顯示)
   - **Stats:** `💪 STR {val} | 🏃 AGI {val} | 👁️ PER {val} | 🧠 KNO {val} | 🔋 END {val}`
   - **Status:** 顯示當前行動、最後互動時間與下次結算時間 (當地時區時標).
     - 範例: `Gathering Stone (Last activity: <t:{ts}:t>, Next check: <t:{ts}:R>)`
+    - 戰鬥範例: `Attacking Boar (HP: 450/1000) (Next check: <t:{ts}:R>)`
     - 閒置範例: `Idle (Last activity: <t:{ts}:t>, Next check: <t:{ts}:R>)`
 
 #### 2.2 互動組件 (Components)
-- **Dropdown: Action Category** (Gather, Build, Explore, Return to Village)
-- **Dropdown: Sub-menu** (動態顯示對應節點或建築)
-  - Gather 節點格式: `{Type} Node`
-  - Gather 描述格式: `Stock {amount} | Quality {quality}%`
+- **Dropdown: Action Category** (Interact, Build, Explore, Return to Village)
+- **Dropdown: Sub-menu** (動態顯示對應目標或建築)
+  - Interact 目標格式: `{Name}` (可能是資源節點或怪物)
+  - Interact 描述格式: 
+    - 資源: `Stock {amount} | Quality {quality}%`
+    - 怪物: `HP {curr}/{max} | Quality {quality}%`
   - 玩家選取目標後, 第二層下拉選單需保留已選中的 target, 再顯示 Submit 按鈕.
 - **Button: Submit** (Green, Start Action)
 - **Button: Refresh** (Gray, 🔄 Refresh Status, 設有 5 秒冷卻)
@@ -49,7 +43,7 @@
   - 選項: `Manage Resources`, `Manage Nodes`.
 - **Step 2: 下拉選單 (Resource Type)**
   - 僅在選擇 `Manage Resources` 後顯示.
-  - 選項: `Food`, `Wood`, `Stone`.
+  - 選項: `Food`, `Wood`, `Stone`, `Gold`.
 - **Step 3: 狀態顯示與按鈕**
   - Embed 顯示當前選定資源的數量.
   - 快速調整按鈕: `+100`, `+1,000`, `-100`, `-1,000`.
@@ -59,10 +53,11 @@
 - **Step 1: 下拉選單 (Action Selector)**
   - 選項: `Manage Nodes`.
 - **Step 2: 下拉選單 (Node List)**
-  - 列出村莊內所有活躍節點.
-  - 格式: `#{id} {Type} (Stock: {stock}, Q: {quality}%)`.
+  - 列出村莊內所有活躍節點與怪物.
+  - 節點格式: `#{id} {Type} (Stock: {stock}, Q: {quality}%)`.
+  - 怪物格式: `#{id} [Monster] {Name} (HP: {hp}, Q: {quality}%)`.
 - **Step 3: 移除按鈕**
-  - **Remove Node 按鈕**: 紅色樣式, 點擊後直接從資料庫移除該節點並重新渲染介面.
+  - **Remove Target 按鈕**: 紅色樣式, 點擊後直接從資料庫移除該目標並重新渲染介面.
 
 ### 4. 間隔控制規範 (Interval Control)
 - **Action Cycle Duration**: 由環境變數 `ACTION_CYCLE_MINUTES` 定義.
@@ -75,3 +70,4 @@
 - 2026.04.08.02: Added /idlevillage-admin command and fixed next check display for idle players. - See [2026.04.08.02.md](../changelogs/2026.04.08.02.md)
 - 2026.04.08.03: Replaced /idlevillage-admin with interactive /idlevillage-manage UI. - See [2026.04.08.03.md](../changelogs/2026.04.08.03.md)
 - 2026.04.09.01: Aligned /idlevillage resource/building wording with normalized village resources and the shared building progress renderer. - See [2026.04.09.01.md](../changelogs/2026.04.09.01.md)
+- 2026.04.10.00: Unified UI template with public announcement. Added Gold resource, Hunting buff, and combat status. Updated admin UI for Gold/Monsters. - See [2026.04.10.00.md](../changelogs/2026.04.10.00.md)

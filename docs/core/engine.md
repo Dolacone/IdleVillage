@@ -38,17 +38,28 @@
 4. 紀錄行動片段:
    - 若 `delta > 0` 且玩家不是 `missing`, 依 `ACTION_CYCLE_MINUTES` 切割片段並寫入 `player_actions_log`.
    - `gathering` 會依節點類型寫為 `gathering_food`, `gathering_wood`, `gathering_stone`.
-5. 資源 / XP 結算 (v2026.04.09.01):
+   - `attack` 會記錄為 `attack`.
+5. 資源 / XP 結算 (v2026.04.10.00):
    - `idle`: 依 PER + KNO 產出村莊糧食, 品質固定 50%.
    - `gathering`: 依節點類型與玩家素質結算產出, 並扣除節點儲量. 產出存入 `village_resources`, 並在入庫前套用 `Resource Yield` 增益.
+   - `attack`:
+     - 依 `STR + AGI` 素質結算傷害.
+     - 傷害公式: `50 * 效率 * (1.0 + 狩獵等級 * 0.05) * ((200 - 品質) / 100)`.
+     - 扣除怪物 HP. 若 HP 歸零, 執行擊敗獎勵 (資源與黃金) 並移除怪物.
    - `building`: 
      - **升級與降級偵測**: 紀錄結算前等級 $L_{pre}$, 結算後等級 $L_{post}$.
      - 若 $L_{post} > L_{pre}$, 觸發慶祝公告.
      - 若 $L_{post} < L_{pre}$ (由損耗引起), 觸發降級通知.
-   - `exploring`: 以 `(AGI + PER) / 2 / 100` 作為效率係數進行成功判定; 成功時建立對應 singleton 節點或補充現有節點的庫存 / 品質.
-   - 村莊資源入庫時, 受 `Storage Capacity` 與 `Resource Yield` 建築效果影響.
+   - `exploring`:
+     - 以 `(AGI + PER) / 2 / 100` 作為效率係數進行判定.
+     - 判定分配: 90% 發現資源節點, 10% 遭遇怪物 (若村莊已有怪物則轉回資源).
+     - 成功時建立對應 singleton 節點或怪物, 或補充現有節點的庫存 / 品質.
+   - 村莊資源入庫時 (v2026.04.10.00):
+     - 受 `Storage Capacity` 與 `Resource Yield` 建築效果影響.
+     - 溢出判定採用防降級丟失公式: `New_Stock = min(max(Capacity, Current), Current + Gain)`.
 6. 村莊損耗結算 (Village Settlement):
    - 損耗公式採用 **動態指數模型**: $D = f(N_{active}, XP_{current})$. 詳見 `docs/modules/buildings.md`.
+   - **倍增威脅 (v2026.04.10.00)**: 若村莊內存在活躍怪物, 損耗值翻倍 (`x2`).
 7. 資料更新:
    - 檢查玩家是否符合 `missing` 條件 (7 天未發言且 7 天未執行 `/idlevillage`).
    - 若玩家主動中斷, 狀態改為 `idle`.
@@ -56,11 +67,13 @@
    - 若循環尚未結束, 保留原本的 `completion_time`.
    - 更新 `status`, `target_id`, `last_update_time`, `completion_time`.
 
-### 3. Action Cycle 啟動 (Lease Start) (v2026.04.09.01)
+### 3. Action Cycle 啟動 (Lease Start) (v2026.04.10.00)
 
 - 任何非 `idle` 行動在啟動時先執行資源預扣.
-- `gathering` / `exploring`: 扣除 `max(10, 20 - KitchenLevel)` 糧食.
-- `building`: 扣除 `max(10, 20 - KitchenLevel)` 糧食, `50` 木材, `50` 石材.
+- `gathering` / `exploring` / `attack`: 扣除 `max(10, 20 - KitchenLevel)` 糧食.
+- `building`: 
+  - 扣除 `max(10, 20 - KitchenLevel)` 糧食.
+  - 扣除 **50 + 50** 雙資源 (依 Building ID 定義, 詳見 Buildings 模組).
 - 若目標無效、節點儲量不足或村莊資源不足, 啟動失敗且不變更玩家狀態.
 - 成功啟動後:
   - 更新 `status`, `target_id`, `last_update_time`.
@@ -74,6 +87,7 @@
   - 資源耗盡 (Stock 為 0).
   - 建築升級 ($L_{post} > L_{pre}$).
   - 建築降級 ($L_{post} < L_{pre}$).
+  - 怪物出現與逃跑 (v2026.04.10.00).
   - 玩家閒置 (由 Active 轉為 `idle`).
 - 資源發現 (`exploring` 成功) 不再發送獨立公告訊息, 僅更新資料並在下次 dashboard 同步時反映.
 - 若公告訊息 ID 遺失, 下次更新時需要清除舊的 `announcement_message_id` 並重建.
@@ -89,3 +103,4 @@
 - 2026.04.08.00: Updated to configurable Action Cycles and 150-entry stat recalculation. See [2026.04.08.00.md](../changelogs/2026.04.08.00.md)
 - 2026.04.08.03: Implemented dynamic exponential building decay and building upgrade notifications. See [2026.04.08.03.md](../changelogs/2026.04.08.03.md)
 - 2026.04.09.01: Normalized resource/buff settlement and rebalanced Action Cycle costs. Added level-down notification logic. See [2026.04.09.01.md](../changelogs/2026.04.09.01.md)
+- 2026.04.10.00: Added Monster combat logic, Gold resource, and double decay penalty. Standardized building cost refactor (50+50). See [2026.04.10.00.md](../changelogs/2026.04.10.00.md)

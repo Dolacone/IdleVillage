@@ -10,17 +10,19 @@
 - **活躍定義:** 僅列出目前非 `missing` 狀態的玩家.
 
 ### 2. 訊息格式模板 (Template)
+此模板同時用於 `/idlevillage` 的 Embed Description 以及公開公告訊息, 以確保視覺一致性.
 
 (Last Update: <t:{unix_timestamp}:R>)
 
 Village Resources (Cap: {max})
-🍎 {food} | 🪵 {wood} | 🪨 {stone}
+🍎 {food} | 🪵 {wood} | 🪨 {stone} | 💰 {gold}
 
 Village Buildings
 ```text
 廚房: Lv.{lv} [XP: {curr_level_xp} / {next_level_required}]
 倉庫: Lv.{lv} [XP: {curr_level_xp} / {next_level_required}]
 加工: Lv.{lv} [XP: {curr_level_xp} / {next_level_required}]
+狩獵: Lv.{lv} [XP: {curr_level_xp} / {next_level_required}]
 ```
 
 Active Villagers
@@ -37,7 +39,7 @@ Active Villagers
 - **Resources**:
   - 不使用 Code Block.
   - 使用純文字標題與表情符號, 不使用 Markdown emphasis.
-  - XP 以外的數值需包含千分位撇號.
+  - 所有資源數值需包含千分位撇號.
 - **Village Buildings**:
   - 建築內容必須包裹在單一 Code Block (```text) 中.
   - 標題 Village Buildings 保持純文字, 不使用 Markdown emphasis.
@@ -51,6 +53,7 @@ Active Villagers
     - idle -> Idle
     - exploring -> Exploring
     - gathering -> Gathering {Resource_Type}
+    - attack -> Attacking {Monster_Name}
     - building -> Building {Building_Name}
   - 排序規則:
     1. 按人數 (Count) 降序排列.
@@ -59,11 +62,10 @@ Active Villagers
 ### 4. 通知機制 (Notifications)
 除公告看板外, 系統會在以下事件發生時於公告頻道發送即時訊息:
 - 資源耗盡通知: 當資源節點存量歸零 (Out of Stock) 時, 發送通知提醒村莊已無該項產出.
+- 怪物出現與逃跑: 當探索觸發怪物或怪物 48h 逾期逃跑時, 發送公告.
 - 建築升級通知: 當村莊建築等級提升時, 發送慶祝訊息.
 - 建築降級通知: 當建築因 XP 損耗而降級時, 發送提醒訊息.
 - 閒置標註通知: 當玩家完成目前行動且未排定下一個行動而進入 Idle 狀態時, 發送訊息標註 (@tag) 該玩家.
-- 資源發現靜默規則: `exploring` 成功時只更新資料與公告看板內容, 不另外發送 discovery 訊息.
-
 
 ### 5. 錯誤處理
 - 若公告訊息 ID 遺失或被刪除, 系統應在下次更新嘗試時檢測到 404 錯誤, 並清除資料庫紀錄.
@@ -74,3 +76,4 @@ Active Villagers
 - 2026.04.08.03: Aligned Resource and Building sections with /idlevillage style. Clarified code block usage for villagers list only. - See [2026.04.08.03.md](../changelogs/2026.04.08.03.md)
 - 2026.04.09.00: Moved Last Update to header, simplified building XP display, and aggregated active villagers count. - See [2026.04.09.00.md](../changelogs/2026.04.09.00.md)
 - 2026.04.09.01: Added building level-down notifications and clarified that exploration discoveries stay silent outside the dashboard refresh. - See [2026.04.09.01.md](../changelogs/2026.04.09.01.md)
+- 2026.04.10.00: Unified output template for /idlevillage and public announcement. Added Gold resource, Hunting buff, and Monster combat status. - See [2026.04.10.00.md](../changelogs/2026.04.10.00.md)
