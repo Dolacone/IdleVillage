@@ -10,11 +10,12 @@
 - **活躍定義:** 僅列出目前非 `missing` 狀態的玩家.
 
 ### 2. 訊息格式模板 (Template)
-此模板同時用於 `/idlevillage` 的 Embed Description 以及公開公告訊息, 以確保視覺一致性.
+此模板同時用於 /idlevillage 的 Embed Description 以及公開公告訊息, 以確保視覺一致性.
 
 (Last Update: <t:{unix_timestamp}:R>)
 
-Village Threat: {None | ACTIVE - {Monster_Name} (HP: {hp}/{max_hp}, Quality: {quality}%)}
+Village Threat:
+{None | ⚠️ {Monster_Name} (HP: {hp})}
 
 Village Resources (Cap: {max})
 🍎 {food} | 🪵 {wood} | 🪨 {stone} | 💰 {gold}
@@ -35,23 +36,26 @@ Active Villagers
 ```
 
 ### 3. 區塊樣式規範
-- **Header**:
+- Header:
   - (Last Update: <t:{unix_timestamp}:R>) 位於訊息最上方.
   - 使用 Discord 的動態時間格式 (Relative Time), 自動適應使用者時區.
-- **Resources**:
+- Village Threat (v2026.04.11.00):
+  - 格式變更: 若有活躍怪物, 將名稱與 HP 移至新行, 並以警告表情符號 (⚠️) 開頭.
+  - 數值簡化: 僅顯示當前 HP, 不顯示最大 HP 與品質 (Quality).
+- Resources:
   - 不使用 Code Block.
   - 使用純文字標題與表情符號, 不使用 Markdown emphasis.
   - 所有資源數值需包含千分位撇號.
-- **Village Buildings**:
+- Village Buildings:
   - 建築內容必須包裹在單一 Code Block (```text) 中.
   - 標題 Village Buildings 保持純文字, 不使用 Markdown emphasis.
   - XP 數值需包含千分位撇號.
   - XP Display: 顯示當前等級累積的經驗值 (已扣除前一等級所需總和) 與升至下一級所需的經驗值差距.
-- **Active Villagers**:
+- Active Villagers:
   - 必須包裹在單一 Code Block (```text) 中.
   - 標題 Active Villagers 保持純文字, 不使用 Markdown emphasis.
   - 彙整邏輯: 不再列出個別玩家名稱, 改為按動作類型分組並顯示參與人數.
-  - 動作名稱映射:
+  - 動作名稱映射 (v2026.04.11.00 簡化):
     - idle -> Idle
     - exploring -> Exploring
     - gathering -> Gathering {Resource_Type}
@@ -60,6 +64,7 @@ Active Villagers
   - 排序規則:
     1. 按人數 (Count) 降序排列.
     2. 若人數相同, 按動作名稱 (Action Name) 升序排列 (A-Z).
+
 
 ### 4. 通知機制 (Notifications)
 除公告看板外, 系統會在以下事件發生時於公告頻道發送即時訊息:

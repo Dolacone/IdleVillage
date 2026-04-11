@@ -26,12 +26,14 @@
 
 #### 2.2 互動組件 (Components)
 - **Dropdown: Action Category** (Interact, Build, Explore, Return to Village)
-- **Dropdown: Sub-menu** (動態顯示對應目標或建築)
-  - Interact 目標格式: `{Name}` (可能是資源節點或怪物)
+- Dropdown: Sub-menu (動態顯示對應目標或建築)
+  - Interact 目標格式: {Name} (可能是資源節點或怪物)
   - Interact 描述格式: 
-    - 資源: `Stock {amount} | Quality {quality}%`
-    - 怪物: `HP {curr}/{max} | Quality {quality}%`
+    - 資源: Stock {amount} | Quality {quality}%
+    - 怪物: HP {curr}/{max} | Quality {quality}%
+  - Build 描述格式 (v2026.04.11.00): {Description} (materials: {TypeA} & {TypeB})
   - 玩家選取目標後, 第二層下拉選單需保留已選中的 target, 再顯示 Submit 按鈕.
+
 - **Button: Submit** (Green, Start Action)
 - **Button: Refresh** (Gray, 🔄 Refresh Status, 設有 5 秒冷卻)
 
