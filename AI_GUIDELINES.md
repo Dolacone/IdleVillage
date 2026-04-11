@@ -8,9 +8,10 @@
 5. Specialized Roles: Activate the relevant skill from `.agents/skills/` based on the lifecycle phase (Planning, Implementation, QA).
 
 ## Gameplay Logic Standards
-- 1-Hour Lease Model: Resources are pre-deducted at the start. Settlement at the end. (SSOT: `docs/modules/village.md`)
+- SSOT First: Resolve mechanic names, formulas, and lifecycle rules from the latest `docs/` content instead of reusing older skill or code wording.
+- Settlement & Action Lifecycle: Use `docs/core/engine.md` and `docs/modules/village.md` as the SSOT for trigger levels, settlement steps, Action Cycle start rules, and pre-deduction behavior.
 - Efficiency Formula: `(StatA + StatB) / 2 / 100`. (SSOT: `docs/modules/player_stats.md`)
-- Stats Invariants: Stats are calculated from the latest 150 action-log entries, using cycle-scaled progress for partial slices. (SSOT: `docs/modules/player_stats.md`)
+- Stat Window Rules: Use `docs/modules/player_stats.md` and `docs/terminology.md` for the current stat-window name, size, and partial-slice recalculation method.
 
 ## Command & UI Standards
 - Ephemeral First: All Slash Command responses MUST be `ephemeral=True`.
