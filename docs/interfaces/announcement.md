@@ -14,6 +14,8 @@
 
 (Last Update: <t:{unix_timestamp}:R>)
 
+Village Threat: {None | ACTIVE - {Monster_Name} (HP: {hp}/{max_hp}, Quality: {quality}%)}
+
 Village Resources (Cap: {max})
 🍎 {food} | 🪵 {wood} | 🪨 {stone} | 💰 {gold}
 

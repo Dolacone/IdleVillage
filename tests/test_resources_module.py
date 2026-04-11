@@ -209,7 +209,7 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
             completion_time=now,
         )
 
-        with patch("core.engine.random.random", return_value=0.0), patch("core.engine.random.choice", return_value="stone"), patch("core.engine.random.gauss", return_value=140), patch("core.engine.random.randint", return_value=28):
+        with patch("core.engine.random.random", side_effect=[0.0, 1.0]), patch("core.engine.random.choice", return_value="stone"), patch("core.engine.random.gauss", return_value=140), patch("core.engine.random.randint", return_value=28):
             async with schema.get_connection() as db:
                 await Engine.settle_player(player_discord_id, village_id, db, interrupted=True)
 
@@ -230,7 +230,7 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
             completion_time=now,
         )
 
-        with patch("core.engine.random.random", return_value=0.0), patch("core.engine.random.choice", return_value="wood"), patch("core.engine.random.gauss", return_value=150), patch("core.engine.random.randint", return_value=20):
+        with patch("core.engine.random.random", side_effect=[0.0, 1.0]), patch("core.engine.random.choice", return_value="wood"), patch("core.engine.random.gauss", return_value=150), patch("core.engine.random.randint", return_value=20):
             async with schema.get_connection() as db:
                 await Engine.settle_player(player_discord_id, village_id, db, interrupted=True)
 
@@ -251,7 +251,7 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
             completion_time=now,
         )
 
-        with patch("core.engine.random.random", return_value=0.0), patch("core.engine.random.choice", return_value="wood"), patch("core.engine.random.gauss", return_value=400), patch("core.engine.random.randint", return_value=20):
+        with patch("core.engine.random.random", side_effect=[0.0, 1.0]), patch("core.engine.random.choice", return_value="wood"), patch("core.engine.random.gauss", return_value=400), patch("core.engine.random.randint", return_value=20):
             async with schema.get_connection() as db:
                 await Engine.settle_player(player_discord_id, village_id, db, interrupted=True)
 
@@ -259,7 +259,7 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
             "SELECT type, quality, remaining_amount FROM resource_nodes WHERE village_id = ?",
             (village_id,),
         )
-        self.assertEqual(node, ("wood", 117, 8000))
+        self.assertEqual(node, ("wood", 104, 8000))
 
     async def test_resources_gathering_clamps_quality_to_seventy_five_percent(self):
         village_id = await self.create_village(wood=0)
@@ -291,9 +291,95 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
             completion_time=now,
         )
 
-        with patch("core.engine.random.random", return_value=0.3):
+        with patch("core.engine.random.random", return_value=0.8):
             async with schema.get_connection() as db:
                 await Engine.settle_player(player_discord_id, village_id, db, interrupted=True)
 
         node_count = await self.fetchone("SELECT count(*) FROM resource_nodes WHERE village_id = ?", (village_id,))
         self.assertEqual(node_count[0], 2)
+
+    async def test_resources_exploring_can_spawn_monster_instead_of_resource_node(self):
+        village_id = await self.create_village()
+        now = datetime.utcnow()
+        player_discord_id = await self.create_player(
+            village_id,
+            status="exploring",
+            last_update_time=now - timedelta(hours=1),
+            completion_time=now,
+        )
+
+        with patch("core.engine.random.random", side_effect=[0.0, 0.0]), patch("core.engine.random.choice", return_value=("Wild Boar", "food")), patch("core.engine.random.gauss", return_value=130), patch("core.engine.random.randint", return_value=20):
+            async with schema.get_connection() as db:
+                await Engine.settle_player(player_discord_id, village_id, db, interrupted=True)
+
+        monster = await self.fetchone(
+            "SELECT name, reward_resource_type, quality, hp, max_hp FROM monsters WHERE village_id = ?",
+            (village_id,),
+        )
+        node_count = await self.fetchone("SELECT count(*) FROM resource_nodes WHERE village_id = ?", (village_id,))
+        self.assertEqual(monster, ("Wild Boar", "food", 130, 500, 500))
+        self.assertEqual(node_count[0], 0)
+
+    async def test_resources_attack_defeat_grants_material_gold_and_hunting_xp(self):
+        village_id = await self.create_village(food=200, wood=0, stone=0, gold=0)
+        now = datetime.utcnow()
+        monster_id = await self.create_monster(
+            village_id,
+            name="Wild Boar",
+            reward_resource_type="food",
+            quality=100,
+            hp=20,
+            max_hp=20,
+            expires_at=now + timedelta(hours=2),
+        )
+        player_discord_id = await self.create_player(
+            village_id,
+            status="attack",
+            target_id=monster_id,
+            last_update_time=now - timedelta(hours=1),
+            completion_time=now,
+        )
+
+        async with schema.get_connection() as db:
+            await Engine.settle_player(player_discord_id, village_id, db, interrupted=True)
+
+        resources = await self.fetch_resources(village_id)
+        buffs = await self.fetch_buffs(village_id)
+        player = await self.fetchone(
+            "SELECT status, target_id FROM players WHERE discord_id = ? AND village_id = ?",
+            (player_discord_id, village_id),
+        )
+        monster = await self.fetchone("SELECT id FROM monsters WHERE village_id = ?", (village_id,))
+        latest_log = await self.fetchone(
+            """
+            SELECT action_type
+            FROM player_actions_log
+            WHERE player_discord_id = ? AND village_id = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (player_discord_id, village_id),
+        )
+
+        self.assertEqual(resources["food"], 220)
+        self.assertEqual(resources["gold"], 20)
+        self.assertEqual(buffs[4], 1000)
+        self.assertEqual(player, ("idle", None))
+        self.assertIsNone(monster)
+        self.assertEqual(latest_log[0], "attack")
+
+    async def test_resources_storage_overflow_rule_preserves_overcap_stock(self):
+        village_id = await self.create_village(food=1500)
+        now = datetime.utcnow()
+        player_discord_id = await self.create_player(
+            village_id,
+            status="idle",
+            last_update_time=now - timedelta(hours=1),
+            completion_time=now,
+        )
+
+        async with schema.get_connection() as db:
+            await Engine.settle_player(player_discord_id, village_id, db, interrupted=True)
+
+        resources = await self.fetch_resources(village_id)
+        self.assertEqual(resources["food"], 1500)

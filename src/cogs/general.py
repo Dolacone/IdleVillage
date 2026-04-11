@@ -12,12 +12,14 @@ RESOURCE_EMOJIS = {
     "food": "🍎",
     "wood": "🪵",
     "stone": "🪨",
+    "gold": "💰",
 }
 
 RESOURCE_LABELS = {
     "food": "Food",
     "wood": "Wood",
     "stone": "Stone",
+    "gold": "Gold",
 }
 
 MANAGE_MODE_LABELS = {
@@ -33,7 +35,7 @@ async def _fetch_village_row(village_id: int):
         if not village:
             return None
         resources = await Engine._fetch_village_resources(db, village_id)
-        return (village[0], resources["food"], resources["wood"], resources["stone"])
+        return (village[0], resources["food"], resources["wood"], resources["stone"], resources["gold"])
 
 
 async def _fetch_active_nodes(village_id: int):
@@ -48,7 +50,43 @@ async def _fetch_active_nodes(village_id: int):
             """,
             (village_id,),
         ) as cursor:
-            return await cursor.fetchall()
+            resource_nodes = await cursor.fetchall()
+        async with db.execute(
+            """
+            SELECT id, name, hp, max_hp, quality
+            FROM monsters
+            WHERE village_id = ?
+            """,
+            (village_id,),
+        ) as cursor:
+            monster = await cursor.fetchone()
+
+    entries = [
+        {
+            "token": f"node:{node_id}",
+            "id": node_id,
+            "kind": "node",
+            "name": node_type.title(),
+            "amount": remaining_amount,
+            "max_amount": None,
+            "quality": quality,
+        }
+        for node_id, node_type, remaining_amount, quality in resource_nodes
+    ]
+    if monster:
+        monster_id, name, hp, max_hp, quality = monster
+        entries.append(
+            {
+                "token": f"monster:{monster_id}",
+                "id": monster_id,
+                "kind": "monster",
+                "name": name,
+                "amount": hp,
+                "max_amount": max_hp,
+                "quality": quality,
+            }
+        )
+    return entries
 
 
 async def _set_village_resource(village_id: int, resource_type: str, amount: int):
@@ -71,32 +109,67 @@ async def _adjust_village_resource(village_id: int, resource_type: str, delta: i
     return new_amount
 
 
-async def _remove_village_node(village_id: int, node_id: int):
-    async with get_connection() as db:
-        async with db.execute(
-            """
-            SELECT type
-            FROM resource_nodes
-            WHERE id = ?
-              AND village_id = ?
-            """,
-            (node_id, village_id),
-        ) as cursor:
-            node_row = await cursor.fetchone()
-
-        if not node_row:
+async def _remove_village_node(village_id: int, target_token: str):
+    if isinstance(target_token, int):
+        target_kind = "node"
+        target_id = int(target_token)
+    else:
+        if not target_token or ":" not in target_token:
             return None
+        target_kind, raw_id = target_token.split(":", 1)
+        if not raw_id.isdigit():
+            return None
+        target_id = int(raw_id)
 
-        await db.execute(
-            """
-            DELETE FROM resource_nodes
-            WHERE id = ?
-              AND village_id = ?
-            """,
-            (node_id, village_id),
-        )
+    async with get_connection() as db:
+        if target_kind == "node":
+            async with db.execute(
+                """
+                SELECT type
+                FROM resource_nodes
+                WHERE id = ?
+                  AND village_id = ?
+                """,
+                (target_id, village_id),
+            ) as cursor:
+                node_row = await cursor.fetchone()
+            if not node_row:
+                return None
+            await db.execute(
+                """
+                DELETE FROM resource_nodes
+                WHERE id = ?
+                  AND village_id = ?
+                """,
+                (target_id, village_id),
+            )
+            removed_label = node_row[0]
+        elif target_kind == "monster":
+            async with db.execute(
+                """
+                SELECT name
+                FROM monsters
+                WHERE id = ?
+                  AND village_id = ?
+                """,
+                (target_id, village_id),
+            ) as cursor:
+                monster_row = await cursor.fetchone()
+            if not monster_row:
+                return None
+            await db.execute(
+                """
+                DELETE FROM monsters
+                WHERE id = ?
+                  AND village_id = ?
+                """,
+                (target_id, village_id),
+            )
+            removed_label = f"Monster {monster_row[0]}"
+        else:
+            return None
         await db.commit()
-        return node_row[0]
+        return removed_label
 
 
 class ManageModeSelect(disnake.ui.StringSelect):
@@ -104,7 +177,7 @@ class ManageModeSelect(disnake.ui.StringSelect):
         options = [
             disnake.SelectOption(
                 label="Manage Resources",
-                description="Adjust village food, wood, and stone totals",
+                description="Adjust village food, wood, stone, and gold totals",
                 value="resources",
                 default=(mode == "resources"),
             ),
@@ -132,7 +205,7 @@ class ResourceTypeSelect(disnake.ui.StringSelect):
                 value=resource_type,
                 default=(selected_resource == resource_type),
             )
-            for resource_type in ("food", "wood", "stone")
+            for resource_type in ("food", "wood", "stone", "gold")
         ]
         super().__init__(placeholder="Choose a resource...", options=options, min_values=1, max_values=1, row=1)
 
@@ -143,16 +216,24 @@ class ResourceTypeSelect(disnake.ui.StringSelect):
 
 
 class NodeSelect(disnake.ui.StringSelect):
-    def __init__(self, nodes, selected_node_id: int = None):
+    def __init__(self, nodes, selected_node_token: str = None):
         if nodes:
             options = [
                 disnake.SelectOption(
-                    label=f"#{node_id} {node_type.title()}",
-                    description=f"Stock {remaining_amount} | Quality {quality}%",
-                    value=str(node_id),
-                    default=(selected_node_id == node_id),
+                    label=(
+                        f"#{entry['id']} [Monster] {entry['name']}"
+                        if entry["kind"] == "monster"
+                        else f"#{entry['id']} {entry['name']}"
+                    ),
+                    description=(
+                        f"HP {entry['amount']}/{entry['max_amount']} | Quality {entry['quality']}%"
+                        if entry["kind"] == "monster"
+                        else f"Stock {entry['amount']} | Quality {entry['quality']}%"
+                    ),
+                    value=entry["token"],
+                    default=(selected_node_token == entry["token"]),
                 )
-                for node_id, node_type, remaining_amount, quality in nodes
+                for entry in nodes
             ]
             disabled = False
             placeholder = "Choose a node to remove..."
@@ -179,7 +260,11 @@ class NodeSelect(disnake.ui.StringSelect):
 
     async def callback(self, inter: disnake.MessageInteraction):
         value = self.values[0]
-        self.view.selected_node_id = None if value == "none" else int(value)
+        self.view.selected_node_token = None if value == "none" else value
+        if self.view.selected_node_token:
+            self.view.selected_node_id = int(self.view.selected_node_token.split(":", 1)[1])
+        else:
+            self.view.selected_node_id = None
         await self.view.refresh_state()
         await self.view.render(inter, content="Node selection updated.")
 
@@ -214,20 +299,20 @@ class RemoveNodeButton(disnake.ui.Button):
         super().__init__(label="Remove Node", style=disnake.ButtonStyle.red, disabled=disabled, row=2)
 
     async def callback(self, inter: disnake.MessageInteraction):
-        if self.view.selected_node_id is None:
+        if self.view.selected_node_token is None:
             await self.view.render(inter, content="Choose a node before removing it.")
             return
 
-        removed_type = await _remove_village_node(self.view.village_id, self.view.selected_node_id)
-        if removed_type is None:
+        removed_label = await _remove_village_node(self.view.village_id, self.view.selected_node_token)
+        if removed_label is None:
             await self.view.refresh_state()
             await self.view.render(inter, content="That node is no longer available.")
             return
 
-        removed_node_id = self.view.selected_node_id
+        removed_node_id = int(self.view.selected_node_token.split(":", 1)[1])
         await Engine.sync_announcement(self.view.village_id, bot=self.view.bot, force=True, req_id=self.view.req_id, user_id=inter.author.id)
         await self.view.refresh_state()
-        await self.view.render(inter, content=f"Removed {removed_type.title()} node #{removed_node_id}.")
+        await self.view.render(inter, content=f"Removed {removed_label} #{removed_node_id}.")
 
 
 class ResourceAmountModal(disnake.ui.Modal):
@@ -278,24 +363,30 @@ class ManageView(disnake.ui.View):
         self.req_id = req_id
         self.mode = "resources"
         self.selected_resource = "food"
+        self.selected_node_token = None
         self.selected_node_id = None
-        self.resource_amounts = {"food": 0, "wood": 0, "stone": 0}
+        self.resource_amounts = {"food": 0, "wood": 0, "stone": 0, "gold": 0}
         self.nodes = []
 
     async def refresh_state(self):
         village = await _fetch_village_row(self.village_id)
         if village:
-            _, food, wood, stone = village
+            _, food, wood, stone, gold = village
             self.resource_amounts = {
                 "food": food,
                 "wood": wood,
                 "stone": stone,
+                "gold": gold,
             }
 
         self.nodes = await _fetch_active_nodes(self.village_id)
-        valid_node_ids = {node_id for node_id, *_ in self.nodes}
-        if self.selected_node_id not in valid_node_ids:
-            self.selected_node_id = self.nodes[0][0] if self.nodes else None
+        valid_tokens = {entry["token"] for entry in self.nodes}
+        if self.selected_node_token not in valid_tokens:
+            self.selected_node_token = self.nodes[0]["token"] if self.nodes else None
+        if self.selected_node_token:
+            self.selected_node_id = int(self.selected_node_token.split(":", 1)[1])
+        else:
+            self.selected_node_id = None
         self._rebuild_items()
         return self
 
@@ -312,8 +403,8 @@ class ManageView(disnake.ui.View):
             self.add_item(SetCustomButton())
             return
 
-        self.add_item(NodeSelect(self.nodes, self.selected_node_id))
-        self.add_item(RemoveNodeButton(disabled=(self.selected_node_id is None)))
+        self.add_item(NodeSelect(self.nodes, self.selected_node_token))
+        self.add_item(RemoveNodeButton(disabled=(self.selected_node_token is None)))
 
     async def build_embed(self):
         village_name = await Engine._resolve_village_name(self.bot, self.village_id)
@@ -333,28 +424,35 @@ class ManageView(disnake.ui.View):
                 value=(
                     f"🍎 Food: {self.resource_amounts['food']:,}\n"
                     f"🪵 Wood: {self.resource_amounts['wood']:,}\n"
-                    f"🪨 Stone: {self.resource_amounts['stone']:,}"
+                    f"🪨 Stone: {self.resource_amounts['stone']:,}\n"
+                    f"💰 Gold: {self.resource_amounts['gold']:,}"
                 ),
                 inline=False,
             )
             return embed
 
         embed.description = "Select a node and remove it from the village board."
-        if self.selected_node_id is None:
+        if self.selected_node_token is None:
             embed.add_field(name="Selected Node", value="No active nodes are available.", inline=False)
             return embed
 
-        selected_node = next((node for node in self.nodes if node[0] == self.selected_node_id), None)
+        selected_node = next((node for node in self.nodes if node["token"] == self.selected_node_token), None)
         if not selected_node:
             embed.add_field(name="Selected Node", value="No active nodes are available.", inline=False)
             return embed
 
-        node_id, node_type, remaining_amount, quality = selected_node
+        node_id = selected_node["id"]
+        node_name = selected_node["name"]
+        remaining_amount = selected_node["amount"]
+        quality = selected_node["quality"]
+        is_monster = selected_node["kind"] == "monster"
         embed.add_field(
             name=f"Node #{node_id}",
             value=(
-                f"Type: {node_type.title()}\n"
-                f"Stock: {remaining_amount:,}\n"
+                f"Type: {'Monster' if is_monster else node_name}\n"
+                f"{'HP' if is_monster else 'Stock'}: {remaining_amount:,}"
+                + (f"/{selected_node['max_amount']:,}" if is_monster else "")
+                + "\n"
                 f"Quality: {quality}%"
             ),
             inline=False,
@@ -421,14 +519,14 @@ class General(commands.Cog):
             await Engine._write_village_resources(
                 db,
                 village_id,
-                {"food": 1000, "wood": 1000, "stone": 1000},
+                {"food": 1000, "wood": 1000, "stone": 1000, "gold": 0},
             )
-            await Engine._write_village_buffs(db, village_id, {1: 0, 2: 0, 3: 0})
+            await Engine._write_village_buffs(db, village_id, {1: 0, 2: 0, 3: 0, 4: 0})
             await db.commit()
 
         log_event(req_id, inter.author.id, "RESP", f"Village initialized for guild {village_id}")
         await inter.response.send_message(
-            "Village successfully initialized for this server with 1,000 food, 1,000 wood, 1,000 stone, and Lv 0 buildings.",
+            "Village successfully initialized for this server with 1,000 food, 1,000 wood, 1,000 stone, 0 gold, and Lv 0 buildings.",
             ephemeral=True,
         )
 

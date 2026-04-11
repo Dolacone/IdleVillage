@@ -92,7 +92,7 @@ class EngineWatcherBehaviorTests(DatabaseTestCase):
         buffs = await self.fetch_buffs(village_id)
 
         self.assertEqual(player, ("missing", None))
-        self.assertEqual(buffs, {1: 100, 2: 100, 3: 100})
+        self.assertEqual(buffs, {1: 100, 2: 100, 3: 100, 4: 0})
 
     async def test_in_game_actions_do_not_prevent_missing_when_message_and_command_are_stale(self):
         village_id = await self.create_village()

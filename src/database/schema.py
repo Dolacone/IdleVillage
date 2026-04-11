@@ -5,11 +5,12 @@ import aiosqlite
 
 DB_PATH = os.getenv("DATABASE_PATH", "data/village.db")
 
-RESOURCE_TYPES = ("food", "wood", "stone")
+RESOURCE_TYPES = ("food", "wood", "stone", "gold")
 BUFF_FOOD_EFFICIENCY = 1
 BUFF_STORAGE_CAPACITY = 2
 BUFF_RESOURCE_YIELD = 3
-BUFF_IDS = (BUFF_FOOD_EFFICIENCY, BUFF_STORAGE_CAPACITY, BUFF_RESOURCE_YIELD)
+BUFF_HUNTING = 4
+BUFF_IDS = (BUFF_FOOD_EFFICIENCY, BUFF_STORAGE_CAPACITY, BUFF_RESOURCE_YIELD, BUFF_HUNTING)
 STATS_BASE_VALUE = 50
 
 
@@ -107,6 +108,23 @@ async def _create_current_tables(db):
             quality INTEGER,
             remaining_amount INTEGER,
             expiry_time TIMESTAMP,
+            FOREIGN KEY (village_id) REFERENCES villages(id)
+        )
+        """
+    )
+
+    await db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS monsters (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            village_id INTEGER NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            reward_resource_type TEXT NOT NULL,
+            quality INTEGER NOT NULL,
+            hp INTEGER NOT NULL,
+            max_hp INTEGER NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (village_id) REFERENCES villages(id)
         )
         """

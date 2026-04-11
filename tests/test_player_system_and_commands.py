@@ -180,8 +180,8 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
 
         resources = await self.fetch_resources(77)
         buffs = await self.fetch_buffs(77)
-        self.assertEqual(resources, {"food": 1000, "stone": 1000, "wood": 1000})
-        self.assertEqual(buffs, {1: 0, 2: 0, 3: 0})
+        self.assertEqual(resources, {"food": 1000, "gold": 0, "stone": 1000, "wood": 1000})
+        self.assertEqual(buffs, {1: 0, 2: 0, 3: 0, 4: 0})
         self.assertEqual(inter.response.calls[-1]["ephemeral"], True)
 
     async def test_village_binding_rejects_reuse_on_existing_server(self):
@@ -264,7 +264,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
             )
             await db.commit()
 
-        with patch("core.engine.random.random", return_value=0.0), patch("core.engine.random.choice", return_value="wood"), patch("core.engine.random.gauss", return_value=130), patch("core.engine.random.randint", return_value=2100):
+        with patch("core.engine.random.random", side_effect=[0.0, 1.0]), patch("core.engine.random.choice", return_value="wood"), patch("core.engine.random.gauss", return_value=130), patch("core.engine.random.randint", return_value=2100):
             async with schema.get_connection() as db:
                 await Engine.settle_player(player_discord_id, village_id, db, interrupted=True)
 
@@ -377,7 +377,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
 
         self.assertTrue(announcement.startswith(f"(Last Update: <t:{Engine._to_discord_unix(fixed_render_time)}:R>)"))
         self.assertIn("Village Resources (Cap: 2,000)", announcement)
-        self.assertIn("🍎 1,234 | 🪵 5,678 | 🪨 90", announcement)
+        self.assertIn("🍎 1,234 | 🪵 5,678 | 🪨 90 | 💰 0", announcement)
         self.assertIn("Village Buildings", announcement)
         self.assertIn("廚房: Lv.1 [XP: 500 / 2,000]", announcement)
         self.assertIn("Active Villagers", announcement)
@@ -417,7 +417,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         resources = await self.fetch_resources(90)
         node = await self.fetchone("SELECT id FROM resource_nodes WHERE id = ?", (node_id,))
         self.assertEqual(new_amount, 4321)
-        self.assertEqual(resources, {"food": 5, "stone": 7, "wood": 4321})
+        self.assertEqual(resources, {"food": 5, "gold": 0, "stone": 7, "wood": 4321})
         self.assertEqual(removed_type, "stone")
         self.assertIsNone(node)
 
@@ -461,7 +461,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         resources = await self.fetch_resources(village_id)
         board_message = next(iter(bot.get_channel(456).messages.values()))
 
-        self.assertEqual(resources, {"food": 4321, "stone": 7, "wood": 6})
+        self.assertEqual(resources, {"food": 4321, "gold": 0, "stone": 7, "wood": 6})
         self.assertIn("Food set to 4,321.", modal_inter.response.calls[-1]["content"])
         self.assertIn("🍎 4,321", board_message.content)
 
@@ -489,7 +489,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         node_select = next(item for item in view.children if isinstance(item, NodeSelect))
         remove_button = next(item for item in view.children if isinstance(item, RemoveNodeButton))
         self.assertEqual(view.selected_node_id, node_id)
-        self.assertEqual(node_select.options[0].value, str(node_id))
+        self.assertEqual(node_select.options[0].value, f"node:{node_id}")
 
         remove_inter = SimpleNamespace(
             author=SimpleNamespace(id=ADMIN_ID),
@@ -508,7 +508,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         self.assertIsNone(node)
         self.assertIsNotNone(village[0])
         self.assertIsNotNone(village[1])
-        self.assertIn(f"Removed Stone node #{node_id}.", remove_inter.response.calls[-1]["content"])
+        self.assertIn(f"Removed stone #{node_id}.", remove_inter.response.calls[-1]["content"])
         self.assertIn("Village Resources", board_message.content)
 
     async def test_settle_player_posts_idle_and_node_expiry_notifications(self):

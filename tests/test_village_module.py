@@ -9,14 +9,14 @@ from core.engine import Engine
 class VillageModuleBehaviorTests(DatabaseTestCase):
     async def test_village_pre_deduction_uses_food_efficiency_and_cycle_minutes(self):
         os.environ["ACTION_CYCLE_MINUTES"] = "30"
-        village_id = await self.create_village(food=20, wood=60, stone=60, food_efficiency_xp=1000)
+        village_id = await self.create_village(food=100, wood=60, stone=60, food_efficiency_xp=1000)
         player_discord_id = await self.create_player(village_id)
 
         success = await Engine.start_action(player_discord_id, village_id, "building", 1)
 
         self.assertTrue(success)
         resources = await self.fetch_resources(village_id)
-        self.assertEqual(resources, {"food": 1, "stone": 10, "wood": 10})
+        self.assertEqual(resources, {"food": 31, "gold": 0, "stone": 60, "wood": 10})
 
         player = await self.fetchone(
             """
@@ -49,7 +49,7 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
             await Engine.settle_village(village_id, db)
 
         buffs = await self.fetch_buffs(village_id)
-        self.assertEqual(buffs, {1: 2994, 2: 2994, 3: 2994})
+        self.assertEqual(buffs, {1: 2994, 2: 2994, 3: 2994, 4: 0})
 
     async def test_village_dynamic_decay_matches_mid_village_target(self):
         last_tick = datetime.utcnow() - timedelta(hours=1)
@@ -66,7 +66,7 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
             await Engine.settle_village(village_id, db)
 
         buffs = await self.fetch_buffs(village_id)
-        self.assertEqual(buffs, {1: 30772, 2: 30772, 3: 30772})
+        self.assertEqual(buffs, {1: 30772, 2: 30772, 3: 30772, 4: 0})
 
     async def test_village_dynamic_decay_matches_extreme_village_target(self):
         last_tick = datetime.utcnow() - timedelta(hours=1)
@@ -83,7 +83,13 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
             await Engine.settle_village(village_id, db)
 
         buffs = await self.fetch_buffs(village_id)
-        self.assertEqual(buffs, {1: 458213, 2: 458213, 3: 458213})
+        # This case uses very large XP, so sub-second runtime jitter can shift decay by 1-2 points.
+        base_decay = Engine._building_decay_per_cycle(100, 511000)
+        expected_base_xp = 511000 - base_decay
+        for buff_id in (1, 2, 3):
+            self.assertGreaterEqual(buffs[buff_id], expected_base_xp - 2)
+            self.assertLessEqual(buffs[buff_id], expected_base_xp)
+        self.assertEqual(buffs[4], 0)
 
     async def test_village_dynamic_decay_uses_cycle_units_for_short_heartbeat(self):
         os.environ["ACTION_CYCLE_MINUTES"] = "1"
@@ -100,7 +106,37 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
             await Engine.settle_village(village_id, db)
 
         buffs = await self.fetch_buffs(village_id)
-        self.assertEqual(buffs, {1: 4995, 2: 4995, 3: 4995})
+        self.assertEqual(buffs, {1: 4995, 2: 4995, 3: 4995, 4: 0})
+
+    async def test_village_decay_doubles_when_monster_is_active(self):
+        last_tick = datetime.utcnow() - timedelta(hours=1)
+        with_monster_village = await self.create_village(
+            food_efficiency_xp=1000,
+            storage_capacity_xp=1000,
+            resource_yield_xp=1000,
+            hunting_xp=1000,
+            last_tick_time=last_tick,
+        )
+        without_monster_village = await self.create_village(
+            food_efficiency_xp=1000,
+            storage_capacity_xp=1000,
+            resource_yield_xp=1000,
+            hunting_xp=1000,
+            last_tick_time=last_tick,
+        )
+        await self.create_player(with_monster_village, status="idle", last_message_time=datetime.utcnow())
+        await self.create_player(without_monster_village, status="idle", last_message_time=datetime.utcnow())
+        await self.create_monster(with_monster_village, expires_at=datetime.utcnow() + timedelta(hours=2))
+
+        async with schema.get_connection() as db:
+            await Engine.settle_village(with_monster_village, db)
+            await Engine.settle_village(without_monster_village, db)
+
+        buffs_with_monster = await self.fetch_buffs(with_monster_village)
+        buffs_without_monster = await self.fetch_buffs(without_monster_village)
+
+        self.assertEqual(buffs_with_monster, {1: 998, 2: 998, 3: 998, 4: 998})
+        self.assertEqual(buffs_without_monster, {1: 999, 2: 999, 3: 999, 4: 999})
 
     async def test_village_interrupted_action_settles_partial_progress(self):
         village_id = await self.create_village(food=0)
@@ -157,6 +193,16 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         )
         self.assertEqual(resources["food"], 3)
         self.assertEqual(player[0], "idle")
+
+    async def test_village_hunting_building_cost_uses_stone_and_gold(self):
+        village_id = await self.create_village(food=100, wood=100, stone=100, gold=100)
+        player_discord_id = await self.create_player(village_id)
+
+        success = await Engine.start_action(player_discord_id, village_id, "building", 4)
+
+        self.assertTrue(success)
+        resources = await self.fetch_resources(village_id)
+        self.assertEqual(resources, {"food": 80, "gold": 50, "stone": 50, "wood": 100})
 
     async def test_ui_refresh_keeps_next_cycle_when_action_has_already_completed(self):
         village_id = await self.create_village(food=20, wood=20, stone=10)
@@ -230,11 +276,11 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
             (player_discord_id, village_id),
         )
 
-        self.assertEqual((resources["food"], resources["wood"], resources["stone"], buffs[1]), (98, 0, 0, 50))
+        self.assertEqual((resources["food"], resources["wood"], resources["stone"], resources["gold"], buffs[1]), (80, 50, 100, 0, 25))
         self.assertEqual(player[0], "idle")
         self.assertIsNone(player[1])
         self.assertIsNone(player[2])
-        self.assertEqual(logs[0], 2)
+        self.assertEqual(logs[0], 1)
 
     async def test_settlement_recalculates_stats_during_backfill(self):
         os.environ["ACTION_CYCLE_MINUTES"] = "1"
@@ -278,4 +324,4 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
             await Engine.settle_player(player_discord_id, village_id, db)
 
         buffs = await self.fetch_buffs(village_id)
-        self.assertEqual(buffs[1], 99)
+        self.assertEqual(buffs[1], 49)

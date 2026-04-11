@@ -54,7 +54,7 @@ async def _update_player_command_time(db, player_discord_id: int, village_id: in
 
 
 async def _load_submenu_options(db, village_id: int, action: str):
-    if action == "gathering":
+    if action == "interact":
         async with db.execute(
             """
             SELECT id, type, remaining_amount, quality
@@ -73,7 +73,26 @@ async def _load_submenu_options(db, village_id: int, action: str):
                 disnake.SelectOption(
                     label=f"{node_type.title()} Node",
                     description=f"Stock {remaining_amount} | Quality {quality}%",
-                    value=str(node_id),
+                    value=f"node:{node_id}",
+                )
+            )
+
+        async with db.execute(
+            """
+            SELECT id, name, hp, max_hp, quality
+            FROM monsters
+            WHERE village_id = ?
+            """,
+            (village_id,),
+        ) as cursor:
+            monster = await cursor.fetchone()
+        if monster:
+            monster_id, name, hp, max_hp, quality = monster
+            options.append(
+                disnake.SelectOption(
+                    label=name,
+                    description=f"HP {hp}/{max_hp} | Quality {quality}%",
+                    value=f"monster:{monster_id}",
                 )
             )
         return options
@@ -83,6 +102,7 @@ async def _load_submenu_options(db, village_id: int, action: str):
             disnake.SelectOption(label="廚房", description="Food cost reduction", value="1"),
             disnake.SelectOption(label="倉庫", description="Storage capacity", value="2"),
             disnake.SelectOption(label="加工", description="Resource yield", value="3"),
+            disnake.SelectOption(label="狩獵", description="Attack damage bonus", value="4"),
         ]
 
     return []
@@ -153,7 +173,10 @@ async def _build_embed(inter, db, village_id: int, player_discord_id: int):
     embed = disnake.Embed(title=f"Idle Village - {guild_name}", color=disnake.Color.green())
     embed.add_field(
         name="Village Resources",
-        value=f"🍎 {resources['food']:,} | 🪵 {resources['wood']:,} | 🪨 {resources['stone']:,} (Cap: {storage_capacity:,})",
+        value=(
+            f"🍎 {resources['food']:,} | 🪵 {resources['wood']:,} | "
+            f"🪨 {resources['stone']:,} | 💰 {resources['gold']:,} (Cap: {storage_capacity:,})"
+        ),
         inline=False,
     )
     embed.add_field(
@@ -288,13 +311,40 @@ class ActionSubmitButton(disnake.ui.Button):
                     user_id=inter.author.id,
                 )
 
+            action_to_start = self.action
             target_id = int(self.target) if self.target and self.target.isdigit() else None
+            if self.action == "interact":
+                if not self.target:
+                    await _render_interface(
+                        inter,
+                        content="Choose an interaction target first.",
+                        view=VillageView(refresh_available_at=self.view.refresh_available_at),
+                        req_id=req_id,
+                        user_id=inter.author.id,
+                    )
+                    return
+                if self.target.startswith("node:"):
+                    action_to_start = "gathering"
+                    target_id = int(self.target.split(":", 1)[1])
+                elif self.target.startswith("monster:"):
+                    action_to_start = "attack"
+                    target_id = int(self.target.split(":", 1)[1])
+                else:
+                    await _render_interface(
+                        inter,
+                        content="Invalid interaction target.",
+                        view=VillageView(refresh_available_at=self.view.refresh_available_at),
+                        req_id=req_id,
+                        user_id=inter.author.id,
+                    )
+                    return
+
             success = True
-            if self.action != "idle":
+            if action_to_start != "idle":
                 success = await Engine.start_action(
                     player_discord_id,
                     village_id,
-                    self.action,
+                    action_to_start,
                     target_id,
                     db,
                     req_id=req_id,
@@ -302,10 +352,10 @@ class ActionSubmitButton(disnake.ui.Button):
                 )
 
             if not success:
-                log_event(req_id, inter.author.id, "RESP", f"Failed to start {self.action}")
+                log_event(req_id, inter.author.id, "RESP", f"Failed to start {action_to_start}")
                 await _render_interface(
                     inter,
-                    content=f"Failed to start {self.action}. Check resources or target availability.",
+                    content=f"Failed to start {action_to_start}. Check resources or target availability.",
                     view=VillageView(refresh_available_at=self.view.refresh_available_at),
                     req_id=req_id,
                     user_id=inter.author.id,
@@ -314,7 +364,7 @@ class ActionSubmitButton(disnake.ui.Button):
 
             await Engine.sync_announcement(village_id, db=db, bot=inter.bot, req_id=req_id, user_id=inter.author.id)
 
-        log_event(req_id, inter.author.id, "RESP", f"Started action {self.action}")
+        log_event(req_id, inter.author.id, "RESP", f"Started action {action_to_start}")
         await _render_interface(
             inter,
             content="Action updated.",
@@ -353,7 +403,7 @@ class SubMenuDropdown(disnake.ui.Select):
 class ActionDropdown(disnake.ui.Select):
     def __init__(self, default_value: str = None):
         options = [
-            disnake.SelectOption(label="Gather", description="Collect from a discovered node", value="gathering", default=(default_value == "gathering")),
+            disnake.SelectOption(label="Interact", description="Gather nodes or attack monsters", value="interact", default=(default_value == "interact")),
             disnake.SelectOption(label="Build", description="Work on a village structure", value="building", default=(default_value == "building")),
             disnake.SelectOption(label="Explore", description="Search for fresh resource nodes", value="exploring", default=(default_value == "exploring")),
             disnake.SelectOption(label="Return", description="Return to idle village support", value="idle", default=(default_value == "idle")),

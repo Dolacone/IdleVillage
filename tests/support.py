@@ -91,9 +91,11 @@ class DatabaseTestCase(unittest.IsolatedAsyncioTestCase):
         food=1000,
         wood=1000,
         stone=1000,
+        gold=0,
         food_efficiency_xp=0,
         storage_capacity_xp=0,
         resource_yield_xp=0,
+        hunting_xp=0,
         last_tick_time=None,
     ):
         if guild_id is None:
@@ -123,6 +125,7 @@ class DatabaseTestCase(unittest.IsolatedAsyncioTestCase):
                     (guild_id, "food", food),
                     (guild_id, "wood", wood),
                     (guild_id, "stone", stone),
+                    (guild_id, "gold", gold),
                 ),
             )
             await db.executemany(
@@ -134,6 +137,7 @@ class DatabaseTestCase(unittest.IsolatedAsyncioTestCase):
                     (guild_id, 1, food_efficiency_xp),
                     (guild_id, 2, storage_capacity_xp),
                     (guild_id, 3, resource_yield_xp),
+                    (guild_id, 4, hunting_xp),
                 ),
             )
             await db.commit()
@@ -222,6 +226,56 @@ class DatabaseTestCase(unittest.IsolatedAsyncioTestCase):
                 WHERE village_id = ?
                 ORDER BY id DESC
                 LIMIT 1
+                """,
+                (village_id,),
+            ) as cursor:
+                row = await cursor.fetchone()
+        return row[0]
+
+    async def create_monster(
+        self,
+        village_id,
+        *,
+        name="Wild Boar",
+        reward_resource_type="food",
+        quality=100,
+        hp=1000,
+        max_hp=1000,
+        expires_at=None,
+    ):
+        if expires_at is None:
+            expires_at = datetime.utcnow() + timedelta(hours=48)
+
+        async with schema.get_connection() as db:
+            await db.execute(
+                """
+                INSERT INTO monsters (
+                    village_id, name, reward_resource_type, quality, hp, max_hp, expires_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(village_id) DO UPDATE SET
+                    name = excluded.name,
+                    reward_resource_type = excluded.reward_resource_type,
+                    quality = excluded.quality,
+                    hp = excluded.hp,
+                    max_hp = excluded.max_hp,
+                    expires_at = excluded.expires_at
+                """,
+                (
+                    village_id,
+                    name,
+                    reward_resource_type,
+                    quality,
+                    hp,
+                    max_hp,
+                    expires_at.isoformat(),
+                ),
+            )
+            await db.commit()
+            async with db.execute(
+                """
+                SELECT id FROM monsters
+                WHERE village_id = ?
                 """,
                 (village_id,),
             ) as cursor:

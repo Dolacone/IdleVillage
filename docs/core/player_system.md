@@ -15,7 +15,7 @@
 | village_id | INTEGER (FK) | 關聯至 villages.id |
 | last_message_time | TIMESTAMP | 玩家最後一次在該 Discord Guild 發言的時間 |
 | last_command_time | TIMESTAMP | 玩家最後一次執行 `/idlevillage` 的時間 |
-| status | TEXT | idle, gathering, building, exploring, missing |
+| status | TEXT | idle, gathering, building, exploring, attack, missing |
 | target_id | INTEGER | 當前行動的目標 ID (如果是採集則為 resource_nodes.id, 建設則為建築類別) |
 | last_update_time | TIMESTAMP | 本次行動片段開始或上次結算的時間 |
 | completion_time | TIMESTAMP | 當前 Action Cycle 的預計完成時間 |
@@ -30,3 +30,4 @@
 - 2026.04.07.00: Simplified status and schema. Removed weight and satiety. See [2026.04.07.00.md](../../changelogs/2026.04.07.00.md)
 - 2026.04.08.00: Added exploring to the active player states and clarified Action Cycle timing fields. See [2026.04.08.00.md](../../changelogs/2026.04.08.00.md)
 - 2026.04.09.01: Performed numerical rebalance and standardized Action Cycle fields. See [2026.04.09.01.md](../../changelogs/2026.04.09.01.md)
+- 2026.04.10.00: Added attack state to player status lifecycle for monster combat. See [2026.04.10.00.md](../../changelogs/2026.04.10.00.md)
