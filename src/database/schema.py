@@ -24,6 +24,67 @@ async def _ensure_column(db, table_name: str, column_name: str, definition: str)
         await db.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
 
 
+async def _table_columns(db, table_name: str):
+    async with db.execute(f"PRAGMA table_info({table_name})") as cursor:
+        columns = await cursor.fetchall()
+    return [column[1] for column in columns]
+
+
+async def _table_exists(db, table_name: str):
+    async with db.execute(
+        """
+        SELECT 1
+        FROM sqlite_master
+        WHERE type = 'table'
+          AND name = ?
+        """,
+        (table_name,),
+    ) as cursor:
+        return await cursor.fetchone() is not None
+
+
+async def _migrate_monsters_table_if_needed(db):
+    if not await _table_exists(db, "monsters"):
+        return
+
+    columns = await _table_columns(db, "monsters")
+    if "expires_at" not in columns:
+        return
+
+    await db.execute("ALTER TABLE monsters RENAME TO monsters_legacy_2026_04_13")
+    await db.execute(
+        """
+        CREATE TABLE monsters (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            village_id INTEGER NOT NULL UNIQUE,
+            name TEXT NOT NULL,
+            reward_resource_type TEXT NOT NULL DEFAULT 'food',
+            quality INTEGER NOT NULL,
+            hp INTEGER NOT NULL,
+            max_hp INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (village_id) REFERENCES villages(id)
+        )
+        """
+    )
+    await db.execute(
+        """
+        INSERT INTO monsters (id, village_id, name, reward_resource_type, quality, hp, max_hp, created_at)
+        SELECT
+            id,
+            village_id,
+            COALESCE(name, 'Monsters'),
+            COALESCE(reward_resource_type, 'food'),
+            quality,
+            hp,
+            max_hp,
+            COALESCE(created_at, CURRENT_TIMESTAMP)
+        FROM monsters_legacy_2026_04_13
+        """
+    )
+    await db.execute("DROP TABLE monsters_legacy_2026_04_13")
+
+
 async def _create_current_tables(db):
     await db.execute(
         """
@@ -169,6 +230,7 @@ async def _create_current_tables(db):
 
     await _ensure_column(db, "villages", "active_command", "TEXT")
     await _ensure_column(db, "villages", "protection_expires_at", "TIMESTAMP")
+    await _migrate_monsters_table_if_needed(db)
     await _ensure_column(db, "monsters", "reward_resource_type", "TEXT NOT NULL DEFAULT 'food'")
     await _ensure_column(db, "monsters", "created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
 

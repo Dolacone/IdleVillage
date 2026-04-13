@@ -148,6 +148,89 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
         self.assertEqual(node[2], 9001)
         self.assertIsNotNone(node[3])
 
+    async def test_init_db_migrates_legacy_monsters_table_to_2026_04_13_schema(self):
+        village_id = await self.create_village()
+
+        async with schema.get_connection() as db:
+            await db.execute("DROP TABLE monsters")
+            await db.execute(
+                """
+                CREATE TABLE monsters (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    village_id INTEGER NOT NULL UNIQUE,
+                    name TEXT NOT NULL,
+                    reward_resource_type TEXT NOT NULL,
+                    quality INTEGER NOT NULL,
+                    hp INTEGER NOT NULL,
+                    max_hp INTEGER NOT NULL,
+                    expires_at TIMESTAMP NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (village_id) REFERENCES villages(id)
+                )
+                """
+            )
+            await db.execute(
+                """
+                INSERT INTO monsters (
+                    village_id, name, reward_resource_type, quality, hp, max_hp, expires_at, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    village_id,
+                    "Wild Boar",
+                    "food",
+                    125,
+                    321,
+                    999,
+                    (datetime.utcnow() + timedelta(hours=48)).isoformat(),
+                    datetime.utcnow().isoformat(),
+                ),
+            )
+            await db.commit()
+
+        await schema.init_db()
+
+        monster_columns = await self.fetchall("PRAGMA table_info(monsters)")
+        monster = await self.fetchone(
+            """
+            SELECT village_id, name, reward_resource_type, quality, hp, max_hp
+            FROM monsters
+            WHERE village_id = ?
+            """,
+            (village_id,),
+        )
+
+        self.assertNotIn("expires_at", {column[1] for column in monster_columns})
+        self.assertEqual(monster, (village_id, "Wild Boar", "food", 125, 321, 999))
+
+    async def test_init_db_leaves_2026_04_13_monsters_table_untouched_on_restart(self):
+        village_id = await self.create_village()
+        monster_id = await self.create_monster(
+            village_id,
+            name="Monsters",
+            reward_resource_type="food",
+            quality=140,
+            hp=222,
+            max_hp=2000,
+        )
+
+        await schema.init_db()
+        await schema.init_db()
+
+        monster_columns = await self.fetchall("PRAGMA table_info(monsters)")
+        monster = await self.fetchone(
+            """
+            SELECT id, village_id, name, reward_resource_type, quality, hp, max_hp
+            FROM monsters
+            WHERE id = ?
+            """,
+            (monster_id,),
+        )
+
+        self.assertNotIn("expires_at", {column[1] for column in monster_columns})
+        self.assertEqual(monster, (monster_id, village_id, "Monsters", "food", 140, 222, 2000))
+
     async def test_resources_idle_state_produces_food_without_food_cost(self):
         village_id = await self.create_village(food=0)
         now = datetime.utcnow()
