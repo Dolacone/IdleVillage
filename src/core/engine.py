@@ -46,6 +46,11 @@ class Engine:
     TOKEN_TYPES = TOKEN_TYPES
     PLAYER_BUFF_TYPES = PLAYER_BUFF_TYPES
 
+    # Token and buff system constants
+    MIN_QUALITY_THRESHOLD = 75
+    BUFF_DURATION_CYCLES = 3
+    VILLAGE_COMMAND_TOKEN_COST = 10
+
     BUILDING_NAMES = {
         BUFF_FOOD_EFFICIENCY: "廚房",
         BUFF_STORAGE_CAPACITY: "倉庫",
@@ -237,7 +242,7 @@ class Engine:
         if existing:
             old_hp, old_quality = existing
             new_hp = min(max_hp, int(old_hp or 0) + hp_gain)
-            new_quality = max(75, min(Engine.MAX_RESOURCE_QUALITY, int(old_quality or quality)))
+            new_quality = max(Engine.MIN_QUALITY_THRESHOLD, min(Engine.MAX_RESOURCE_QUALITY, int(old_quality or quality)))
         else:
             new_hp = min(max_hp, hp_gain)
             new_quality = int(min(Engine.MAX_RESOURCE_QUALITY, quality))
@@ -315,46 +320,43 @@ class Engine:
         return buffs
 
     @staticmethod
-    async def _fetch_village_command(db, village_id: int):
+    async def _fetch_village_field(db, village_id: int, field_name: str, convert_fn=None):
+        """Generic utility to fetch a single field from villages table."""
         async with db.execute(
-            "SELECT active_command FROM villages WHERE id = ?",
+            f"SELECT {field_name} FROM villages WHERE id = ?",
             (village_id,),
         ) as cursor:
             row = await cursor.fetchone()
-        if not row or not row[0]:
+        if not row or row[0] is None:
             return None
-        return str(row[0])
+        value = row[0]
+        return convert_fn(value) if convert_fn else value
+
+    @staticmethod
+    async def _set_village_field(db, village_id: int, field_name: str, value):
+        """Generic utility to set a single field in villages table."""
+        await db.execute(
+            f"UPDATE villages SET {field_name} = ? WHERE id = ?",
+            (value, village_id),
+        )
+
+    @staticmethod
+    async def _fetch_village_command(db, village_id: int):
+        result = await Engine._fetch_village_field(db, village_id, "active_command", str)
+        return result if result else None
 
     @staticmethod
     async def _set_village_command(db, village_id: int, command: str | None):
-        await db.execute(
-            """
-            UPDATE villages
-            SET active_command = ?
-            WHERE id = ?
-            """,
-            (command, village_id),
-        )
+        await Engine._set_village_field(db, village_id, "active_command", command)
 
     @staticmethod
     async def _fetch_protection_expires_at(db, village_id: int):
-        async with db.execute(
-            "SELECT protection_expires_at FROM villages WHERE id = ?",
-            (village_id,),
-        ) as cursor:
-            row = await cursor.fetchone()
-        return Engine._parse_timestamp(row[0]) if row and row[0] else None
+        return await Engine._fetch_village_field(db, village_id, "protection_expires_at", Engine._parse_timestamp)
 
     @staticmethod
     async def _set_protection_expires_at(db, village_id: int, expires_at: datetime | None):
-        await db.execute(
-            """
-            UPDATE villages
-            SET protection_expires_at = ?
-            WHERE id = ?
-            """,
-            (expires_at.isoformat() if expires_at else None, village_id),
-        )
+        value = expires_at.isoformat() if expires_at else None
+        await Engine._set_village_field(db, village_id, "protection_expires_at", value)
 
     @staticmethod
     async def _fetch_player_tokens(db, player_discord_id: int, village_id: int):
@@ -448,9 +450,9 @@ class Engine:
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         current_buff = await Engine._fetch_player_buff(db, player_discord_id, village_id, now=now)
         if current_buff and current_buff["buff_type"] == token_type:
-            expires_at = current_buff["expires_at"] + timedelta(minutes=3 * Engine._action_cycle_minutes())
+            expires_at = current_buff["expires_at"] + timedelta(minutes=Engine.BUFF_DURATION_CYCLES * Engine._action_cycle_minutes())
         else:
-            expires_at = now + timedelta(minutes=3 * Engine._action_cycle_minutes())
+            expires_at = now + timedelta(minutes=Engine.BUFF_DURATION_CYCLES * Engine._action_cycle_minutes())
         tokens[token_type] -= 1
         await Engine._write_player_tokens(db, player_discord_id, village_id, tokens)
         await Engine._set_player_buff(db, player_discord_id, village_id, token_type, expires_at)
@@ -477,9 +479,9 @@ class Engine:
             return False, "Invalid village command."
         tokens = await Engine._fetch_player_tokens(db, player_discord_id, village_id)
         total_tokens = sum(tokens.values())
-        if total_tokens < 10:
+        if total_tokens < Engine.VILLAGE_COMMAND_TOKEN_COST:
             return False, "Not enough tokens to set the village command."
-        remaining_cost = 10
+        remaining_cost = Engine.VILLAGE_COMMAND_TOKEN_COST
         for token_type in Engine.TOKEN_TYPES:
             if remaining_cost <= 0:
                 break
@@ -973,7 +975,7 @@ class Engine:
                     efficiency = Engine.calculate_efficiency(p_str + bonus, p_end)
 
                 gathered = Engine.calculate_outcome(
-                    efficiency * (max(75, quality) / 100.0) * yield_mult,
+                    efficiency * (max(Engine.MIN_QUALITY_THRESHOLD, quality) / 100.0) * yield_mult,
                     time_ratio,
                 )
                 actual_gathered = min(gathered, remaining_amount)

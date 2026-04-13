@@ -160,7 +160,7 @@ async def _build_embed(inter, db, village_id: int, player_discord_id: int):
         next_check_time = Engine._next_idle_completion(last_update)
 
     if next_check_time:
-        next_check_text = f"<t:{Engine._to_discord_unix(next_check_time)}:R>"
+        next_check_text = _format_discord_relative_time(next_check_time)
     else:
         next_check_text = "Manual refresh"
 
@@ -205,6 +205,11 @@ def _format_token_status(tokens: dict):
         f"Building: {tokens['building']}\n"
         f"Attacking: {tokens['attacking']}"
     )
+
+
+def _format_discord_relative_time(dt: datetime) -> str:
+    """Format datetime as Discord relative timestamp."""
+    return f"<t:{Engine._to_discord_unix(dt)}:R>"
 
 
 async def _render_interface(
@@ -517,7 +522,7 @@ class ActionsCog(commands.Cog):
                     await inter.response.send_message(str(buff_result), ephemeral=True)
                     return
                 response_lines.append(
-                    f"Used 1 {token_type} token. Matching actions now gain +100 total stats until <t:{Engine._to_discord_unix(buff_result)}:R>."
+                    f"Used 1 {token_type} token. Matching actions now gain +100 total stats until {_format_discord_relative_time(buff_result)}."
                 )
             elif action == "protect":
                 success, protect_result = await Engine.use_village_protection_token(db, player_discord_id, village_id)
@@ -525,7 +530,7 @@ class ActionsCog(commands.Cog):
                     await inter.response.send_message(str(protect_result), ephemeral=True)
                     return
                 response_lines.append(
-                    f"Village protection extended until <t:{Engine._to_discord_unix(protect_result)}:R>. Future decay is reduced by 50% while active."
+                    f"Village protection extended until {_format_discord_relative_time(protect_result)}. Future decay is reduced by 50% while active."
                 )
 
             tokens = await Engine._fetch_player_tokens(db, player_discord_id, village_id)
@@ -537,11 +542,11 @@ class ActionsCog(commands.Cog):
         response_lines.append(_format_token_status(tokens))
         if active_buff:
             response_lines.append(
-                f"Active buff: {active_buff['buff_type']} until <t:{Engine._to_discord_unix(active_buff['expires_at'])}:R>"
+                f"Active buff: {active_buff['buff_type']} until {_format_discord_relative_time(active_buff['expires_at'])}"
             )
         if protection_expires_at:
             response_lines.append(
-                f"Village protection: <t:{Engine._to_discord_unix(protection_expires_at)}:R>"
+                f"Village protection: {_format_discord_relative_time(protection_expires_at)}"
             )
 
         await inter.response.send_message("\n".join(response_lines), ephemeral=True)
@@ -585,13 +590,12 @@ class ActionsCog(commands.Cog):
                     await inter.response.send_message(str(command_result), ephemeral=True)
                     return
                 current_command = command_result
-                tokens = await Engine._fetch_player_tokens(db, player_discord_id, village_id)
-                total_tokens = sum(tokens.values())
+                total_tokens = total_tokens - Engine.VILLAGE_COMMAND_TOKEN_COST
                 await db.commit()
                 await inter.response.send_message(
                     (
                         f"Village command set to `{current_command}`. "
-                        "This setting consumed 10 tokens.\n"
+                        f"This setting consumed {Engine.VILLAGE_COMMAND_TOKEN_COST} tokens.\n"
                         f"Remaining total tokens: {total_tokens}"
                     ),
                     ephemeral=True,
@@ -603,7 +607,7 @@ class ActionsCog(commands.Cog):
             (
                 f"Current village command: `{current_command or 'none'}`\n"
                 f"Your total tokens: {total_tokens}\n"
-                "Setting a village command will consume 10 tokens.\n"
+                f"Setting a village command will consume {Engine.VILLAGE_COMMAND_TOKEN_COST} tokens.\n"
                 f"Available commands: {valid_commands}"
             ),
             ephemeral=True,
