@@ -14,6 +14,12 @@
   - 定義: 玩家目前沒有執行任何工作, 探索或移動指令的狀態.
 - Auto-Restart (自動重啟) (v2026.04.09.01):
   - 定義: 當一個行動週期 (Action Cycle) 結束且村莊資源充足時, 系統自動為玩家續約下一個週期的機制.
+- Village Command (村莊命令) (v2026.04.13.00):
+  - 定義: 玩家支付 Token 設定的集體方針, 自動導向閒置玩家執行特定任務。
+- Threat Node (威脅節點) (v2026.04.13.00):
+  - 定義: 探索發現的敵對實體, 具備累積 HP 特性, 超過門檻會造成村莊損耗加倍。
+- Tokens (代幣/標記) (v2026.04.13.00):
+  - 定義: 執行行動獲得的獎勵資源, 用於啟動個人 Buff、村莊保護或變更村莊命令。
 
 ### 2. 計算模型 (Calculation Models)
 
@@ -28,8 +34,8 @@
 ### 3. 資源與建築 (Resources and Buildings)
 
 - Normalized Tables (正規化資料表) (v2026.04.09.01):
-  - **village_resources**: 獨立儲存村莊各類資源 (糧食、木材、石材) 數值的資料表.
-  - **buffs**: 獨立儲存村莊建築/增益 XP 的資料表.
+  - `village_resources`: 獨立儲存村莊各類資源 (糧食、木材、石材) 數值的資料表.
+  - `buffs`: 獨立儲存村莊建築/增益 XP 的資料表.
 - Scaled Integer (縮放整數):
   - 定義: 為了避免浮點數精確度飄移, 資料庫中使用整數儲存放大後的數值.
   - 範例: 1.25 倍品質存為 125. 資源數量與 XP 則直接以 1x 整數儲存.
@@ -46,6 +52,6 @@
   - 定義: 背景執行的輕量級任務, 負責處理那些已達到 Completion Timestamp 但尚未被玩家主動觸發更新的結算作業.
 
 ## Changelog
-- 2026.04.07.00: Updated to reflect 1-hour lease model and stats recalculation logic. See [2026.04.07.00.md](../../changelogs/2026.04.07.00.md)
-- 2026.04.08.00: Defined 150 Cycles Sliding Window and Action Cycle concepts. See [2026.04.08.00.md](../../changelogs/2026.04.08.00.md)
-- 2026.04.09.01: Introduced Normalized Tables and Base Outcome terminology. Removed Satiety. See [2026.04.09.01.md](../../changelogs/2026.04.09.01.md)
+- 2026.04.07.00: Updated to reflect 1-hour lease model and stats recalculation logic. - See [2026.04.07.00.md](changelogs/2026.04.07.00.md)
+- 2026.04.08.00: Defined 150 Cycles Sliding Window and Action Cycle concepts. - See [2026.04.08.00.md](changelogs/2026.04.08.00.md)
+- 2026.04.09.01: Introduced Normalized Tables and Base Outcome terminology. Removed Satiety. - See [2026.04.09.01.md](changelogs/2026.04.09.01.md)

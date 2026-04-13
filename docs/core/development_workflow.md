@@ -30,6 +30,7 @@ Every significant change must follow this lifecycle.
 Every documentation file in `docs/` (except changelogs) MUST contain a `## Changelog` section at the end.
 - Format: `- YYYY.MM.DD.NN: [Short summary of changes] - See [YYYY.MM.DD.NN.md](../changelogs/YYYY.MM.DD.NN.md)`
 - AI is responsible for appending this entry to all modified docs before finalizing the Change Plan.
+- Formatting Rule: Do not use Markdown bold or italics in project documents. Use headings, lists, tables, code blocks, and backticks instead.
 
 ## 4. Change Plan Template
 ```markdown
@@ -60,19 +61,19 @@ Every documentation file in `docs/` (except changelogs) MUST contain a `## Chang
 ## 5. 偵錯與日誌規範 (Logging & Debugging)
 為了追蹤非同步操作與複雜結算邏輯, 系統必須將日誌輸出至 `stdout`, 格式如下:
 `[REQ_ID] [USER_ID/SYSTEM] {TYPE}: {MESSAGE}`
-- **REQ_ID**: 每個 Slash Command 或 Watcher Task 的唯一 UUID.
-- **USER_ID**: 觸發者的 Discord ID (系統任務則為 `SYSTEM`).
-- **TYPE**: 日誌類別 (CMD, RESP, COST, SETTLE, STATUS, ERROR).
-- **追蹤重點**:
+- `REQ_ID`: 每個 Slash Command 或 Watcher Task 的唯一 UUID.
+- `USER_ID`: 觸發者的 Discord ID (系統任務則為 `SYSTEM`).
+- `TYPE`: 日誌類別 (CMD, RESP, COST, SETTLE, STATUS, ERROR).
+- 追蹤重點:
   - 指令輸入與回傳結果 (CMD/RESP).
   - 資源扣除明細 (COST: food, wood, stone).
   - 行動結算產出 (SETTLE: xp_gained, resources_gained).
   - 狀態變更 (STATUS: from X to Y).
 
 ## 6. 開發者測試 (Developer Testing)
-- **週期加速**: 測試期間建議設定 `ACTION_CYCLE_MINUTES=1` 並將 Watcher Heartbeat 設為 60s 以快速驗證邏輯.
-- **SSOT 遵循**: 任何邏輯調整必須先反映在 `docs/` 文件中, 才能進入實作.
-- **日誌對齊**: 測試時應優先檢視 `stdout` 以確認資源扣除與結算次數是否符合預期.
+- 週期加速: 測試期間建議設定 `ACTION_CYCLE_MINUTES=1` 並將 Watcher Heartbeat 設為 60s 以快速驗證邏輯.
+- SSOT 遵循: 任何邏輯調整必須先反映在 `docs/` 文件中, 才能進入實作.
+- 日誌對齊: 測試時應優先檢視 `stdout` 以確認資源扣除與結算次數是否符合預期.
 
 ## Changelog
 - 2026.04.06.00: Clarified and then finalized the workflow around the current flat `src/` service layout and required document synchronization. - See [2026.04.06.00.md](../changelogs/2026.04.06.00.md)

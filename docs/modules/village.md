@@ -43,11 +43,12 @@
   1. 時差 (Delta): 現在時間 - last_tick_time.
   2. 週期單位 (Cycle Units): Delta_Minutes / ACTION_CYCLE_MINUTES.
   3. 損耗公式 (每週期): int(活躍玩家數 * 0.5) + int(當前 XP * (0.001 + 當前 XP / 5,000,000)).
-  4. 倍增威脅 (v2026.04.10.00): 若村莊內存在活躍怪物, 損耗值翻倍 (x2).
-  5. 總損耗: 週期單位 * 每週期損耗.
-  6. 套用: 將 buffs 表中所有相關項目的 XP 減去總損耗 (最小為 0).
-  7. 降級偵測: 若結算後增益等級低於結算前, 系統將發送降級公告.
-  8. 更新: last_tick_time = 現在時間.
+  4. 威脅倍增 (v2026.04.13.00): 若村莊內存在威脅節點 (Threat Node) 且 HP 高於 活躍玩家數 * 100, 損耗值翻倍 (x2)。
+  5. 村莊保護 (v2026.04.13.00): 若村莊目前存有有效保護 Buff, 損耗值減少 50%。
+  6. 總損耗: 週期單位 * 每週期損耗.
+  7. 套用: 將 buffs 表中所有相關項目的 XP 減去總損耗 (最小為 0).
+  8. 降級偵測: 若結算後增益等級低於結算前, 系統將發送降級公告.
+  9. 更新: last_tick_time = 現在時間.
 
 ### 5. 村莊增益 (Buffs/Buildings)
 - 廚房 (Food Efficiency): 降低每次行動週期所需的糧食消耗. (ID 1)
@@ -55,9 +56,14 @@
 - 加工 (Resource Yield): (ID 3)
 - 狩獵 (Hunting): (ID 4) (v2026.04.10.00)
 
+### 6. 村莊命令 (Village Command) (v2026.04.13.00)
+- 核心方針: 村莊層級的全局設定，影響所有處於 idle 狀態的玩家。
+- 設定規則: 支付 10 個 Token 後可變更，詳細規則參見 docs/modules/tokens.md。
+- 操作介面: 使用 `/idlevillage-village-command` 設定, 介面中需明確提示本次操作會消耗 10 個 Token。
+
 ## Changelog
-- 2026.04.07.00: Replaced satiety refill with 1-hour lease logic. Updated building effects. - See [2026.04.07.00.md](../changelogs/2026.04.07.00.md)
 - 2026.04.08.00: Implemented Action Cycle Duration and updated Food Efficiency cost logic. - See [2026.04.08.00.md](../changelogs/2026.04.08.00.md)
 - 2026.04.08.03: Switched to dynamic exponential decay model for buildings. - See [2026.04.08.03.md](../changelogs/2026.04.08.03.md)
 - 2026.04.09.01: Normalized Resources and Buildings (as "buffs") into separate tables. Performed numerical rebalance. Added level-down notifications. - See [2026.04.09.01.md](../changelogs/2026.04.09.01.md)
 - 2026.04.10.00: Updated initialization resources (Gold 0), building cost model (50+50), and doubled decay during monster presence. - See [2026.04.10.00.md](../changelogs/2026.04.10.00.md)
+- 2026.04.13.00: Added Village Command logic, protection buff impact, and dynamic threat decay threshold. - See [2026.04.13.00.md](../changelogs/2026.04.13.00.md)

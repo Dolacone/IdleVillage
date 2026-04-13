@@ -27,7 +27,7 @@
 - Last Command Time: 玩家首次執行 `/idlevillage` 時寫入
 
 ## Changelog
-- 2026.04.07.00: Simplified status and schema. Removed weight and satiety. See [2026.04.07.00.md](../../changelogs/2026.04.07.00.md)
-- 2026.04.08.00: Added exploring to the active player states and clarified Action Cycle timing fields. See [2026.04.08.00.md](../../changelogs/2026.04.08.00.md)
-- 2026.04.09.01: Performed numerical rebalance and standardized Action Cycle fields. See [2026.04.09.01.md](../../changelogs/2026.04.09.01.md)
-- 2026.04.10.00: Added attack state to player status lifecycle for monster combat. See [2026.04.10.00.md](../../changelogs/2026.04.10.00.md)
+- 2026.04.07.00: Simplified status and schema. Removed weight and satiety. - See [2026.04.07.00.md](../changelogs/2026.04.07.00.md)
+- 2026.04.08.00: Added exploring to the active player states and clarified Action Cycle timing fields. - See [2026.04.08.00.md](../changelogs/2026.04.08.00.md)
+- 2026.04.09.01: Performed numerical rebalance and standardized Action Cycle fields. - See [2026.04.09.01.md](../changelogs/2026.04.09.01.md)
+- 2026.04.10.00: Added attack state to player status lifecycle for monster combat. - See [2026.04.10.00.md](../changelogs/2026.04.10.00.md)

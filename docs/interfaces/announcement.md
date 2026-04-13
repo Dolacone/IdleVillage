@@ -3,11 +3,11 @@
 定義伺服器公開頻道中的村莊公告看板格式.
 
 ### 1. 顯示規則
-- **訊息類型:** 混合格式訊息 (純文字資源區塊, 搭配建築與村民的 Code Block).
-- **更新機制:** 當村莊中有玩家執行 `/idlevillage`、Watcher 完成結算, 或管理員執行 `/idlevillage-announcement` 時嘗試觸發更新.
-- **節流控制 (Throttling)**: 每次公告更新後需冷卻 60 秒 (由資料庫 `last_announcement_updated` 紀錄).
+- 訊息類型: 混合格式訊息 (純文字資源區塊, 搭配建築與村民的 Code Block).
+- 更新機制: 當村莊中有玩家執行 `/idlevillage`、Watcher 完成結算, 或管理員執行 `/idlevillage-announcement` 時嘗試觸發更新.
+- 節流控制 (Throttling): 每次公告更新後需冷卻 60 秒 (由資料庫 `last_announcement_updated` 紀錄).
 - 排序邏輯: Active Villagers 依據彙整後的人數 (Count) 降序排列; 若人數相同, 按動作名稱 (Action Name) 升序排列.
-- **活躍定義:** 僅列出目前非 `missing` 狀態的玩家.
+- 活躍定義: 僅列出目前非 `missing` 狀態的玩家.
 
 ### 2. 訊息格式模板 (Template)
 此模板同時用於 /idlevillage 的 Embed Description 以及公開公告訊息, 以確保視覺一致性.
@@ -15,7 +15,7 @@
 (Last Update: <t:{unix_timestamp}:R>)
 
 Village Threat:
-{None | ⚠️ {Monster_Name} (HP: {hp})}
+{None | ⚠️ Monsters (HP: {hp})}
 
 Village Resources (Cap: {max})
 🍎 {food} | 🪵 {wood} | 🪨 {stone} | 💰 {gold}
@@ -39,7 +39,7 @@ Active Villagers
   - (Last Update: <t:{unix_timestamp}:R>) 位於訊息最上方.
   - 使用 Discord 的動態時間格式 (Relative Time), 自動適應使用者時區.
 - Village Threat (v2026.04.11.00):
-  - 格式變更: 若有活躍怪物, 將名稱與 HP 移至新行, 並以警告表情符號 (⚠️) 開頭.
+  - 格式變更: 若有活躍威脅節點, 將 Monsters 與 HP 移至新行, 並以警告表情符號 (⚠️) 開頭.
   - 數值簡化: 僅顯示當前 HP, 不顯示最大 HP 與品質 (Quality).
 - Resources:
   - 不使用 Code Block.
@@ -58,7 +58,7 @@ Active Villagers
     - idle -> Idle
     - exploring -> Exploring
     - gathering -> Gathering {Resource_Type}
-    - attack -> Attacking {Monster_Name}
+    - attack -> Attacking Monsters
     - building -> Building {Building_Name}
   - 排序規則:
     1. 按人數 (Count) 降序排列.
@@ -68,7 +68,6 @@ Active Villagers
 ### 4. 通知機制 (Notifications)
 除公告看板外, 系統會在以下事件發生時於公告頻道發送即時訊息:
 - 資源耗盡通知: 當資源節點存量歸零 (Out of Stock) 時, 發送通知提醒村莊已無該項產出.
-- 怪物出現與逃跑: 當探索觸發怪物或怪物 48h 逾期逃跑時, 發送公告.
 - 建築升級通知: 當村莊建築等級提升時, 發送慶祝訊息.
 - 建築降級通知: 當建築因 XP 損耗而降級時, 發送提醒訊息.
 - 閒置標註通知: 當玩家完成目前行動且未排定下一個行動而進入 Idle 狀態時, 發送訊息標註 (@tag) 該玩家.
