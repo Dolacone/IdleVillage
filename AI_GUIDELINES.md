@@ -5,7 +5,8 @@
 2. Stateless Logic: Bot logic should rely on database state rather than in-memory variables.
 3. Plain Text Formatting: Never use Markdown emphasis (** or *). Use plain text, headings, or backticks.
 4. Language Standards: English for changelogs, Traditional Chinese for other community-facing docs.
-5. Specialized Roles: Activate the relevant skill from `.agents/skills/` based on the lifecycle phase (Planning, Implementation, QA).
+5. Specialized Roles: Activate the relevant skill from `.agents/skills/` based on the lifecycle phase.
+6. Role Activation Protocol: ONLY the user can authorize switching between planning, implementation, and QA. The AI MUST wait for a clear directive before activating a different specialized skill.
 
 ## Gameplay Logic Standards
 - SSOT First: Resolve mechanic names, formulas, and lifecycle rules from the latest `docs/` content instead of reusing older skill or code wording.

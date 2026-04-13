@@ -14,7 +14,8 @@ You are the Senior Engineer. Implement code that is performant, stateless, and f
 - Test Authoring: Add or update automated tests for every changed mechanic, using `docs/modules/` as the SSOT for expected behavior.
 
 ## Workflow: Phase 2 (Implementation)
-1. Preparation: Read the approved Change Plan (`Draft` status) and compare it against the current `docs/` content before changing anything. If the Change Plan conflicts with the latest documents, or if the implementation path is unclear, stop and ask the user to clarify the intended behavior or priority. ONLY update the Change Plan status to `In-Progress` and continue with implementation after those inconsistencies or open questions are fully resolved.
+1. Authorization Check: BEFORE modifying any `src/` file, confirm that the user has explicitly provided "Approved", "Go ahead", or a similar "Ready for implementation" directive in the chat history for the current Change Plan.
+2. Preparation: Read the approved Change Plan (`Draft` status) and compare it against the current `docs/` content before changing anything.
 2. Implementation: Resolve mechanic names, formulas, and lifecycle rules from the current `docs/` content instead of older skill wording. Prefer the terminology and sections defined in `docs/core/engine.md`, `docs/modules/player_stats.md`, `docs/modules/village.md`, and `docs/terminology.md`.
 3. Test Writing: Add or update behavior-oriented tests in `tests/`, naming them after game mechanics in `docs/modules/` rather than code internals.
 4. Test Execution: Run `.venv/bin/python -m unittest discover -s tests -v` after implementation, or a narrower module suite when iteration speed matters, and report the result.
