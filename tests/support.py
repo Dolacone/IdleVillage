@@ -236,30 +236,28 @@ class DatabaseTestCase(unittest.IsolatedAsyncioTestCase):
         self,
         village_id,
         *,
-        name="Wild Boar",
+        name="Monsters",
         reward_resource_type="food",
         quality=100,
         hp=1000,
         max_hp=1000,
         expires_at=None,
     ):
-        if expires_at is None:
-            expires_at = datetime.utcnow() + timedelta(hours=48)
+        del expires_at
 
         async with schema.get_connection() as db:
             await db.execute(
                 """
                 INSERT INTO monsters (
-                    village_id, name, reward_resource_type, quality, hp, max_hp, expires_at
+                    village_id, name, reward_resource_type, quality, hp, max_hp
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(village_id) DO UPDATE SET
                     name = excluded.name,
                     reward_resource_type = excluded.reward_resource_type,
                     quality = excluded.quality,
                     hp = excluded.hp,
-                    max_hp = excluded.max_hp,
-                    expires_at = excluded.expires_at
+                    max_hp = excluded.max_hp
                 """,
                 (
                     village_id,
@@ -268,7 +266,6 @@ class DatabaseTestCase(unittest.IsolatedAsyncioTestCase):
                     quality,
                     hp,
                     max_hp,
-                    expires_at.isoformat(),
                 ),
             )
             await db.commit()
@@ -315,3 +312,16 @@ class DatabaseTestCase(unittest.IsolatedAsyncioTestCase):
             (village_id,),
         )
         return {buff_id: xp for buff_id, xp in rows}
+
+    async def fetch_tokens(self, player_discord_id, village_id):
+        rows = await self.fetchall(
+            """
+            SELECT token_type, amount
+            FROM tokens
+            WHERE player_discord_id = ?
+              AND village_id = ?
+            ORDER BY token_type
+            """,
+            (player_discord_id, village_id),
+        )
+        return {token_type: amount for token_type, amount in rows}

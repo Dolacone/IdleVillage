@@ -108,7 +108,7 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         buffs = await self.fetch_buffs(village_id)
         self.assertEqual(buffs, {1: 4995, 2: 4995, 3: 4995, 4: 0})
 
-    async def test_village_decay_doubles_when_monster_is_active(self):
+    async def test_village_decay_doubles_when_monster_hp_exceeds_active_player_threshold(self):
         last_tick = datetime.utcnow() - timedelta(hours=1)
         with_monster_village = await self.create_village(
             food_efficiency_xp=1000,
@@ -126,7 +126,7 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         )
         await self.create_player(with_monster_village, status="idle", last_message_time=datetime.utcnow())
         await self.create_player(without_monster_village, status="idle", last_message_time=datetime.utcnow())
-        await self.create_monster(with_monster_village, expires_at=datetime.utcnow() + timedelta(hours=2))
+        await self.create_monster(with_monster_village, hp=1000, max_hp=2000)
 
         async with schema.get_connection() as db:
             await Engine.settle_village(with_monster_village, db)
@@ -137,6 +137,46 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
 
         self.assertEqual(buffs_with_monster, {1: 998, 2: 998, 3: 998, 4: 998})
         self.assertEqual(buffs_without_monster, {1: 999, 2: 999, 3: 999, 4: 999})
+
+    async def test_village_decay_does_not_double_when_monster_hp_is_below_threshold(self):
+        last_tick = datetime.utcnow() - timedelta(hours=1)
+        village_id = await self.create_village(
+            food_efficiency_xp=1000,
+            storage_capacity_xp=1000,
+            resource_yield_xp=1000,
+            hunting_xp=1000,
+            last_tick_time=last_tick,
+        )
+        await self.create_player(village_id, status="idle", last_message_time=datetime.utcnow())
+        await self.create_monster(village_id, hp=100, max_hp=2000)
+
+        async with schema.get_connection() as db:
+            await Engine.settle_village(village_id, db)
+
+        buffs = await self.fetch_buffs(village_id)
+        self.assertEqual(buffs, {1: 999, 2: 999, 3: 999, 4: 999})
+
+    async def test_village_protection_reduces_decay_by_half(self):
+        last_tick = datetime.utcnow() - timedelta(hours=1)
+        village_id = await self.create_village(
+            food_efficiency_xp=1000,
+            storage_capacity_xp=1000,
+            resource_yield_xp=1000,
+            hunting_xp=1000,
+            last_tick_time=last_tick,
+        )
+        await self.create_player(village_id, status="idle", last_message_time=datetime.utcnow())
+
+        async with schema.get_connection() as db:
+            await db.execute(
+                "UPDATE villages SET protection_expires_at = ? WHERE id = ?",
+                ((datetime.utcnow() + timedelta(hours=1)).isoformat(), village_id),
+            )
+            await db.commit()
+            await Engine.settle_village(village_id, db)
+
+        buffs = await self.fetch_buffs(village_id)
+        self.assertEqual(buffs, {1: 1000, 2: 1000, 3: 1000, 4: 1000})
 
     async def test_village_interrupted_action_settles_partial_progress(self):
         village_id = await self.create_village(food=0)

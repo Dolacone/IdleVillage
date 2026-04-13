@@ -12,7 +12,9 @@ from database.schema import (
     BUFF_FOOD_EFFICIENCY,
     BUFF_HUNTING,
     BUFF_IDS,
+    PLAYER_BUFF_TYPES,
     RESOURCE_TYPES,
+    TOKEN_TYPES,
     BUFF_STORAGE_CAPACITY,
     BUFF_RESOURCE_YIELD,
     get_connection,
@@ -38,13 +40,11 @@ class Engine:
     BASE_FOOD_COST = 20
     STATS_BASE_VALUE = 50
     EXPLORING_BASE_CHANCE = 0.2
-    MONSTER_DISCOVERY_RATIO = 0.1
-    MAX_RESOURCE_NODE_STOCK = 8000
     MAX_RESOURCE_QUALITY = 175
-    MONSTER_LIFETIME_HOURS = 48
-    MONSTER_REWARD_XP = 1000
     RESOURCE_TYPES = RESOURCE_TYPES
     BUFF_IDS = BUFF_IDS
+    TOKEN_TYPES = TOKEN_TYPES
+    PLAYER_BUFF_TYPES = PLAYER_BUFF_TYPES
 
     BUILDING_NAMES = {
         BUFF_FOOD_EFFICIENCY: "廚房",
@@ -64,6 +64,13 @@ class Engine:
         ("Wild Boar", "food"),
         ("Ancient Treant", "wood"),
         ("Stone Golem", "stone"),
+    )
+    VILLAGE_COMMANDS = (
+        "gathering_food",
+        "gathering_wood",
+        "gathering_stone",
+        "exploring",
+        "attack",
     )
 
     @staticmethod
@@ -131,6 +138,28 @@ class Engine:
         return (float(stat_a or 0) + float(stat_b or 0)) / 2.0 / 100.0
 
     @staticmethod
+    def _token_type_for_action(action: str):
+        mapping = {
+            "gathering": "gathering",
+            "exploring": "exploring",
+            "building": "building",
+            "attack": "attacking",
+        }
+        return mapping.get(action)
+
+    @staticmethod
+    def _player_buff_bonus_for_action(buff_type: str, action_type: str):
+        mapping = {
+            "gathering": {"gathering_food", "gathering_wood", "gathering_stone", "gathering"},
+            "exploring": {"exploring"},
+            "building": {"building"},
+            "attacking": {"attack"},
+        }
+        if not buff_type:
+            return 0
+        return 100 if action_type in mapping.get(buff_type, set()) else 0
+
+    @staticmethod
     def calculate_outcome(multiplier: float, time_ratio: float):
         return int(Engine.BASE_OUTCOME * max(0.0, multiplier) * max(0.0, time_ratio))
 
@@ -153,10 +182,9 @@ class Engine:
 
     @staticmethod
     async def _fetch_active_monster(db, village_id: int, now: datetime = None):
-        now = now or datetime.now(timezone.utc).replace(tzinfo=None)
         async with db.execute(
             """
-            SELECT id, name, reward_resource_type, quality, hp, max_hp, expires_at
+            SELECT id, name, reward_resource_type, quality, hp, max_hp
             FROM monsters
             WHERE village_id = ?
             """,
@@ -167,9 +195,8 @@ class Engine:
         if not row:
             return None
 
-        monster_id, name, reward_resource_type, quality, hp, max_hp, expires_at_str = row
-        expires_at = Engine._parse_timestamp(expires_at_str)
-        if expires_at is not None and expires_at <= now:
+        monster_id, name, reward_resource_type, quality, hp, max_hp = row
+        if int(hp or 0) <= 0:
             return None
 
         return {
@@ -179,7 +206,6 @@ class Engine:
             "quality": int(quality),
             "hp": int(hp),
             "max_hp": int(max_hp),
-            "expires_at": expires_at,
         }
 
     @staticmethod
@@ -189,54 +215,61 @@ class Engine:
         quality: int,
         exploring_efficiency: float,
         spawned_at: datetime,
+        hp_gain: int,
+        storage_capacity: int,
     ):
-        monster_choice = random.choice(Engine.MONSTER_DEFINITIONS)
-        if isinstance(monster_choice, tuple):
-            name, reward_resource_type = monster_choice
+        del exploring_efficiency, spawned_at
+        name = "Monsters"
+        reward_resource_type = "food"
+        max_hp = max(1, int(storage_capacity * 2))
+        hp_gain = max(1, int(hp_gain))
+
+        async with db.execute(
+            """
+            SELECT hp, quality
+            FROM monsters
+            WHERE village_id = ?
+            """,
+            (village_id,),
+        ) as cursor:
+            existing = await cursor.fetchone()
+
+        if existing:
+            old_hp, old_quality = existing
+            new_hp = min(max_hp, int(old_hp or 0) + hp_gain)
+            new_quality = max(75, min(Engine.MAX_RESOURCE_QUALITY, int(old_quality or quality)))
         else:
-            reward_resource_type = str(monster_choice)
-            fallback = {
-                "food": "Wild Boar",
-                "wood": "Ancient Treant",
-                "stone": "Stone Golem",
-            }
-            name = fallback.get(reward_resource_type, "Wild Boar")
-            if reward_resource_type not in ("food", "wood", "stone"):
-                reward_resource_type = "food"
-        max_hp = max(1, int(Engine.BASE_OUTCOME * random.randint(15, 25) * max(0.0, exploring_efficiency)))
-        expires_at = spawned_at + timedelta(hours=Engine.MONSTER_LIFETIME_HOURS)
+            new_hp = min(max_hp, hp_gain)
+            new_quality = int(min(Engine.MAX_RESOURCE_QUALITY, quality))
 
         await db.execute(
             """
             INSERT INTO monsters (
-                village_id, name, reward_resource_type, quality, hp, max_hp, expires_at
+                village_id, name, reward_resource_type, quality, hp, max_hp
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(village_id) DO UPDATE SET
                 name = excluded.name,
                 reward_resource_type = excluded.reward_resource_type,
                 quality = excluded.quality,
                 hp = excluded.hp,
-                max_hp = excluded.max_hp,
-                expires_at = excluded.expires_at
+                max_hp = excluded.max_hp
             """,
             (
                 village_id,
                 name,
                 reward_resource_type,
-                int(min(Engine.MAX_RESOURCE_QUALITY, quality)),
+                new_quality,
+                new_hp,
                 max_hp,
-                max_hp,
-                expires_at.isoformat(),
             ),
         )
         return {
             "name": name,
             "reward_resource_type": reward_resource_type,
-            "quality": int(min(Engine.MAX_RESOURCE_QUALITY, quality)),
-            "hp": max_hp,
+            "quality": new_quality,
+            "hp": new_hp,
             "max_hp": max_hp,
-            "expires_at": expires_at,
         }
 
     @staticmethod
@@ -280,6 +313,182 @@ class Engine:
                 buffs[int(buff_id)] = int(xp or 0)
 
         return buffs
+
+    @staticmethod
+    async def _fetch_village_command(db, village_id: int):
+        async with db.execute(
+            "SELECT active_command FROM villages WHERE id = ?",
+            (village_id,),
+        ) as cursor:
+            row = await cursor.fetchone()
+        if not row or not row[0]:
+            return None
+        return str(row[0])
+
+    @staticmethod
+    async def _set_village_command(db, village_id: int, command: str | None):
+        await db.execute(
+            """
+            UPDATE villages
+            SET active_command = ?
+            WHERE id = ?
+            """,
+            (command, village_id),
+        )
+
+    @staticmethod
+    async def _fetch_protection_expires_at(db, village_id: int):
+        async with db.execute(
+            "SELECT protection_expires_at FROM villages WHERE id = ?",
+            (village_id,),
+        ) as cursor:
+            row = await cursor.fetchone()
+        return Engine._parse_timestamp(row[0]) if row and row[0] else None
+
+    @staticmethod
+    async def _set_protection_expires_at(db, village_id: int, expires_at: datetime | None):
+        await db.execute(
+            """
+            UPDATE villages
+            SET protection_expires_at = ?
+            WHERE id = ?
+            """,
+            (expires_at.isoformat() if expires_at else None, village_id),
+        )
+
+    @staticmethod
+    async def _fetch_player_tokens(db, player_discord_id: int, village_id: int):
+        tokens = {token_type: 0 for token_type in Engine.TOKEN_TYPES}
+        async with db.execute(
+            """
+            SELECT token_type, amount
+            FROM tokens
+            WHERE player_discord_id = ?
+              AND village_id = ?
+            """,
+            (player_discord_id, village_id),
+        ) as cursor:
+            rows = await cursor.fetchall()
+        for token_type, amount in rows:
+            if token_type in tokens:
+                tokens[token_type] = int(amount or 0)
+        return tokens
+
+    @staticmethod
+    async def _write_player_tokens(db, player_discord_id: int, village_id: int, tokens: dict):
+        await db.executemany(
+            """
+            INSERT INTO tokens (player_discord_id, village_id, token_type, amount)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(player_discord_id, village_id, token_type) DO UPDATE SET amount = excluded.amount
+            """,
+            [
+                (player_discord_id, village_id, token_type, int(tokens.get(token_type, 0)))
+                for token_type in Engine.TOKEN_TYPES
+            ],
+        )
+
+    @staticmethod
+    async def _fetch_player_buff(db, player_discord_id: int, village_id: int, now: datetime = None):
+        now = now or datetime.now(timezone.utc).replace(tzinfo=None)
+        async with db.execute(
+            """
+            SELECT buff_type, expires_at
+            FROM player_buffs
+            WHERE player_discord_id = ?
+              AND village_id = ?
+            """,
+            (player_discord_id, village_id),
+        ) as cursor:
+            row = await cursor.fetchone()
+        if not row:
+            return None
+        buff_type, expires_at_str = row
+        expires_at = Engine._parse_timestamp(expires_at_str)
+        if not buff_type or expires_at is None or expires_at <= now:
+            return None
+        return {"buff_type": str(buff_type), "expires_at": expires_at}
+
+    @staticmethod
+    async def _set_player_buff(db, player_discord_id: int, village_id: int, buff_type: str | None, expires_at: datetime | None):
+        await db.execute(
+            """
+            INSERT INTO player_buffs (player_discord_id, village_id, buff_type, expires_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(player_discord_id, village_id) DO UPDATE SET
+                buff_type = excluded.buff_type,
+                expires_at = excluded.expires_at
+            """,
+            (
+                player_discord_id,
+                village_id,
+                buff_type,
+                expires_at.isoformat() if expires_at else None,
+            ),
+        )
+
+    @staticmethod
+    async def grant_action_token(db, player_discord_id: int, village_id: int, action: str):
+        token_type = Engine._token_type_for_action(action)
+        if not token_type:
+            return None
+        tokens = await Engine._fetch_player_tokens(db, player_discord_id, village_id)
+        tokens[token_type] += 1
+        await Engine._write_player_tokens(db, player_discord_id, village_id, tokens)
+        return token_type
+
+    @staticmethod
+    async def use_player_buff_token(db, player_discord_id: int, village_id: int, token_type: str):
+        token_type = str(token_type or "")
+        if token_type not in Engine.TOKEN_TYPES:
+            return False, "Invalid token type."
+        tokens = await Engine._fetch_player_tokens(db, player_discord_id, village_id)
+        if tokens[token_type] <= 0:
+            return False, f"No {token_type} tokens available."
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        current_buff = await Engine._fetch_player_buff(db, player_discord_id, village_id, now=now)
+        if current_buff and current_buff["buff_type"] == token_type:
+            expires_at = current_buff["expires_at"] + timedelta(minutes=3 * Engine._action_cycle_minutes())
+        else:
+            expires_at = now + timedelta(minutes=3 * Engine._action_cycle_minutes())
+        tokens[token_type] -= 1
+        await Engine._write_player_tokens(db, player_discord_id, village_id, tokens)
+        await Engine._set_player_buff(db, player_discord_id, village_id, token_type, expires_at)
+        return True, expires_at
+
+    @staticmethod
+    async def use_village_protection_token(db, player_discord_id: int, village_id: int):
+        tokens = await Engine._fetch_player_tokens(db, player_discord_id, village_id)
+        spend_type = next((token_type for token_type in Engine.TOKEN_TYPES if tokens[token_type] > 0), None)
+        if spend_type is None:
+            return False, "No tokens available for village protection."
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        current_expires = await Engine._fetch_protection_expires_at(db, village_id)
+        base_time = current_expires if current_expires and current_expires > now else now
+        expires_at = base_time + timedelta(minutes=Engine._action_cycle_minutes())
+        tokens[spend_type] -= 1
+        await Engine._write_player_tokens(db, player_discord_id, village_id, tokens)
+        await Engine._set_protection_expires_at(db, village_id, expires_at)
+        return True, expires_at
+
+    @staticmethod
+    async def set_village_command_with_tokens(db, player_discord_id: int, village_id: int, command: str | None):
+        if command is not None and command not in Engine.VILLAGE_COMMANDS:
+            return False, "Invalid village command."
+        tokens = await Engine._fetch_player_tokens(db, player_discord_id, village_id)
+        total_tokens = sum(tokens.values())
+        if total_tokens < 10:
+            return False, "Not enough tokens to set the village command."
+        remaining_cost = 10
+        for token_type in Engine.TOKEN_TYPES:
+            if remaining_cost <= 0:
+                break
+            spend = min(tokens[token_type], remaining_cost)
+            tokens[token_type] -= spend
+            remaining_cost -= spend
+        await Engine._write_player_tokens(db, player_discord_id, village_id, tokens)
+        await Engine._set_village_command(db, village_id, command)
+        return True, command
 
     @staticmethod
     async def _write_village_resources(db, village_id: int, resources: dict):
@@ -332,6 +541,83 @@ class Engine:
     @staticmethod
     def _building_progress_lines(buffs: dict):
         return [Engine._building_progress_line(buff_id, buffs[buff_id]) for buff_id in Engine.BUFF_IDS]
+
+    @staticmethod
+    async def _resolve_village_command_target(db, village_id: int, command: str):
+        if command not in Engine.VILLAGE_COMMANDS:
+            return None, None
+        if command.startswith("gathering_"):
+            resource_type = command.split("_", 1)[1]
+            async with db.execute(
+                """
+                SELECT id
+                FROM resource_nodes
+                WHERE village_id = ?
+                  AND type = ?
+                  AND remaining_amount > 0
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (village_id, resource_type),
+            ) as cursor:
+                row = await cursor.fetchone()
+            if not row:
+                return None, None
+            return "gathering", int(row[0])
+        if command == "exploring":
+            return "exploring", None
+        if command == "attack":
+            monster = await Engine._fetch_active_monster(db, village_id)
+            if not monster:
+                return None, None
+            return "attack", int(monster["id"])
+        return None, None
+
+    @staticmethod
+    async def _compute_action_resource_costs(db, village_id: int, action: str, target_id: int, resources: dict = None, buffs: dict = None):
+        resources = dict(resources or await Engine._fetch_village_resources(db, village_id))
+        buffs = dict(buffs or await Engine._fetch_village_buffs(db, village_id))
+        resource_costs = {resource_type: 0 for resource_type in Engine.RESOURCE_TYPES}
+
+        if action in ("gathering", "exploring", "building", "attack"):
+            resource_costs["food"] = Engine._food_cost(buffs[BUFF_FOOD_EFFICIENCY])
+        if action == "building":
+            if not target_id or int(target_id) not in Engine.BUILDING_COSTS:
+                return None
+            cost_types = Engine.BUILDING_COSTS[int(target_id)]
+            resource_costs[cost_types[0]] += Engine.BASE_BUILD_COST
+            resource_costs[cost_types[1]] += Engine.BASE_BUILD_COST
+        if action == "gathering":
+            if not target_id:
+                return None
+            async with db.execute(
+                "SELECT remaining_amount FROM resource_nodes WHERE id = ? AND village_id = ?",
+                (target_id, village_id),
+            ) as cursor:
+                node = await cursor.fetchone()
+            if not node or int(node[0] or 0) <= 0:
+                return None
+        if action == "attack":
+            monster = await Engine._fetch_active_monster(db, village_id)
+            if not monster or int(target_id or 0) != monster["id"]:
+                return None
+
+        if any(resources[resource_type] < resource_costs[resource_type] for resource_type in Engine.RESOURCE_TYPES):
+            return None
+        return resource_costs
+
+    @staticmethod
+    async def _attempt_idle_village_command(db, village_id: int, resources: dict, buffs: dict):
+        command = await Engine._fetch_village_command(db, village_id)
+        if not command:
+            return None
+        action, target_id = await Engine._resolve_village_command_target(db, village_id, command)
+        if not action:
+            return None
+        costs = await Engine._compute_action_resource_costs(db, village_id, action, target_id, resources=resources, buffs=buffs)
+        if costs is None:
+            return None
+        return {"command": command, "action": action, "target_id": target_id, "resource_costs": costs}
 
     @staticmethod
     def _format_remaining_short(target_time: datetime, reference_time: datetime = None):
@@ -605,6 +891,7 @@ class Engine:
         start_time: datetime,
         end_time: datetime,
         db,
+        grant_cycle_token: bool = False,
         req_id: str = None,
         user_id=None,
     ):
@@ -617,16 +904,6 @@ class Engine:
             return {"discoveries": [], "expired_nodes": [], "upgrades": [], "monster_events": []}
 
         time_ratio = Engine._time_ratio(delta_seconds)
-        await Engine._record_action_logs(
-            db,
-            player_discord_id,
-            village_id,
-            status,
-            target_id,
-            start_time,
-            end_time,
-        )
-
         async with db.execute(
             """
             SELECT 1
@@ -647,28 +924,53 @@ class Engine:
         buffs = await Engine._fetch_village_buffs(db, village_id)
         storage_capacity = Engine._storage_capacity(buffs[BUFF_STORAGE_CAPACITY])
         yield_mult = Engine._yield_multiplier(buffs[BUFF_RESOURCE_YIELD])
+        active_buff = await Engine._fetch_player_buff(db, player_discord_id, village_id, now=end_time)
 
         food_gained, wood_gained, stone_gained, gold_gained = 0, 0, 0, 0
         depleted_nodes = []
         active_monster = await Engine._fetch_active_monster(db, village_id, now=end_time)
+        effective_status = status
+        effective_target_id = target_id
+        command_plan = None
 
         if status == "idle":
+            command_plan = await Engine._attempt_idle_village_command(db, village_id, resources, buffs)
+            if command_plan:
+                effective_status = command_plan["action"]
+                effective_target_id = command_plan["target_id"]
+                for resource_type, cost in command_plan["resource_costs"].items():
+                    resources[resource_type] -= cost
+                if any(cost > 0 for cost in command_plan["resource_costs"].values()):
+                    await Engine._write_village_resources(db, village_id, resources)
+
+        await Engine._record_action_logs(
+            db,
+            player_discord_id,
+            village_id,
+            effective_status,
+            effective_target_id,
+            start_time,
+            end_time,
+        )
+
+        if effective_status == "idle":
             efficiency = Engine.calculate_efficiency(p_per, p_kno)
             food_gained = Engine.calculate_outcome(efficiency * 0.5, time_ratio)
 
-        elif status == "gathering" and target_id:
+        elif effective_status == "gathering" and effective_target_id:
             async with db.execute(
                 "SELECT type, remaining_amount, quality FROM resource_nodes WHERE id = ?",
-                (target_id,),
+                (effective_target_id,),
             ) as cursor:
                 node = await cursor.fetchone()
 
             if node:
                 node_type, remaining_amount, quality = node
+                bonus = Engine._player_buff_bonus_for_action(active_buff["buff_type"], f"gathering_{node_type}") if active_buff else 0
                 if node_type == "food":
-                    efficiency = Engine.calculate_efficiency(p_per, p_kno)
+                    efficiency = Engine.calculate_efficiency(p_per + bonus, p_kno)
                 else:
-                    efficiency = Engine.calculate_efficiency(p_str, p_end)
+                    efficiency = Engine.calculate_efficiency(p_str + bonus, p_end)
 
                 gathered = Engine.calculate_outcome(
                     efficiency * (max(75, quality) / 100.0) * yield_mult,
@@ -680,12 +982,12 @@ class Engine:
                     new_remaining_amount = remaining_amount - actual_gathered
                     await db.execute(
                         "UPDATE resource_nodes SET remaining_amount = ? WHERE id = ?",
-                        (max(0, new_remaining_amount), target_id),
+                        (max(0, new_remaining_amount), effective_target_id),
                     )
                     if new_remaining_amount <= 0:
                         depleted_nodes.append(
                             {
-                                "node_id": target_id,
+                                "node_id": effective_target_id,
                                 "node_type": node_type,
                                 "reason": "out_of_stock",
                             }
@@ -697,10 +999,11 @@ class Engine:
                     elif node_type == "stone":
                         stone_gained = actual_gathered
 
-        elif status == "attack" and target_id:
-            if active_monster and active_monster["id"] == int(target_id):
+        elif effective_status == "attack" and effective_target_id:
+            if active_monster and active_monster["id"] == int(effective_target_id):
                 hunting_level = Engine._building_level_from_xp(buffs[BUFF_HUNTING])
-                efficiency = Engine.calculate_efficiency(p_str, p_agi)
+                bonus = Engine._player_buff_bonus_for_action(active_buff["buff_type"], "attack") if active_buff else 0
+                efficiency = Engine.calculate_efficiency(p_str + bonus, p_agi)
                 damage = Engine.calculate_outcome(
                     efficiency
                     * (1.0 + (hunting_level * 0.05))
@@ -708,92 +1011,79 @@ class Engine:
                     time_ratio,
                 )
                 if damage > 0:
-                    new_hp = max(0, active_monster["hp"] - damage)
+                    actual_damage = min(damage, active_monster["hp"])
+                    new_hp = max(0, active_monster["hp"] - actual_damage)
+                    gold_gained += actual_damage
+                    for _ in range(actual_damage):
+                        reward_resource = random.choice(["food", "wood", "stone"])
+                        if reward_resource == "food":
+                            food_gained += 1
+                        elif reward_resource == "wood":
+                            wood_gained += 1
+                        else:
+                            stone_gained += 1
                     if new_hp > 0:
                         await db.execute(
                             "UPDATE monsters SET hp = ? WHERE id = ? AND village_id = ?",
                             (new_hp, active_monster["id"], village_id),
                         )
                     else:
-                        reward_amount = int(active_monster["max_hp"] * (active_monster["quality"] / 100.0))
-                        reward_resource = active_monster["reward_resource_type"]
-                        if reward_resource == "food":
-                            food_gained += reward_amount
-                        elif reward_resource == "wood":
-                            wood_gained += reward_amount
-                        elif reward_resource == "stone":
-                            stone_gained += reward_amount
-                        gold_gained += reward_amount
-
-                        previous_hunting_xp = buffs[BUFF_HUNTING]
-                        previous_hunting_level = Engine._building_level_from_xp(previous_hunting_xp)
-                        buffs[BUFF_HUNTING] = previous_hunting_xp + Engine.MONSTER_REWARD_XP
-                        await Engine._write_village_buffs(db, village_id, buffs)
-                        new_hunting_level = Engine._building_level_from_xp(buffs[BUFF_HUNTING])
-                        if new_hunting_level > previous_hunting_level:
-                            upgrades.append(
-                                {
-                                    "building_id": BUFF_HUNTING,
-                                    "building_name": Engine.BUILDING_NAMES[BUFF_HUNTING],
-                                    "level": new_hunting_level,
-                                }
-                            )
-
                         await Engine._remove_monster(db, village_id)
                         monster_events.append(
                             {
                                 "kind": "defeated",
                                 "name": active_monster["name"],
-                                "reward_resource_type": reward_resource,
-                                "reward_amount": reward_amount,
+                                "reward_amount": actual_damage,
                             }
                         )
 
-        elif status == "building" and target_id:
-            efficiency = Engine.calculate_efficiency(p_kno, p_end)
+        elif effective_status == "building" and effective_target_id:
+            bonus = Engine._player_buff_bonus_for_action(active_buff["buff_type"], "building") if active_buff else 0
+            efficiency = Engine.calculate_efficiency(p_kno + bonus, p_end)
             xp_gained = Engine.calculate_outcome(efficiency, time_ratio)
             if xp_gained > 0:
-                previous_xp = buffs.get(target_id, 0)
+                previous_xp = buffs.get(effective_target_id, 0)
                 previous_level = Engine._building_level_from_xp(previous_xp)
                 new_xp = previous_xp + xp_gained
                 new_level = Engine._building_level_from_xp(new_xp)
-                buffs[target_id] = new_xp
+                buffs[effective_target_id] = new_xp
                 await Engine._write_village_buffs(db, village_id, buffs)
                 if new_level > previous_level:
                     upgrades.append(
                         {
-                            "building_id": target_id,
-                            "building_name": Engine.BUILDING_NAMES.get(target_id, f"Building {target_id}"),
+                            "building_id": effective_target_id,
+                            "building_name": Engine.BUILDING_NAMES.get(effective_target_id, f"Building {effective_target_id}"),
                             "level": new_level,
                         }
                     )
 
-        elif status == "exploring" and time_ratio > 0:
-            exploring_efficiency = Engine.calculate_efficiency(p_agi, p_per)
+        elif effective_status == "exploring" and time_ratio > 0:
+            bonus = Engine._player_buff_bonus_for_action(active_buff["buff_type"], "exploring") if active_buff else 0
+            exploring_efficiency = Engine.calculate_efficiency(p_agi + bonus, p_per)
             discovery_chance = min(1.0, time_ratio * exploring_efficiency * Engine.EXPLORING_BASE_CHANCE)
             if random.random() < discovery_chance:
                 quality = min(
                     Engine.MAX_RESOURCE_QUALITY,
                     max(75, int(random.gauss((p_agi + p_per) / 2.0, 50))),
                 )
-                should_spawn_monster = active_monster is None and random.random() < Engine.MONSTER_DISCOVERY_RATIO
+                discovered_type = random.choice(["food", "wood", "stone", "threat"])
+                stock = max(
+                    1,
+                    int(Engine.BASE_OUTCOME * random.randint(20, 40) * exploring_efficiency),
+                )
 
-                if should_spawn_monster:
-                    spawned_monster = await Engine._spawn_monster(
+                if discovered_type == "threat":
+                    threat_hp_gain = max(1, int(stock * 0.1))
+                    await Engine._spawn_monster(
                         db,
                         village_id,
                         quality,
                         exploring_efficiency,
                         end_time,
+                        hp_gain=threat_hp_gain,
+                        storage_capacity=storage_capacity,
                     )
-                    monster_events.append({"kind": "spawned", **spawned_monster})
                 else:
-                    node_type = random.choice(["food", "wood", "stone"])
-                    stock = max(
-                        1,
-                        int(Engine.BASE_OUTCOME * random.randint(20, 40) * exploring_efficiency),
-                    )
-
                     async with db.execute(
                         """
                         SELECT id, quality, remaining_amount
@@ -803,7 +1093,7 @@ class Engine:
                         ORDER BY id DESC
                         LIMIT 1
                         """,
-                        (village_id, node_type),
+                        (village_id, discovered_type),
                     ) as cursor:
                         existing_node = await cursor.fetchone()
 
@@ -816,7 +1106,7 @@ class Engine:
                                 ((old_quality * old_stock) + (quality * stock)) / (old_stock + stock)
                             )
                         new_quality = min(Engine.MAX_RESOURCE_QUALITY, new_quality)
-                        new_stock = min(Engine.MAX_RESOURCE_NODE_STOCK, old_stock + stock)
+                        new_stock = min(storage_capacity * 2, old_stock + stock)
                         await db.execute(
                             """
                             UPDATE resource_nodes
@@ -827,7 +1117,7 @@ class Engine:
                         )
                     else:
                         new_quality = quality
-                        new_stock = min(Engine.MAX_RESOURCE_NODE_STOCK, stock)
+                        new_stock = min(storage_capacity * 2, stock)
                         await db.execute(
                             """
                             INSERT INTO resource_nodes (
@@ -835,12 +1125,12 @@ class Engine:
                             )
                             VALUES (?, ?, ?, ?, NULL)
                             """,
-                            (village_id, node_type, new_quality, new_stock),
+                            (village_id, discovered_type, new_quality, new_stock),
                         )
 
                     discoveries.append(
                         {
-                            "type": node_type,
+                            "type": discovered_type,
                             "quality": new_quality,
                             "remaining_amount": new_stock,
                             "stock_added": stock,
@@ -871,11 +1161,14 @@ class Engine:
                 user_id,
                 "SETTLE",
                 (
-                    f"Player {player_discord_id} settled {status}: "
+                    f"Player {player_discord_id} settled {effective_status}: "
                     f"food={food_gained}, wood={wood_gained}, stone={stone_gained}, gold={gold_gained}, "
                     f"time_ratio={time_ratio:.2f}"
                 ),
             )
+
+        if grant_cycle_token and effective_status in ("gathering", "exploring", "building", "attack"):
+            await Engine.grant_action_token(db, player_discord_id, village_id, effective_status)
 
         return {
             "discoveries": discoveries,
@@ -905,29 +1198,7 @@ class Engine:
             buffs = await Engine._fetch_village_buffs(db, village_id)
             now = datetime.now(timezone.utc).replace(tzinfo=None)
             await Engine._mark_missing_players(db, now, village_id=village_id, req_id=req_id, user_id=user_id)
-
-            async with db.execute(
-                """
-                SELECT name
-                FROM monsters
-                WHERE village_id = ?
-                  AND expires_at <= ?
-                """,
-                (village_id, now.isoformat()),
-            ) as cursor:
-                expired_monster = await cursor.fetchone()
-            if expired_monster:
-                await Engine._remove_monster(db, village_id)
-                await Engine.send_monster_fled_announcement(
-                    village_id,
-                    expired_monster[0],
-                    bot=Engine.bot,
-                    req_id=req_id,
-                    user_id=user_id,
-                )
-
             active_monster = await Engine._fetch_active_monster(db, village_id, now=now)
-            decay_multiplier = 2 if active_monster else 1
 
             try:
                 last_tick = Engine._parse_timestamp(last_tick_time_str)
@@ -949,11 +1220,15 @@ class Engine:
                 active_count_row = await cursor.fetchone()
 
             active_count = active_count_row[0] if active_count_row else 0
+            threat_threshold = max(0, int(active_count) * 100)
+            decay_multiplier = 2 if active_monster and active_monster["hp"] > threat_threshold else 1
+            protection_expires_at = await Engine._fetch_protection_expires_at(db, village_id)
+            protection_multiplier = 0.5 if protection_expires_at and protection_expires_at > now else 1.0
             previous_levels = {buff_id: Engine._building_level_from_xp(buffs[buff_id]) for buff_id in Engine.BUFF_IDS}
             decay_by_buff = {}
             new_buffs = {}
             for buff_id in Engine.BUFF_IDS:
-                buff_decay = int(cycle_units * Engine._building_decay_per_cycle(active_count, buffs[buff_id]) * decay_multiplier)
+                buff_decay = int(cycle_units * Engine._building_decay_per_cycle(active_count, buffs[buff_id]) * decay_multiplier * protection_multiplier)
                 decay_by_buff[buff_id] = buff_decay
                 new_buffs[buff_id] = max(0, buffs[buff_id] - buff_decay)
 
@@ -979,7 +1254,7 @@ class Engine:
                     req_id,
                     user_id,
                     "SETTLE",
-                    f"Village {village_id} decay applied (x{decay_multiplier}): {decay_parts}",
+                    f"Village {village_id} decay applied (x{decay_multiplier}, protection={protection_multiplier}): {decay_parts}",
                 )
                 for buff_id, new_xp in new_buffs.items():
                     new_level = Engine._building_level_from_xp(new_xp)
@@ -1079,8 +1354,8 @@ class Engine:
             async with db.execute("SELECT name, hp, max_hp FROM monsters WHERE id = ?", (target_id,)) as cursor:
                 monster = await cursor.fetchone()
             if monster:
-                return f"Attacking {monster[0]} (HP: {monster[1]}/{monster[2]})"
-            return "Attacking Monster"
+                return f"Attacking Monsters (HP: {monster[1]}/{monster[2]})"
+            return "Attacking Monsters"
 
         if status == "exploring":
             return "Exploring"
@@ -1122,6 +1397,7 @@ class Engine:
                 current_last_update,
                 current_completion,
                 db,
+                grant_cycle_token=True,
                 req_id=req_id,
                 user_id=user_id,
             )
@@ -1241,7 +1517,7 @@ class Engine:
                     village_id,
                     (
                         f"The village defeated {event['name']}! "
-                        f"Gained {event['reward_amount']} {event['reward_resource_type']} and {event['reward_amount']} gold."
+                        f"Gained {event['reward_amount']} gold and {event['reward_amount']} random base resources."
                     ),
                     bot=Engine.bot,
                     req_id=req_id,
@@ -1464,55 +1740,17 @@ class Engine:
 
             resources = await Engine._fetch_village_resources(db, village_id)
             buffs = await Engine._fetch_village_buffs(db, village_id)
-            resource_costs = {resource_type: 0 for resource_type in Engine.RESOURCE_TYPES}
-
-            if action in ("gathering", "exploring", "building", "attack"):
-                resource_costs["food"] = Engine._food_cost(buffs[BUFF_FOOD_EFFICIENCY])
-            if action == "building":
-                if not target_id or int(target_id) not in Engine.BUILDING_COSTS:
-                    return None
-                cost_types = Engine.BUILDING_COSTS[int(target_id)]
-                resource_costs[cost_types[0]] += Engine.BASE_BUILD_COST
-                resource_costs[cost_types[1]] += Engine.BASE_BUILD_COST
-
-            if action == "gathering":
-                if not target_id:
-                    return None
-                async with db.execute(
-                    "SELECT remaining_amount FROM resource_nodes WHERE id = ? AND village_id = ?",
-                    (target_id, village_id),
-                ) as cursor:
-                    node = await cursor.fetchone()
-                if not node:
-                    return None
-                remaining_amount = node[0]
-                if remaining_amount <= 0:
-                    return None
-
-            if action == "attack":
-                if not target_id:
-                    return None
-                async with db.execute(
-                    """
-                    SELECT hp, expires_at
-                    FROM monsters
-                    WHERE id = ?
-                      AND village_id = ?
-                    """,
-                    (target_id, village_id),
-                ) as cursor:
-                    monster = await cursor.fetchone()
-                if not monster:
-                    return None
-                hp, expires_at_str = monster
-                expires_at = Engine._parse_timestamp(expires_at_str)
-                cycle_start = cycle_start_time or datetime.now(timezone.utc).replace(tzinfo=None)
-                if hp <= 0 or (expires_at is not None and expires_at <= cycle_start):
-                    return None
-
-            if any(resources[resource_type] < resource_costs[resource_type] for resource_type in Engine.RESOURCE_TYPES):
+            resource_costs = await Engine._compute_action_resource_costs(
+                db,
+                village_id,
+                action,
+                target_id,
+                resources=resources,
+                buffs=buffs,
+            )
+            if resource_costs is None:
                 shortfall_text = ", ".join(
-                    f"{resource_type}={resources[resource_type]}/{resource_costs[resource_type]}"
+                    f"{resource_type}={resources[resource_type]}"
                     for resource_type in Engine.RESOURCE_TYPES
                 )
                 log_event(
@@ -1662,16 +1900,25 @@ class Engine:
             storage_capacity = Engine._storage_capacity(buffs[BUFF_STORAGE_CAPACITY])
             last_updated = rendered_at or Engine._parse_timestamp(last_updated_str) or datetime.now(timezone.utc).replace(tzinfo=None)
             active_monster = await Engine._fetch_active_monster(db, village_id, now=last_updated)
+            active_command = await Engine._fetch_village_command(db, village_id)
+            protection_expires_at = await Engine._fetch_protection_expires_at(db, village_id)
             threat_line = "Village Threat:\nNone"
             if active_monster:
                 threat_line = (
                     "Village Threat:\n"
-                    f"⚠️ {active_monster['name']} (HP: {active_monster['hp']:,})"
+                    f"⚠️ Monsters (HP: {active_monster['hp']:,})"
                 )
+            protection_line = "Village Protection: Inactive"
+            if protection_expires_at and protection_expires_at > last_updated:
+                protection_line = f"Village Protection: Active until <t:{Engine._to_discord_unix(protection_expires_at)}:R>"
+            command_line = f"Village Command: {active_command or 'None'}"
             rich_text_lines = [
                 f"(Last Update: <t:{Engine._to_discord_unix(last_updated)}:R>)",
                 "",
                 threat_line,
+                "",
+                protection_line,
+                command_line,
                 "",
                 f"Village Resources (Cap: {storage_capacity:,})",
                 f"🍎 {resources['food']:,} | 🪵 {resources['wood']:,} | 🪨 {resources['stone']:,} | 💰 {resources['gold']:,}",
@@ -1700,9 +1947,9 @@ class Engine:
                     async with db.execute("SELECT name FROM monsters WHERE id = ?", (target_id,)) as cursor:
                         monster = await cursor.fetchone()
                     if monster:
-                        action_name = f"Attacking {monster[0]}"
+                        action_name = "Attacking Monsters"
                     else:
-                        action_name = "Attacking Monster"
+                        action_name = "Attacking Monsters"
                 else:
                     action_name = await Engine._get_target_description(db, status, target_id)
                 villager_lines.append((action_name, int(count)))

@@ -12,6 +12,16 @@ BUFF_RESOURCE_YIELD = 3
 BUFF_HUNTING = 4
 BUFF_IDS = (BUFF_FOOD_EFFICIENCY, BUFF_STORAGE_CAPACITY, BUFF_RESOURCE_YIELD, BUFF_HUNTING)
 STATS_BASE_VALUE = 50
+TOKEN_TYPES = ("gathering", "exploring", "building", "attacking")
+PLAYER_BUFF_TYPES = TOKEN_TYPES
+
+
+async def _ensure_column(db, table_name: str, column_name: str, definition: str):
+    async with db.execute(f"PRAGMA table_info({table_name})") as cursor:
+        columns = await cursor.fetchall()
+    existing_names = {column[1] for column in columns}
+    if column_name not in existing_names:
+        await db.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
 
 
 async def _create_current_tables(db):
@@ -22,7 +32,9 @@ async def _create_current_tables(db):
             last_tick_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             announcement_channel_id TEXT,
             announcement_message_id TEXT,
-            last_announcement_updated TIMESTAMP
+            last_announcement_updated TIMESTAMP,
+            active_command TEXT,
+            protection_expires_at TIMESTAMP
         )
         """
     )
@@ -119,16 +131,46 @@ async def _create_current_tables(db):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             village_id INTEGER NOT NULL UNIQUE,
             name TEXT NOT NULL,
-            reward_resource_type TEXT NOT NULL,
+            reward_resource_type TEXT NOT NULL DEFAULT 'food',
             quality INTEGER NOT NULL,
             hp INTEGER NOT NULL,
             max_hp INTEGER NOT NULL,
-            expires_at TIMESTAMP NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (village_id) REFERENCES villages(id)
         )
         """
     )
+
+    await db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tokens (
+            player_discord_id INTEGER NOT NULL,
+            village_id INTEGER NOT NULL,
+            token_type TEXT NOT NULL,
+            amount INTEGER DEFAULT 0,
+            PRIMARY KEY (player_discord_id, village_id, token_type),
+            FOREIGN KEY (player_discord_id, village_id) REFERENCES players(discord_id, village_id)
+        )
+        """
+    )
+
+    await db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS player_buffs (
+            player_discord_id INTEGER NOT NULL,
+            village_id INTEGER NOT NULL,
+            buff_type TEXT,
+            expires_at TIMESTAMP,
+            PRIMARY KEY (player_discord_id, village_id),
+            FOREIGN KEY (player_discord_id, village_id) REFERENCES players(discord_id, village_id)
+        )
+        """
+    )
+
+    await _ensure_column(db, "villages", "active_command", "TEXT")
+    await _ensure_column(db, "villages", "protection_expires_at", "TIMESTAMP")
+    await _ensure_column(db, "monsters", "reward_resource_type", "TEXT NOT NULL DEFAULT 'food'")
+    await _ensure_column(db, "monsters", "created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
 
     await db.execute(
         """

@@ -188,6 +188,25 @@ async def _build_embed(inter, db, village_id: int, player_discord_id: int):
     return embed
 
 
+async def _ensure_player_ready(db, village_id: int, player_discord_id: int):
+    if not await _village_exists(db, village_id):
+        return False, "Village not initialized for this server. Ask an admin to run `/idlevillage-initial`."
+    await Engine.settle_village(village_id, db)
+    player_discord_id = await _get_or_create_player(db, village_id, player_discord_id)
+    await _update_player_command_time(db, player_discord_id, village_id)
+    await Engine.settle_player(player_discord_id, village_id, db, is_ui_refresh=True)
+    return True, player_discord_id
+
+
+def _format_token_status(tokens: dict):
+    return (
+        f"Gathering: {tokens['gathering']}\n"
+        f"Exploring: {tokens['exploring']}\n"
+        f"Building: {tokens['building']}\n"
+        f"Attacking: {tokens['attacking']}"
+    )
+
+
 async def _render_interface(
     inter,
     *,
@@ -458,6 +477,137 @@ class ActionsCog(commands.Cog):
             update_command_activity=True,
         )
         log_event(req_id, inter.author.id, "RESP", "/idlevillage rendered")
+
+    @commands.slash_command(name="idlevillage-tokens", description="Check and spend personal village tokens")
+    async def idlevillage_tokens(
+        self,
+        inter: disnake.ApplicationCommandInteraction,
+        action: str = "status",
+        token_type: str = None,
+    ):
+        req_id = new_request_id()
+        log_event(req_id, inter.author.id, "CMD", f"/idlevillage-tokens action={action}")
+
+        if not inter.guild:
+            await inter.response.send_message("This command must be run in a server.", ephemeral=True)
+            return
+
+        village_id = int(inter.guild.id)
+        player_discord_id = int(inter.author.id)
+        action = str(action or "status").lower()
+        token_type = str(token_type).lower() if token_type else None
+
+        async with get_connection() as db:
+            ready, result = await _ensure_player_ready(db, village_id, player_discord_id)
+            if not ready:
+                await inter.response.send_message(result, ephemeral=True)
+                return
+
+            player_discord_id = result
+            response_lines = []
+            if action == "buff":
+                if not token_type:
+                    await inter.response.send_message(
+                        "Choose a token type for buff use: gathering, exploring, building, or attacking.",
+                        ephemeral=True,
+                    )
+                    return
+                success, buff_result = await Engine.use_player_buff_token(db, player_discord_id, village_id, token_type)
+                if not success:
+                    await inter.response.send_message(str(buff_result), ephemeral=True)
+                    return
+                response_lines.append(
+                    f"Used 1 {token_type} token. Matching actions now gain +100 total stats until <t:{Engine._to_discord_unix(buff_result)}:R>."
+                )
+            elif action == "protect":
+                success, protect_result = await Engine.use_village_protection_token(db, player_discord_id, village_id)
+                if not success:
+                    await inter.response.send_message(str(protect_result), ephemeral=True)
+                    return
+                response_lines.append(
+                    f"Village protection extended until <t:{Engine._to_discord_unix(protect_result)}:R>. Future decay is reduced by 50% while active."
+                )
+
+            tokens = await Engine._fetch_player_tokens(db, player_discord_id, village_id)
+            active_buff = await Engine._fetch_player_buff(db, player_discord_id, village_id)
+            protection_expires_at = await Engine._fetch_protection_expires_at(db, village_id)
+            await db.commit()
+
+        response_lines.append("Current tokens:")
+        response_lines.append(_format_token_status(tokens))
+        if active_buff:
+            response_lines.append(
+                f"Active buff: {active_buff['buff_type']} until <t:{Engine._to_discord_unix(active_buff['expires_at'])}:R>"
+            )
+        if protection_expires_at:
+            response_lines.append(
+                f"Village protection: <t:{Engine._to_discord_unix(protection_expires_at)}:R>"
+            )
+
+        await inter.response.send_message("\n".join(response_lines), ephemeral=True)
+
+    @commands.slash_command(name="idlevillage-village-command", description="View or set the village command")
+    async def idlevillage_village_command(
+        self,
+        inter: disnake.ApplicationCommandInteraction,
+        command: str = None,
+    ):
+        req_id = new_request_id()
+        log_event(req_id, inter.author.id, "CMD", f"/idlevillage-village-command command={command}")
+
+        if not inter.guild:
+            await inter.response.send_message("This command must be run in a server.", ephemeral=True)
+            return
+
+        village_id = int(inter.guild.id)
+        player_discord_id = int(inter.author.id)
+        normalized_command = str(command).lower() if command else None
+
+        async with get_connection() as db:
+            ready, result = await _ensure_player_ready(db, village_id, player_discord_id)
+            if not ready:
+                await inter.response.send_message(result, ephemeral=True)
+                return
+
+            player_discord_id = result
+            tokens = await Engine._fetch_player_tokens(db, player_discord_id, village_id)
+            total_tokens = sum(tokens.values())
+            current_command = await Engine._fetch_village_command(db, village_id)
+
+            if normalized_command:
+                success, command_result = await Engine.set_village_command_with_tokens(
+                    db,
+                    player_discord_id,
+                    village_id,
+                    normalized_command,
+                )
+                if not success:
+                    await inter.response.send_message(str(command_result), ephemeral=True)
+                    return
+                current_command = command_result
+                tokens = await Engine._fetch_player_tokens(db, player_discord_id, village_id)
+                total_tokens = sum(tokens.values())
+                await db.commit()
+                await inter.response.send_message(
+                    (
+                        f"Village command set to `{current_command}`. "
+                        "This setting consumed 10 tokens.\n"
+                        f"Remaining total tokens: {total_tokens}"
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+        valid_commands = ", ".join(Engine.VILLAGE_COMMANDS)
+        await inter.response.send_message(
+            (
+                f"Current village command: `{current_command or 'none'}`\n"
+                f"Your total tokens: {total_tokens}\n"
+                "Setting a village command will consume 10 tokens.\n"
+                f"Available commands: {valid_commands}"
+            ),
+            ephemeral=True,
+        )
 
 
 def setup(bot: commands.Bot):
