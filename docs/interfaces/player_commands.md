@@ -8,8 +8,7 @@
 - `/idlevillage-announcement`: [管理員] 在當前頻道發布村莊公告訊息 (Public).
 - `/idlevillage-initial`: [管理員] 初始化村莊.
 - `/idlevillage-manage`: [管理員] 互動式管理村莊資源與節點.
-- `/idlevillage-tokens`: 管理個人 Token 持有量、個人加成使用與村莊保護使用 (Ephemeral).
-- `/idlevillage-village-command`: 設定村莊命令 (Ephemeral), 介面必須清楚顯示本次設定將消耗 10 個 Token.
+- `/idlevillage-tokens`: 管理個人 Token 持有量、個人加成、村莊保護與村莊命令設定 (Ephemeral, Embed Menu).
 
 ### 2. 個人主介面 (/idlevillage)
 這是一個包含 Embed 與多個互動組件的隱藏訊息 (Ephemeral).
@@ -44,25 +43,26 @@
   - 顯示各類 Token 持有量。
   - 使用 Token 啟動個人加成。
   - 使用 Token 啟動村莊保護。
+  - 設定村莊命令。
 - 個人加成說明:
   - 必須清楚說明對應類別行動在公式計算時獲得 `+100` 總素質。
   - 持續時間顯示為 `3 * ACTION_CYCLE_MINUTES`。
 - 村莊保護說明:
   - 必須清楚說明保護效果為減少 50% 村莊建築 XP 損耗。
   - 持續時間顯示為 `1 * ACTION_CYCLE_MINUTES`。
-
-### 4. 村莊命令介面 (/idlevillage-village-command)
-- 功能範圍:
-  - 顯示目前村莊命令。
-  - 提供可選擇的村莊命令清單。
-  - 在確認前清楚提示將消耗 10 個 Token。
-- 失敗說明:
+ - 村莊命令說明:
+  - 必須顯示目前村莊命令。
+  - 必須提供可選擇的村莊命令清單。
+  - 必須先選擇要消耗的 Token 類型, 並清楚提示將消耗該類型的 10 個 Token。
+ - 互動需求:
+  - 必須使用互動式 Select/Menu 供玩家選擇功能、Token 類型與村莊命令內容。
+ - 失敗說明:
   - 若 Token 不足, 必須直接提示設定失敗且不變更村莊命令。
 
-### 5. 管理員管理介面 (/idlevillage-manage)
+### 4. 管理員管理介面 (/idlevillage-manage)
 這是為管理員設計的互動式選單 (Ephemeral), 用於更直觀地維護村莊狀態.
 
-#### 5.1 資源調整 (Resource Management)
+#### 4.1 資源調整 (Resource Management)
 - Step 1: 下拉選單 (Action Selector)
   - 選項: `Manage Resources`, `Manage Nodes`.
 - Step 2: 下拉選單 (Resource Type)
@@ -73,7 +73,7 @@
   - 快速調整按鈕: `+100`, `+1,000`, `-100`, `-1,000`.
   - Set Custom 按鈕: 點擊後彈出 Modal 視窗, 提供一個文字輸入欄位輸入絕對數值.
 
-#### 5.2 節點管理 (Node Management)
+#### 4.2 節點管理 (Node Management)
 - Step 1: 下拉選單 (Action Selector)
   - 選項: `Manage Nodes`.
 - Step 2: 下拉選單 (Node List)
@@ -83,7 +83,7 @@
 - Step 3: 移除按鈕
   - Remove Target 按鈕: 紅色樣式, 點擊後直接從資料庫移除該目標並重新渲染介面.
 
-### 6. 間隔控制規範 (Interval Control)
+### 5. 間隔控制規範 (Interval Control)
 - Action Cycle Duration: 由環境變數 `ACTION_CYCLE_MINUTES` 定義.
 - Refresh Button Cooldown: 5 秒.
 - Announcement Throttling: 60 秒.

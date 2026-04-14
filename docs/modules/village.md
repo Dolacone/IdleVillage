@@ -58,8 +58,8 @@
 
 ### 6. 村莊命令 (Village Command) (v2026.04.13.00)
 - 核心方針: 村莊層級的全局設定，影響所有處於 idle 狀態的玩家。
-- 設定規則: 支付 10 個 Token 後可變更，詳細規則參見 docs/modules/tokens.md。
-- 操作介面: 使用 `/idlevillage-village-command` 設定, 介面中需明確提示本次操作會消耗 10 個 Token。
+- 設定規則: 支付 10 個指定類型的 Token 後可變更，詳細規則參見 docs/modules/tokens.md。
+- 操作介面: 使用 `/idlevillage-tokens` 內的 Token Embed Menu 設定, 介面中需明確提示本次操作會消耗所選類型的 10 個 Token。
 
 ## Changelog
 - 2026.04.08.00: Implemented Action Cycle Duration and updated Food Efficiency cost logic. - See [2026.04.08.00.md](../changelogs/2026.04.08.00.md)

@@ -459,9 +459,16 @@ class Engine:
         return True, expires_at
 
     @staticmethod
-    async def use_village_protection_token(db, player_discord_id: int, village_id: int):
+    async def use_village_protection_token(db, player_discord_id: int, village_id: int, token_type: str | None = None):
         tokens = await Engine._fetch_player_tokens(db, player_discord_id, village_id)
-        spend_type = next((token_type for token_type in Engine.TOKEN_TYPES if tokens[token_type] > 0), None)
+        spend_type = str(token_type or "")
+        if spend_type:
+            if spend_type not in Engine.TOKEN_TYPES:
+                return False, "Invalid token type."
+            if tokens[spend_type] <= 0:
+                return False, f"No {spend_type} tokens available."
+        else:
+            spend_type = next((available_type for available_type in Engine.TOKEN_TYPES if tokens[available_type] > 0), None)
         if spend_type is None:
             return False, "No tokens available for village protection."
         now = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -474,20 +481,34 @@ class Engine:
         return True, expires_at
 
     @staticmethod
-    async def set_village_command_with_tokens(db, player_discord_id: int, village_id: int, command: str | None):
+    async def set_village_command_with_tokens(
+        db,
+        player_discord_id: int,
+        village_id: int,
+        command: str | None,
+        token_type: str | None = None,
+    ):
         if command is not None and command not in Engine.VILLAGE_COMMANDS:
             return False, "Invalid village command."
         tokens = await Engine._fetch_player_tokens(db, player_discord_id, village_id)
-        total_tokens = sum(tokens.values())
-        if total_tokens < Engine.VILLAGE_COMMAND_TOKEN_COST:
-            return False, "Not enough tokens to set the village command."
-        remaining_cost = Engine.VILLAGE_COMMAND_TOKEN_COST
-        for token_type in Engine.TOKEN_TYPES:
-            if remaining_cost <= 0:
-                break
-            spend = min(tokens[token_type], remaining_cost)
-            tokens[token_type] -= spend
-            remaining_cost -= spend
+        spend_type = str(token_type or "")
+        if spend_type:
+            if spend_type not in Engine.TOKEN_TYPES:
+                return False, "Invalid token type."
+            if tokens[spend_type] < Engine.VILLAGE_COMMAND_TOKEN_COST:
+                return False, f"Not enough {spend_type} tokens to set the village command."
+            tokens[spend_type] -= Engine.VILLAGE_COMMAND_TOKEN_COST
+        else:
+            total_tokens = sum(tokens.values())
+            if total_tokens < Engine.VILLAGE_COMMAND_TOKEN_COST:
+                return False, "Not enough tokens to set the village command."
+            remaining_cost = Engine.VILLAGE_COMMAND_TOKEN_COST
+            for available_type in Engine.TOKEN_TYPES:
+                if remaining_cost <= 0:
+                    break
+                spend = min(tokens[available_type], remaining_cost)
+                tokens[available_type] -= spend
+                remaining_cost -= spend
         await Engine._write_player_tokens(db, player_discord_id, village_id, tokens)
         await Engine._set_village_command(db, village_id, command)
         return True, command

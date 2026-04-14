@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from support import DatabaseTestCase
-from cogs.actions import ActionsCog, _build_embed
+from cogs.actions import ActionsCog, TokenView, _build_embed
 from cogs.events import EventsCog
 from cogs.general import (
     General,
@@ -576,7 +576,7 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         messages = [message.content for message in bot.get_channel(456).messages.values()]
         self.assertTrue(any("廚房" in message and "Level 1" in message for message in messages))
 
-    async def test_idlevillage_tokens_can_consume_a_buff_token(self):
+    async def test_idlevillage_tokens_renders_interactive_embed_menu(self):
         village_id = await self.create_village(guild_id=68)
         await self.create_player(village_id, discord_id=123)
         bot = _FakeBot()
@@ -589,25 +589,13 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
             bot=bot,
         )
 
-        async with schema.get_connection() as db:
-            await db.execute(
-                "INSERT INTO tokens (player_discord_id, village_id, token_type, amount) VALUES (?, ?, ?, ?)",
-                (123, village_id, "gathering", 1),
-            )
-            await db.commit()
+        await cog.idlevillage_tokens.callback(cog, inter)
 
-        await cog.idlevillage_tokens.callback(cog, inter, "buff", "gathering")
-
-        buff_row = await self.fetchone(
-            "SELECT buff_type FROM player_buffs WHERE player_discord_id = ? AND village_id = ?",
-            (123, village_id),
-        )
-        tokens = await self.fetch_tokens(123, village_id)
-        self.assertEqual(buff_row[0], "gathering")
-        self.assertEqual(tokens["gathering"], 0)
         self.assertEqual(inter.response.calls[-1]["ephemeral"], True)
+        self.assertIsInstance(inter.response.calls[-1]["view"], TokenView)
+        self.assertEqual(inter.response.calls[-1]["embed"].title, "Idle Village Tokens - Village 68")
 
-    async def test_idlevillage_village_command_consumes_ten_tokens(self):
+    async def test_idlevillage_tokens_can_consume_a_buff_token_from_menu(self):
         village_id = await self.create_village(guild_id=69)
         await self.create_player(village_id, discord_id=123)
         bot = _FakeBot()
@@ -623,14 +611,73 @@ class PlayerSystemAndCommandsBehaviorTests(DatabaseTestCase):
         async with schema.get_connection() as db:
             await db.execute(
                 "INSERT INTO tokens (player_discord_id, village_id, token_type, amount) VALUES (?, ?, ?, ?)",
-                (123, village_id, "gathering", 10),
+                (123, village_id, "gathering", 1),
             )
             await db.commit()
 
-        await cog.idlevillage_village_command.callback(cog, inter, "gathering_wood")
+        await cog.idlevillage_tokens.callback(cog, inter)
+
+        view = inter.response.calls[-1]["view"]
+        view.reset(mode="buff", token_type="gathering")
+        apply_button = next(item for item in view.children if item.__class__.__name__ == "TokenApplyButton")
+        action_inter = SimpleNamespace(
+            author=SimpleNamespace(id=123),
+            guild=SimpleNamespace(id=69, name="Village 69"),
+            response=_FakeResponse(),
+            bot=bot,
+        )
+
+        await apply_button.callback(action_inter)
+
+        buff_row = await self.fetchone(
+            "SELECT buff_type FROM player_buffs WHERE player_discord_id = ? AND village_id = ?",
+            (123, village_id),
+        )
+        tokens = await self.fetch_tokens(123, village_id)
+        self.assertEqual(buff_row[0], "gathering")
+        self.assertEqual(tokens["gathering"], 0)
+        self.assertIn("Used 1 Gathering token.", action_inter.response.calls[-1]["content"])
+
+    async def test_idlevillage_tokens_village_command_consumes_selected_token_type(self):
+        village_id = await self.create_village(guild_id=70)
+        await self.create_player(village_id, discord_id=123)
+        bot = _FakeBot()
+        bot.register_guild(70)
+        cog = ActionsCog(bot=bot)
+        inter = SimpleNamespace(
+            author=SimpleNamespace(id=123),
+            guild=SimpleNamespace(id=70, name="Village 70"),
+            response=_FakeResponse(),
+            bot=bot,
+        )
+
+        async with schema.get_connection() as db:
+            await db.executemany(
+                "INSERT INTO tokens (player_discord_id, village_id, token_type, amount) VALUES (?, ?, ?, ?)",
+                (
+                    (123, village_id, "building", 10),
+                    (123, village_id, "gathering", 4),
+                ),
+            )
+            await db.commit()
+
+        await cog.idlevillage_tokens.callback(cog, inter)
+
+        view = inter.response.calls[-1]["view"]
+        view.reset(mode="command", token_type="building", command="gathering_wood")
+        apply_button = next(item for item in view.children if item.__class__.__name__ == "TokenApplyButton")
+        action_inter = SimpleNamespace(
+            author=SimpleNamespace(id=123),
+            guild=SimpleNamespace(id=70, name="Village 70"),
+            response=_FakeResponse(),
+            bot=bot,
+        )
+
+        await apply_button.callback(action_inter)
 
         village = await self.fetchone("SELECT active_command FROM villages WHERE id = ?", (village_id,))
         tokens = await self.fetch_tokens(123, village_id)
         self.assertEqual(village[0], "gathering_wood")
-        self.assertEqual(tokens["gathering"], 0)
-        self.assertEqual(inter.response.calls[-1]["ephemeral"], True)
+        self.assertEqual(tokens["building"], 0)
+        self.assertEqual(tokens["gathering"], 4)
+        self.assertIn("consumed 10 building tokens", action_inter.response.calls[-1]["content"])

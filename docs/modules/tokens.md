@@ -37,8 +37,9 @@
 
 ### 4. 村莊命令 (Village Command)
 
-- 消耗: 累計消耗 10 個任何類別的 Token。
+- 消耗: 消耗 10 個指定類別的 Token。
 - 設定: 玩家可指定村莊目前的發展方針 (如 gathering_wood)。
+- 介面規則: 玩家需在 Token 介面中選擇本次要消耗的 Token 類型。
 - 影響: 
   - 所有狀態為 idle 的玩家在結算時會自動執行該命令。
   - 若命令因資源不足或節點不存在而失效，則自動退回基礎 idle 邏輯 (產出糧食)。
@@ -46,8 +47,8 @@
 
 ### 5. 指令介面 (Commands)
 
-- `/idlevillage-tokens`: 集中處理所有 Token 相關功能, 包含持有量查詢、個人加成使用與村莊保護使用。
-- `/idlevillage-village-command`: 用於設定村莊命令, 介面中必須清楚提示本次設定會消耗 10 個 Token。
+- `/idlevillage-tokens`: 集中處理所有 Token 相關功能, 以 Embed Menu 顯示持有量、個人加成、村莊保護與村莊命令設定。
+- `/idlevillage-tokens`: 村莊命令設定必須清楚提示本次操作會消耗所選類型的 10 個 Token。
 
 ## Changelog
 - 2026.04.13.00: Initial token module definition with categories, self-buffs, protection, and village command logic. - See [2026.04.13.00.md](../changelogs/2026.04.13.00.md)
