@@ -435,7 +435,7 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
         monster = await self.fetchone("SELECT id FROM monsters WHERE village_id = ?", (village_id,))
         latest_log = await self.fetchone(
             """
-            SELECT action_type
+            SELECT strength_delta, agility_delta, perception_delta, knowledge_delta, endurance_delta
             FROM player_actions_log
             WHERE player_discord_id = ? AND village_id = ?
             ORDER BY id DESC
@@ -449,7 +449,7 @@ class ResourcesModuleBehaviorTests(DatabaseTestCase):
         self.assertEqual(buffs[4], 0)
         self.assertEqual(player, ("idle", None))
         self.assertIsNone(monster)
-        self.assertEqual(latest_log[0], "attack")
+        self.assertEqual(latest_log, (1, 1, 0, 0, 0))
 
     async def test_completed_cycle_grants_matching_action_token(self):
         village_id = await self.create_village(food=200, wood=100, stone=100)

@@ -206,10 +206,9 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         node = await self.fetchone("SELECT remaining_amount FROM resource_nodes WHERE id = ?", (node_id,))
         log_row = await self.fetchone(
             """
-            SELECT action_type
+            SELECT count(*)
             FROM player_actions_log
             WHERE player_discord_id = ? AND village_id = ?
-            ORDER BY id DESC LIMIT 1
             """,
             (player_discord_id, village_id),
         )
@@ -217,7 +216,7 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
         self.assertEqual(resources["food"], 12)
         self.assertEqual(player, ("idle", None, None))
         self.assertEqual(node[0], 88)
-        self.assertEqual(log_row[0], "gathering_food")
+        self.assertEqual(log_row[0], 0)
 
     async def test_resources_gathering_requires_a_real_node(self):
         village_id = await self.create_village(food=3)
@@ -311,7 +310,7 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
             """
             SELECT count(*)
             FROM player_actions_log
-            WHERE player_discord_id = ? AND village_id = ? AND action_type = 'building'
+            WHERE player_discord_id = ? AND village_id = ?
             """,
             (player_discord_id, village_id),
         )
@@ -332,12 +331,15 @@ class VillageModuleBehaviorTests(DatabaseTestCase):
             entries = []
             for index in range(49):
                 end_time = now - timedelta(minutes=50 - index)
-                start_time = end_time - timedelta(minutes=1)
-                entries.append((player_discord_id, village_id, "building", start_time.isoformat(), end_time.isoformat()))
+                entries.append((player_discord_id, village_id, 0, 0, 0, 1, 1, end_time.isoformat()))
             await db.executemany(
                 """
-                INSERT INTO player_actions_log (player_discord_id, village_id, action_type, start_time, end_time)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO player_actions_log (
+                    player_discord_id, village_id,
+                    strength_delta, agility_delta, perception_delta, knowledge_delta, endurance_delta,
+                    cycle_end_time
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 entries,
             )

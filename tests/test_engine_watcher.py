@@ -33,7 +33,7 @@ class EngineWatcherBehaviorTests(DatabaseTestCase):
         resources = await self.fetch_resources(village_id)
         logs = await self.fetchall(
             """
-            SELECT action_type
+            SELECT strength_delta, agility_delta, perception_delta, knowledge_delta, endurance_delta
             FROM player_actions_log
             WHERE player_discord_id = ? AND village_id = ?
             """,
@@ -43,7 +43,7 @@ class EngineWatcherBehaviorTests(DatabaseTestCase):
         self.assertEqual(expired_node[0], expired_node_id)
         self.assertEqual(active_node[0], active_node_id)
         self.assertEqual(resources["food"], 17)
-        self.assertEqual(logs, [("idle",)])
+        self.assertEqual(logs, [(0, 0, 1, 1, 0)])
 
     async def test_player_system_inactive_players_become_missing_after_7_days(self):
         village_id = await self.create_village()

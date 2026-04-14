@@ -838,31 +838,84 @@ class Engine:
         return f"gathering_{node[0]}"
 
     @staticmethod
-    async def _record_action_logs(
+    def _stat_deltas_for_action(action_type: str):
+        mapping = {
+            "idle": (0, 0, 1, 1, 0),
+            "gathering_food": (0, 0, 1, 1, 0),
+            "gathering_wood": (1, 0, 0, 0, 1),
+            "gathering_stone": (1, 0, 0, 0, 1),
+            "exploring": (0, 1, 1, 0, 0),
+            "building": (0, 0, 0, 1, 1),
+            "attack": (1, 1, 0, 0, 0),
+        }
+        return mapping.get(action_type)
+
+    @staticmethod
+    async def _record_completed_cycle_stats(
         db,
         player_discord_id: int,
         village_id: int,
         status: str,
         target_id: int,
-        start: datetime,
-        end: datetime,
+        cycle_end_time: datetime,
     ):
-        if start >= end or status == "missing":
+        if cycle_end_time is None or status == "missing":
             return
 
         action_type = status
         if status == "gathering":
             action_type = await Engine._resolve_gathering_log_type(db, target_id)
 
-        segments = Engine._chunk_time_range(start, end)
-        for seg_start, seg_end in segments:
-            await db.execute(
-                """
-                INSERT INTO player_actions_log (player_discord_id, village_id, action_type, start_time, end_time)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (player_discord_id, village_id, action_type, seg_start.isoformat(), seg_end.isoformat()),
+        deltas = Engine._stat_deltas_for_action(action_type)
+        if deltas is None:
+            return
+
+        await db.execute(
+            """
+            INSERT INTO player_actions_log (
+                player_discord_id,
+                village_id,
+                strength_delta,
+                agility_delta,
+                perception_delta,
+                knowledge_delta,
+                endurance_delta,
+                cycle_end_time
             )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                player_discord_id,
+                village_id,
+                deltas[0],
+                deltas[1],
+                deltas[2],
+                deltas[3],
+                deltas[4],
+                cycle_end_time.isoformat(),
+            ),
+        )
+        await db.execute(
+            """
+            DELETE FROM player_actions_log
+            WHERE id IN (
+                SELECT id
+                FROM (
+                    SELECT
+                        id,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY player_discord_id, village_id
+                            ORDER BY cycle_end_time DESC, id DESC
+                        ) AS row_num
+                    FROM player_actions_log
+                    WHERE player_discord_id = ?
+                      AND village_id = ?
+                )
+                WHERE row_num > 150
+            )
+            """,
+            (player_discord_id, village_id),
+        )
 
     @staticmethod
     async def _mark_missing_players(db, now: datetime, village_id: int = None, req_id: str = None, user_id=None):
@@ -966,15 +1019,15 @@ class Engine:
                 if any(cost > 0 for cost in command_plan["resource_costs"].values()):
                     await Engine._write_village_resources(db, village_id, resources)
 
-        await Engine._record_action_logs(
-            db,
-            player_discord_id,
-            village_id,
-            effective_status,
-            effective_target_id,
-            start_time,
-            end_time,
-        )
+        if grant_cycle_token:
+            await Engine._record_completed_cycle_stats(
+                db,
+                player_discord_id,
+                village_id,
+                effective_status,
+                effective_target_id,
+                end_time,
+            )
 
         if effective_status == "idle":
             efficiency = Engine.calculate_efficiency(p_per, p_kno)
@@ -1293,54 +1346,40 @@ class Engine:
 
     @staticmethod
     async def recalculate_player_stats(player_discord_id: int, village_id: int, db):
-        """Recalculates player stats based on the last 150 action log entries."""
+        """Recalculates player stats based on the last 150 stat-history rows."""
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         async with db.execute(
             """
-            SELECT action_type, start_time, end_time
+            SELECT
+                strength_delta,
+                agility_delta,
+                perception_delta,
+                knowledge_delta,
+                endurance_delta
             FROM player_actions_log
             WHERE player_discord_id = ?
               AND village_id = ?
-            ORDER BY end_time DESC, id DESC
+            ORDER BY cycle_end_time DESC, id DESC
             LIMIT 150
             """,
             (player_discord_id, village_id),
         ) as cursor:
             logs = await cursor.fetchall()
 
-        base = float(Engine.STATS_BASE_VALUE)
-        p_str, p_agi, p_per, p_kno, p_end = base, base, base, base, base
+        p_str = Engine.STATS_BASE_VALUE
+        p_agi = Engine.STATS_BASE_VALUE
+        p_per = Engine.STATS_BASE_VALUE
+        p_kno = Engine.STATS_BASE_VALUE
+        p_end = Engine.STATS_BASE_VALUE
 
-        for action_type, start_str, end_str in reversed(logs):
-            try:
-                start = Engine._parse_timestamp(start_str)
-                end = Engine._parse_timestamp(end_str)
-                if start is None or end is None or end <= start:
-                    continue
-                time_ratio = Engine._time_ratio((end - start).total_seconds())
-            except (ValueError, TypeError):
-                continue
+        for str_delta, agi_delta, per_delta, kno_delta, end_delta in logs:
+            p_str += int(str_delta or 0)
+            p_agi += int(agi_delta or 0)
+            p_per += int(per_delta or 0)
+            p_kno += int(kno_delta or 0)
+            p_end += int(end_delta or 0)
 
-            if action_type == "idle":
-                p_per += 1.0 * time_ratio
-                p_kno += 1.0 * time_ratio
-            elif action_type == "gathering_food":
-                p_per += 1.0 * time_ratio
-                p_kno += 1.0 * time_ratio
-            elif action_type in ("gathering_wood", "gathering_stone"):
-                p_str += 1.0 * time_ratio
-                p_end += 1.0 * time_ratio
-            elif action_type == "exploring":
-                p_agi += 1.0 * time_ratio
-                p_per += 1.0 * time_ratio
-            elif action_type == "building":
-                p_kno += 1.0 * time_ratio
-                p_end += 1.0 * time_ratio
-            elif action_type == "attack":
-                p_str += 1.0 * time_ratio
-                p_agi += 1.0 * time_ratio
-
-        final_stats = (int(p_str), int(p_agi), int(p_per), int(p_kno), int(p_end))
+        final_stats = (p_str, p_agi, p_per, p_kno, p_end)
         await db.execute(
             """
             INSERT INTO player_stats (
@@ -1400,6 +1439,7 @@ class Engine:
         last_command_time: datetime,
         now: datetime,
         db,
+        allow_future_restart: bool = True,
         req_id: str = None,
         user_id=None,
     ):
@@ -1410,6 +1450,7 @@ class Engine:
         current_last_update = last_update
         current_completion = completion_time
         send_idle_notification = False
+        settled_cycle_count = 0
 
         while now >= current_completion:
             slice_result = await Engine._settle_time_slice(
@@ -1429,9 +1470,17 @@ class Engine:
             upgrades.extend(slice_result["upgrades"])
             monster_events.extend(slice_result["monster_events"])
             current_last_update = current_completion
+            settled_cycle_count += 1
 
             if Engine._player_is_missing(last_message_time, last_command_time, now):
                 current_status = "missing"
+                current_target = None
+                current_completion = None
+                break
+
+            next_cycle_completion = current_last_update + timedelta(minutes=Engine._action_cycle_minutes())
+            if not allow_future_restart and next_cycle_completion > now:
+                current_status = "idle"
                 current_target = None
                 current_completion = None
                 break
@@ -1482,6 +1531,7 @@ class Engine:
             "expired_nodes": expired_nodes,
             "upgrades": upgrades,
             "monster_events": monster_events,
+            "settled_cycle_count": settled_cycle_count,
             "status": current_status,
             "target": current_target,
             "last_update": current_last_update,
@@ -1611,12 +1661,13 @@ class Engine:
             current_target = target_id
             current_last_update = last_update
             current_completion = completion_time
+            stats_dirty = False
 
             if Engine._player_is_missing(last_message_time, last_command_time, now):
                 current_status = "missing"
                 current_target = None
                 current_completion = None
-            elif not interrupted and current_status not in ("missing", "idle") and current_completion is not None:
+            elif current_status != "missing" and current_completion is not None and now >= current_completion:
                 result = await Engine._advance_completed_cycles(
                     player_discord_id,
                     village_id,
@@ -1628,6 +1679,7 @@ class Engine:
                     last_command_time,
                     now,
                     db,
+                    allow_future_restart=not interrupted,
                     req_id=req_id,
                     user_id=user_id,
                 )
@@ -1640,6 +1692,7 @@ class Engine:
                 current_last_update = result["last_update"]
                 current_completion = result["completion"]
                 send_idle_notification = result["send_idle"]
+                stats_dirty = result["settled_cycle_count"] > 0
 
             partial_end = None
             if current_status == "missing":
@@ -1653,6 +1706,7 @@ class Engine:
                 partial_end = now if current_completion is None else min(now, current_completion)
 
             if partial_end is not None:
+                partial_start = current_last_update
                 slice_result = await Engine._settle_time_slice(
                     player_discord_id,
                     village_id,
@@ -1669,6 +1723,7 @@ class Engine:
                 upgrades.extend(slice_result["upgrades"])
                 monster_events.extend(slice_result["monster_events"])
                 current_last_update = partial_end
+                stats_dirty = stats_dirty or partial_end > partial_start
 
             new_status = current_status
             new_target = current_target
@@ -1694,6 +1749,9 @@ class Engine:
                     """,
                     (new_status, new_target, current_last_update.isoformat(), new_completion, player_discord_id, village_id),
                 )
+
+            if stats_dirty:
+                await Engine.recalculate_player_stats(player_discord_id, village_id, db)
 
             await db.commit()
 

@@ -1,7 +1,9 @@
-import asyncio
 import os
+from datetime import datetime, timedelta
 
 import aiosqlite
+
+from core.config import get_action_cycle_minutes
 
 DB_PATH = os.getenv("DATABASE_PATH", "data/village.db")
 
@@ -85,6 +87,146 @@ async def _migrate_monsters_table_if_needed(db):
     await db.execute("DROP TABLE monsters_legacy_2026_04_13")
 
 
+def _parse_timestamp(value):
+    if not value:
+        return None
+    return datetime.fromisoformat(value)
+
+
+def _action_cycle_seconds():
+    return get_action_cycle_minutes() * 60
+
+
+def _action_deltas(action_type: str):
+    mapping = {
+        "idle": (0, 0, 1, 1, 0),
+        "gathering_food": (0, 0, 1, 1, 0),
+        "gathering_wood": (1, 0, 0, 0, 1),
+        "gathering_stone": (1, 0, 0, 0, 1),
+        "exploring": (0, 1, 1, 0, 0),
+        "building": (0, 0, 0, 1, 1),
+        "attack": (1, 1, 0, 0, 0),
+    }
+    return mapping.get(action_type)
+
+
+async def _create_player_actions_log_table(db):
+    await db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS player_actions_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            player_discord_id INTEGER NOT NULL,
+            village_id INTEGER NOT NULL,
+            strength_delta INTEGER NOT NULL DEFAULT 0,
+            agility_delta INTEGER NOT NULL DEFAULT 0,
+            perception_delta INTEGER NOT NULL DEFAULT 0,
+            knowledge_delta INTEGER NOT NULL DEFAULT 0,
+            endurance_delta INTEGER NOT NULL DEFAULT 0,
+            cycle_end_time TIMESTAMP NOT NULL,
+            FOREIGN KEY (player_discord_id, village_id) REFERENCES players(discord_id, village_id)
+        )
+        """
+    )
+    columns = await _table_columns(db, "player_actions_log")
+    if "cycle_end_time" in columns:
+        await db.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_actions_log_player
+            ON player_actions_log (player_discord_id, village_id, cycle_end_time DESC, id DESC)
+            """
+        )
+
+
+async def _migrate_player_actions_log_if_needed(db):
+    if not await _table_exists(db, "player_actions_log"):
+        await _create_player_actions_log_table(db)
+        return
+
+    columns = await _table_columns(db, "player_actions_log")
+    if "action_type" not in columns:
+        await _create_player_actions_log_table(db)
+        return
+
+    await db.execute("ALTER TABLE player_actions_log RENAME TO player_actions_log_legacy_2026_04_14")
+    await _create_player_actions_log_table(db)
+
+    async with db.execute(
+        """
+        SELECT player_discord_id, village_id, action_type, start_time, end_time
+        FROM player_actions_log_legacy_2026_04_14
+        ORDER BY player_discord_id, village_id, end_time, id
+        """
+    ) as cursor:
+        legacy_rows = await cursor.fetchall()
+
+    converted_rows = []
+    cycle_seconds = _action_cycle_seconds()
+    for player_discord_id, village_id, action_type, start_time, end_time in legacy_rows:
+        deltas = _action_deltas(action_type)
+        if deltas is None:
+            continue
+
+        start_dt = _parse_timestamp(start_time)
+        end_dt = _parse_timestamp(end_time)
+        if start_dt is None or end_dt is None or end_dt <= start_dt:
+            continue
+
+        full_cycles = int((end_dt - start_dt).total_seconds() // cycle_seconds)
+        for cycle_index in range(full_cycles):
+            cycle_end_time = start_dt + timedelta(seconds=cycle_seconds * (cycle_index + 1))
+            converted_rows.append(
+                (
+                    player_discord_id,
+                    village_id,
+                    deltas[0],
+                    deltas[1],
+                    deltas[2],
+                    deltas[3],
+                    deltas[4],
+                    cycle_end_time.isoformat(),
+                )
+            )
+
+    if converted_rows:
+        await db.executemany(
+            """
+            INSERT INTO player_actions_log (
+                player_discord_id,
+                village_id,
+                strength_delta,
+                agility_delta,
+                perception_delta,
+                knowledge_delta,
+                endurance_delta,
+                cycle_end_time
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            converted_rows,
+        )
+
+        await db.execute(
+            """
+            DELETE FROM player_actions_log
+            WHERE id IN (
+                SELECT id
+                FROM (
+                    SELECT
+                        id,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY player_discord_id, village_id
+                            ORDER BY cycle_end_time DESC, id DESC
+                        ) AS row_num
+                    FROM player_actions_log
+                )
+                WHERE row_num > 150
+            )
+            """
+        )
+
+    await db.execute("DROP TABLE player_actions_log_legacy_2026_04_14")
+
+
 async def _create_current_tables(db):
     await db.execute(
         """
@@ -158,19 +300,7 @@ async def _create_current_tables(db):
         """
     )
 
-    await db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS player_actions_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            player_discord_id INTEGER NOT NULL,
-            village_id INTEGER NOT NULL,
-            action_type TEXT,
-            start_time TIMESTAMP,
-            end_time TIMESTAMP,
-            FOREIGN KEY (player_discord_id, village_id) REFERENCES players(discord_id, village_id)
-        )
-        """
-    )
+    await _create_player_actions_log_table(db)
 
     await db.execute(
         """
@@ -234,12 +364,7 @@ async def _create_current_tables(db):
     await _ensure_column(db, "monsters", "reward_resource_type", "TEXT NOT NULL DEFAULT 'food'")
     await _ensure_column(db, "monsters", "created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
 
-    await db.execute(
-        """
-        CREATE INDEX IF NOT EXISTS idx_actions_log_player
-        ON player_actions_log (player_discord_id, village_id, end_time DESC, id DESC)
-        """
-    )
+    await _migrate_player_actions_log_if_needed(db)
 
 async def init_db():
     """Initializes the SQLite database with the required schemas."""
