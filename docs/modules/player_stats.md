@@ -61,4 +61,4 @@
 - 2026.04.08.00: Transitioned from 150h window to 150 cycles window. - See [2026.04.08.00.md](../changelogs/2026.04.08.00.md)
 - 2026.04.09.01: Introduced STATS_BASE_VALUE constant and standardized action log types. - See [2026.04.09.01.md](../changelogs/2026.04.09.01.md)
 - 2026.04.10.00: Added attack action type and weights (STR + AGI). - See [2026.04.10.00.md](../changelogs/2026.04.10.00.md)
-- 2026.04.14.00: Planned `player_actions_log` redesign to store per-cycle stat deltas, keep only 150 rows per player, and exclude partial slices from stat growth. - See [2026.04.14.00.md](../changelogs/2026.04.14.00.md)
+- 2026.04.14.00: Redesigned `player_actions_log` to store per-cycle stat deltas, keep only 150 rows per player, and exclude partial slices from stat growth. - See [2026.04.14.00.md](../changelogs/2026.04.14.00.md)

@@ -57,4 +57,4 @@
 - 2026.04.07.00: Updated to reflect 1-hour lease model and stats recalculation logic. - See [2026.04.07.00.md](changelogs/2026.04.07.00.md)
 - 2026.04.08.00: Defined 150 Cycles Sliding Window and Action Cycle concepts. - See [2026.04.08.00.md](changelogs/2026.04.08.00.md)
 - 2026.04.09.01: Introduced Normalized Tables and Base Outcome terminology. Removed Satiety. - See [2026.04.09.01.md](changelogs/2026.04.09.01.md)
-- 2026.04.14.00: Planned stat-history rows as the new `player_actions_log` source for the 150-cycle stat window. - See [2026.04.14.00.md](changelogs/2026.04.14.00.md)
+- 2026.04.14.00: Defined stat-history rows as the new `player_actions_log` source for the 150-cycle stat window. - See [2026.04.14.00.md](changelogs/2026.04.14.00.md)

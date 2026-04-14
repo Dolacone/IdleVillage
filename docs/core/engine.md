@@ -76,4 +76,4 @@
 ## Changelog
 - 2026.04.07.00: Updated settlement flow. - See [2026.04.07.00.md](../changelogs/2026.04.07.00.md)
 - 2026.04.13.00: Refactored to SSOT. Centralized formulas to modules and removed standalone discovery announcements. See [2026.04.13.00.md](../changelogs/2026.04.13.00.md)
-- 2026.04.14.00: Planned stat-history logging so only completed cycles write per-stat deltas and each player retains only the newest 150 rows. - See [2026.04.14.00.md](../changelogs/2026.04.14.00.md)
+- 2026.04.14.00: Implemented stat-history logging so only completed cycles write per-stat deltas and each player retains only the newest 150 rows. - See [2026.04.14.00.md](../changelogs/2026.04.14.00.md)
