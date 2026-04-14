@@ -29,7 +29,9 @@
 - Completion Timestamp (完成時間點):
   - 定義: 根據當前 Action Cycle 預計結束的時間點.
 - 150 Cycles Sliding Window (150 週期滑動窗口) (v2026.04.08.00):
-  - 定義: 素質計算邏輯. 抓取 `player_actions_log` 中最近 150 筆週期紀錄來動態決定素質.
+  - 定義: 素質計算邏輯. 抓取 `player_actions_log` 中最近 150 筆完整週期的素質紀錄來動態決定素質.
+- Stat History Row (素質歷史紀錄) (v2026.04.14.00):
+  - 定義: `player_actions_log` 的單筆資料. 代表一個完整 Action Cycle 對五項素質的固定增量, 不保存 action name 作為素質計算來源.
 
 ### 3. 資源與建築 (Resources and Buildings)
 
@@ -55,3 +57,4 @@
 - 2026.04.07.00: Updated to reflect 1-hour lease model and stats recalculation logic. - See [2026.04.07.00.md](changelogs/2026.04.07.00.md)
 - 2026.04.08.00: Defined 150 Cycles Sliding Window and Action Cycle concepts. - See [2026.04.08.00.md](changelogs/2026.04.08.00.md)
 - 2026.04.09.01: Introduced Normalized Tables and Base Outcome terminology. Removed Satiety. - See [2026.04.09.01.md](changelogs/2026.04.09.01.md)
+- 2026.04.14.00: Planned stat-history rows as the new `player_actions_log` source for the 150-cycle stat window. - See [2026.04.14.00.md](changelogs/2026.04.14.00.md)

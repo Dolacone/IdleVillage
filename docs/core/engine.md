@@ -21,7 +21,10 @@
 2. 每個循環切片都先重算玩家素質: 依 player_actions_log 最近 150 筆紀錄更新 player_stats.
 3. 計算 Delta: SliceEnd - SliceStart.
 4. 紀錄行動片段:
-   - 若 delta > 0 且玩家不是 missing, 依 ACTION_CYCLE_MINUTES 切割片段並寫入 player_actions_log.
+   - 若本次結算完成了一個完整行動週期且玩家不是 missing, 寫入一筆 `player_actions_log` 素質紀錄.
+   - `player_actions_log` 不記錄 action name, 而是記錄該完整週期提供的五項素質增量.
+   - UI refresh, interrupted settlement, 或其他未滿一個週期的 partial slice 不寫入 `player_actions_log`.
+   - 每位玩家在 `player_actions_log` 中只保留最新 150 筆完整週期紀錄.
 5. 資源 / XP 結算 (v2026.04.13.00):
    - Token 產出: 每完成一個循環且行動不為 idle，系統贈予 1 個對應類別 Token (分類詳見 docs/modules/tokens.md)。
    - idle: 若村莊存有有效村莊命令且條件符合，結算時優先嘗試執行該命令 (行為詳見 docs/modules/village.md)。
@@ -73,3 +76,4 @@
 ## Changelog
 - 2026.04.07.00: Updated settlement flow. - See [2026.04.07.00.md](../changelogs/2026.04.07.00.md)
 - 2026.04.13.00: Refactored to SSOT. Centralized formulas to modules and removed standalone discovery announcements. See [2026.04.13.00.md](../changelogs/2026.04.13.00.md)
+- 2026.04.14.00: Planned stat-history logging so only completed cycles write per-stat deltas and each player retains only the newest 150 rows. - See [2026.04.14.00.md](../changelogs/2026.04.14.00.md)
