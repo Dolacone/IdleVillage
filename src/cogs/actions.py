@@ -216,6 +216,12 @@ def _token_type_label(token_type: str) -> str:
     }.get(str(token_type or ""), str(token_type or "Unknown").replace("_", " ").title())
 
 
+def _format_token_usage(quantity: int, token_type: str) -> str:
+    quantity = int(quantity or 0)
+    label = _token_type_label(token_type)
+    return f"{quantity} {label} token" if quantity == 1 else f"{quantity} {label} tokens"
+
+
 def _village_command_label(command: str | None) -> str:
     return {
         "gathering_food": "Gather Food",
@@ -231,7 +237,14 @@ def _format_discord_relative_time(dt: datetime) -> str:
     return f"<t:{Engine._to_discord_unix(dt)}:R>"
 
 
-async def _build_token_embed(inter, db, village_id: int, player_discord_id: int):
+async def _build_token_embed(
+    inter,
+    db,
+    village_id: int,
+    player_discord_id: int,
+    selected_quantity: int = 1,
+    selected_mode: str | None = None,
+):
     tokens = await Engine._fetch_player_tokens(db, player_discord_id, village_id)
     active_buff = await Engine._fetch_player_buff(db, player_discord_id, village_id)
     protection_expires_at = await Engine._fetch_protection_expires_at(db, village_id)
@@ -270,12 +283,21 @@ async def _build_token_embed(inter, db, village_id: int, player_discord_id: int)
     embed.add_field(
         name="Costs",
         value=(
-            "Personal Buff: 1 matching token\n"
-            "Village Protection: 1 selected token\n"
+            "Personal Buff: 1 matching token = 3 cycles\n"
+            "Village Protection: 1 selected token = 1 cycle\n"
             f"Village Command: {Engine.VILLAGE_COMMAND_TOKEN_COST} tokens from the selected token type"
         ),
         inline=False,
     )
+    if selected_mode in ("buff", "protect") and int(selected_quantity or 1) > 1:
+        embed.add_field(
+            name="Selected Quantity",
+            value=(
+                f"Personal Buff: {selected_quantity} tokens = {selected_quantity * Engine.BUFF_DURATION_CYCLES} cycles\n"
+                f"Village Protection: {selected_quantity} tokens = {selected_quantity} cycles"
+            ),
+            inline=False,
+        )
     return embed
 
 
@@ -351,7 +373,16 @@ async def _render_token_interface(
                 await inter.response.edit_message(content=str(result), embed=None, view=None)
             return
         player_discord_id = result
-        embed = await _build_token_embed(inter, db, village_id, player_discord_id)
+        selected_quantity = getattr(view, "quantity", 1) if view is not None else 1
+        selected_mode = getattr(view, "mode", None) if view is not None else None
+        embed = await _build_token_embed(
+            inter,
+            db,
+            village_id,
+            player_discord_id,
+            selected_quantity=selected_quantity,
+            selected_mode=selected_mode,
+        )
 
     active_view = view or TokenView()
     if create_response:
@@ -586,6 +617,7 @@ class TokenRefreshButton(disnake.ui.Button):
                 mode=self.view.mode,
                 token_type=self.view.token_type,
                 command=self.view.command,
+                quantity=self.view.quantity,
                 refresh_available_at=self.view.refresh_available_at,
             ),
             req_id=new_request_id(),
@@ -618,8 +650,15 @@ class TokenModeDropdown(disnake.ui.Select):
         super().__init__(placeholder="Choose a token action...", min_values=1, max_values=1, options=options)
 
     async def callback(self, inter: disnake.MessageInteraction):
-        self.view.reset(mode=self.values[0])
-        await inter.response.edit_message(view=self.view)
+        next_mode = self.values[0]
+        next_quantity = self.view.quantity if next_mode in ("buff", "protect") else 1
+        self.view.reset(mode=next_mode, quantity=next_quantity)
+        await _render_token_interface(
+            inter,
+            view=self.view,
+            req_id=new_request_id(),
+            user_id=inter.author.id,
+        )
 
 
 class TokenTypeDropdown(disnake.ui.Select):
@@ -640,8 +679,43 @@ class TokenTypeDropdown(disnake.ui.Select):
         self.mode = mode
 
     async def callback(self, inter: disnake.MessageInteraction):
-        self.view.reset(mode=self.view.mode, token_type=self.values[0], command=self.view.command)
+        self.view.reset(
+            mode=self.view.mode,
+            token_type=self.values[0],
+            command=self.view.command,
+            quantity=self.view.quantity,
+        )
         await inter.response.edit_message(view=self.view)
+
+
+class TokenQuantityDropdown(disnake.ui.Select):
+    QUANTITIES = (1, 2, 3, 5, 10, 25, 50)
+
+    def __init__(self, selected_value: int | None = None):
+        options = [
+            disnake.SelectOption(
+                label=str(quantity),
+                description=f"Spend {quantity} tokens in one action.",
+                value=str(quantity),
+                default=(int(selected_value or 1) == quantity),
+            )
+            for quantity in self.QUANTITIES
+        ]
+        super().__init__(placeholder="Choose token quantity...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, inter: disnake.MessageInteraction):
+        self.view.reset(
+            mode=self.view.mode,
+            token_type=self.view.token_type,
+            command=self.view.command,
+            quantity=int(self.values[0]),
+        )
+        await _render_token_interface(
+            inter,
+            view=self.view,
+            req_id=new_request_id(),
+            user_id=inter.author.id,
+        )
 
 
 class VillageCommandDropdown(disnake.ui.Select):
@@ -656,7 +730,12 @@ class VillageCommandDropdown(disnake.ui.Select):
         super().__init__(placeholder="Choose the village command...", min_values=1, max_values=1, options=options)
 
     async def callback(self, inter: disnake.MessageInteraction):
-        self.view.reset(mode=self.view.mode, token_type=self.view.token_type, command=self.values[0])
+        self.view.reset(
+            mode=self.view.mode,
+            token_type=self.view.token_type,
+            command=self.values[0],
+            quantity=self.view.quantity,
+        )
         await inter.response.edit_message(view=self.view)
 
 
@@ -701,10 +780,11 @@ class TokenApplyButton(disnake.ui.Button):
                     player_discord_id,
                     village_id,
                     self.view.token_type,
+                    quantity=self.view.quantity,
                 )
                 if success:
                     message = (
-                        f"Used 1 {_token_type_label(self.view.token_type)} token. "
+                        f"Used {_format_token_usage(self.view.quantity, self.view.token_type)}. "
                         f"Matching actions now gain +100 total stats until {_format_discord_relative_time(action_result)}."
                     )
             elif self.view.mode == "protect":
@@ -713,10 +793,11 @@ class TokenApplyButton(disnake.ui.Button):
                     player_discord_id,
                     village_id,
                     self.view.token_type,
+                    quantity=self.view.quantity,
                 )
                 if success:
                     message = (
-                        f"Used 1 {_token_type_label(self.view.token_type)} token. "
+                        f"Used {_format_token_usage(self.view.quantity, self.view.token_type)}. "
                         f"Village protection is active until {_format_discord_relative_time(action_result)}."
                     )
             else:
@@ -746,6 +827,7 @@ class TokenApplyButton(disnake.ui.Button):
                 mode=self.view.mode,
                 token_type=self.view.token_type,
                 command=self.view.command,
+                quantity=self.view.quantity,
                 refresh_available_at=self.view.refresh_available_at,
             ),
             req_id=req_id,
@@ -759,6 +841,7 @@ class TokenView(disnake.ui.View):
         mode: str | None = None,
         token_type: str | None = None,
         command: str | None = None,
+        quantity: int = 1,
         refresh_available_at: float = 0.0,
     ):
         super().__init__(timeout=300.0)
@@ -766,18 +849,23 @@ class TokenView(disnake.ui.View):
         self.mode = mode
         self.token_type = token_type
         self.command = command
-        self.reset(mode=mode, token_type=token_type, command=command)
+        self.quantity = int(quantity or 1)
+        self.reset(mode=mode, token_type=token_type, command=command, quantity=self.quantity)
 
-    def reset(self, mode: str | None = None, token_type: str | None = None, command: str | None = None):
+    def reset(self, mode: str | None = None, token_type: str | None = None, command: str | None = None, quantity: int = 1):
         self.mode = mode
         self.token_type = token_type
         self.command = command if mode == "command" else None
+        self.quantity = int(quantity or 1) if mode in ("buff", "protect") else 1
 
         self.clear_items()
         self.add_item(TokenModeDropdown(default_value=self.mode))
 
         if self.mode in ("buff", "protect", "command"):
             self.add_item(TokenTypeDropdown(self.mode, selected_value=self.token_type))
+
+        if self.mode in ("buff", "protect"):
+            self.add_item(TokenQuantityDropdown(selected_value=self.quantity))
 
         if self.mode == "command":
             self.add_item(VillageCommandDropdown(selected_value=self.command))

@@ -440,42 +440,55 @@ class Engine:
         return token_type
 
     @staticmethod
-    async def use_player_buff_token(db, player_discord_id: int, village_id: int, token_type: str):
+    async def use_player_buff_token(db, player_discord_id: int, village_id: int, token_type: str, quantity: int = 1):
         token_type = str(token_type or "")
         if token_type not in Engine.TOKEN_TYPES:
             return False, "Invalid token type."
+        try:
+            quantity = int(quantity)
+        except (TypeError, ValueError):
+            return False, "Invalid token quantity."
+        if quantity <= 0:
+            return False, "Invalid token quantity."
         tokens = await Engine._fetch_player_tokens(db, player_discord_id, village_id)
-        if tokens[token_type] <= 0:
-            return False, f"No {token_type} tokens available."
+        if tokens[token_type] < quantity:
+            return False, f"Not enough {token_type} tokens available."
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         current_buff = await Engine._fetch_player_buff(db, player_discord_id, village_id, now=now)
+        duration_minutes = quantity * Engine.BUFF_DURATION_CYCLES * Engine._action_cycle_minutes()
         if current_buff and current_buff["buff_type"] == token_type:
-            expires_at = current_buff["expires_at"] + timedelta(minutes=Engine.BUFF_DURATION_CYCLES * Engine._action_cycle_minutes())
+            expires_at = current_buff["expires_at"] + timedelta(minutes=duration_minutes)
         else:
-            expires_at = now + timedelta(minutes=Engine.BUFF_DURATION_CYCLES * Engine._action_cycle_minutes())
-        tokens[token_type] -= 1
+            expires_at = now + timedelta(minutes=duration_minutes)
+        tokens[token_type] -= quantity
         await Engine._write_player_tokens(db, player_discord_id, village_id, tokens)
         await Engine._set_player_buff(db, player_discord_id, village_id, token_type, expires_at)
         return True, expires_at
 
     @staticmethod
-    async def use_village_protection_token(db, player_discord_id: int, village_id: int, token_type: str | None = None):
+    async def use_village_protection_token(db, player_discord_id: int, village_id: int, token_type: str | None = None, quantity: int = 1):
         tokens = await Engine._fetch_player_tokens(db, player_discord_id, village_id)
+        try:
+            quantity = int(quantity)
+        except (TypeError, ValueError):
+            return False, "Invalid token quantity."
+        if quantity <= 0:
+            return False, "Invalid token quantity."
         spend_type = str(token_type or "")
         if spend_type:
             if spend_type not in Engine.TOKEN_TYPES:
                 return False, "Invalid token type."
-            if tokens[spend_type] <= 0:
-                return False, f"No {spend_type} tokens available."
+            if tokens[spend_type] < quantity:
+                return False, f"Not enough {spend_type} tokens available."
         else:
-            spend_type = next((available_type for available_type in Engine.TOKEN_TYPES if tokens[available_type] > 0), None)
+            spend_type = next((available_type for available_type in Engine.TOKEN_TYPES if tokens[available_type] >= quantity), None)
         if spend_type is None:
             return False, "No tokens available for village protection."
         now = datetime.now(timezone.utc).replace(tzinfo=None)
         current_expires = await Engine._fetch_protection_expires_at(db, village_id)
         base_time = current_expires if current_expires and current_expires > now else now
-        expires_at = base_time + timedelta(minutes=Engine._action_cycle_minutes())
-        tokens[spend_type] -= 1
+        expires_at = base_time + timedelta(minutes=quantity * Engine._action_cycle_minutes())
+        tokens[spend_type] -= quantity
         await Engine._write_player_tokens(db, player_discord_id, village_id, tokens)
         await Engine._set_protection_expires_at(db, village_id, expires_at)
         return True, expires_at
