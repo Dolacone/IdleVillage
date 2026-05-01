@@ -6,6 +6,7 @@ import aiosqlite
 from support import DatabaseTestCase
 from database import schema
 from core.config import REQUIRED_KEYS
+from core.engine import Engine
 
 V2_TABLE_NAMES = {
     "village_state",
@@ -158,3 +159,20 @@ class PlayerIndexesExist(DatabaseTestCase):
             "SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_players_action'"
         )
         self.assertIsNotNone(row)
+
+
+class WatcherIsV2Safe(DatabaseTestCase):
+    async def test_process_watcher_does_not_raise_on_v2_schema(self):
+        # Watcher must skip gracefully on a v2 DB (no villages table).
+        # An exception here would mean the background loop crashes every heartbeat.
+        try:
+            await Engine.process_watcher()
+        except Exception as e:
+            self.fail(f"process_watcher() raised {type(e).__name__} on v2 schema: {e}")
+
+    async def test_process_watcher_skips_when_villages_table_absent(self):
+        # Confirms no settlement queries run against missing v1 tables.
+        # After the guard, the v2 players table must remain empty (no writes attempted).
+        await Engine.process_watcher()
+        row = await self.fetchone("SELECT COUNT(*) FROM players")
+        self.assertEqual(row[0], 0)

@@ -8,6 +8,7 @@ load_dotenv()
 import disnake
 from disnake.ext import commands
 from core.config import validate_env, get_discord_token
+from core.engine import Engine
 from database.schema import init_db
 
 
@@ -18,6 +19,11 @@ class IdleVillageBot(commands.InteractionBot):
         super().__init__(intents=intents)
 
     async def on_ready(self):
+        Engine.set_bot(self)
+        if not Engine.start_watcher_loop.is_running():
+            Engine.start_watcher_loop.start()
+            print("Watcher loop started.")
+
         print(f"Logged in as {self.user} (ID: {self.user.id})")
         print("------")
 
@@ -36,6 +42,19 @@ def main():
     bot = IdleVillageBot()
 
     os.makedirs("data", exist_ok=True)
+
+    initial_extensions = [
+        "cogs.general",
+        "cogs.events",
+        "cogs.actions",
+    ]
+
+    for extension in initial_extensions:
+        try:
+            bot.load_extension(extension)
+            print(f"Loaded extension: {extension}")
+        except Exception as e:
+            print(f"Failed to load extension {extension}. Error: {e}")
 
     bot.run(get_discord_token())
 

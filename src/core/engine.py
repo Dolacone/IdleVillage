@@ -2156,6 +2156,14 @@ class Engine:
     @staticmethod
     async def process_watcher(req_id: str = None):
         watcher_req_id = req_id or new_request_id()
+
+        async with get_connection() as db:
+            async with db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='villages'"
+            ) as cursor:
+                if not await cursor.fetchone():
+                    return  # v1 settlement tables absent; watcher skips until v2 engine lands
+
         log_event(watcher_req_id, "SYSTEM", "STATUS", "Watcher sweep started")
 
         async with get_connection() as db:
