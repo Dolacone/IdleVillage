@@ -193,7 +193,8 @@ class ActionsCog(commands.Cog):
             await inter.response.defer()
             now = datetime.now(timezone.utc)
             try:
-                await change_action(user_id, action, target, now)
+                events = await change_action(user_id, action, target, now)
+                await notification.dispatch_events(self.bot, events)
             except ValueError:
                 pass
             await self._render_main(inter)

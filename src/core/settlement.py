@@ -236,13 +236,14 @@ async def settle_complete_cycles(user_id: str, now: datetime) -> list[dict]:
 
 async def change_action(
     user_id: str, new_action: str | None, new_target: str | None, now: datetime
-) -> None:
+) -> list[dict]:
     """
     Atomic action-change: settle overdue full cycles, run optional partial cycle for
     the old action, then write the new action and reset cycle timing.
 
     new_target must be a building enum for action='building', else pass None.
     Pass new_action=None to clear the action.
+    Returns a list of notification events emitted during the full-cycle catch-up.
     """
     if new_action is not None and new_action not in VALID_ACTIONS:
         raise ValueError(f"Invalid action: {new_action!r}")
@@ -252,10 +253,11 @@ async def change_action(
         if new_target not in BUILDING_TYPES:
             raise ValueError(f"Invalid building target: {new_target!r}. Must be one of {BUILDING_TYPES}")
 
+    events: list[dict] = []
     async with get_connection() as db:
         player = await _read_player(db, user_id)
         if player is None:
-            return
+            return events
 
         old_action = player["action"]
         completion_time_str = player["completion_time"]
@@ -269,7 +271,8 @@ async def change_action(
             cycle_end = completion_time
             cycles_done = 0
             while cycle_end <= now and cycles_done < max_cycles:
-                await _run_one_cycle(db, user_id, cycle_end)
+                cycle_events = await _run_one_cycle(db, user_id, cycle_end)
+                events.extend(cycle_events)
                 cycle_end += timedelta(minutes=cycle_mins)
                 cycles_done += 1
             # Re-read player after catch-up (timestamps may have changed)
@@ -333,6 +336,8 @@ async def change_action(
             )
 
         await db.commit()
+
+    return events
 
 
 async def settle_burst(user_id: str, now: datetime) -> tuple[bool, list[dict]]:

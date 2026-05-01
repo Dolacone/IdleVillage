@@ -6,6 +6,8 @@ import os
 import sys
 import unittest
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -388,6 +390,62 @@ class TestNotificationFormatting(unittest.TestCase):
         text = _format_event(ev)
         # Stage 5 is current (4 cleared, working on 5th)
         self.assertIn("5", text)
+
+
+class TestActionChangeNotificationDispatch(DatabaseTestCase):
+    async def test_confirm_action_dispatches_overdue_catchup_events(self):
+        from cogs.actions import ActionsCog
+
+        user_id = "123"
+        now = _now()
+        cycle_end = now - timedelta(minutes=1)
+        last_update = now - timedelta(minutes=11)
+        base = int(ALL_TEST_ENV["BASE_OUTPUT"])
+
+        async with get_connection() as db:
+            await db.execute(
+                """UPDATE village_resources SET amount=10000
+                   WHERE resource_type IN ('food', 'wood', 'knowledge')"""
+            )
+            await db.execute(
+                """UPDATE stage_state SET current_stage_type='gathering',
+                   current_stage_progress=0, current_stage_target=?,
+                   stage_started_at=?, overtime_notified=0 WHERE id=1""",
+                (base, now.isoformat()),
+            )
+            await db.execute(
+                """INSERT OR REPLACE INTO players
+                   (user_id, action, action_target, completion_time, last_update_time,
+                    ap_full_time, created_at, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (
+                    user_id,
+                    "gathering",
+                    None,
+                    cycle_end.isoformat(),
+                    last_update.isoformat(),
+                    now.isoformat(),
+                    last_update.isoformat(),
+                    last_update.isoformat(),
+                ),
+            )
+            await db.commit()
+
+        inter = SimpleNamespace(
+            guild_id=int(ALL_TEST_ENV["DISCORD_GUILD_ID"]),
+            user=SimpleNamespace(id=int(user_id)),
+            component=SimpleNamespace(custom_id="confirm_action:combat"),
+            response=SimpleNamespace(defer=AsyncMock()),
+        )
+        cog = ActionsCog(bot=object())
+
+        with patch.object(cog, "_render_main", new=AsyncMock()), \
+             patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as dispatch:
+            await cog.on_button_click(inter)
+
+        dispatch.assert_called_once()
+        events = dispatch.call_args.args[1]
+        self.assertIn("stage_clear", [event["type"] for event in events])
 
 
 if __name__ == "__main__":
