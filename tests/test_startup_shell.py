@@ -28,19 +28,30 @@ class StartupShellBehavior(unittest.TestCase):
             return None
 
         class FakeBot:
+            def __init__(self):
+                self.startup_loop = asyncio.get_event_loop()
+                self.startup_loop_was_open = not self.startup_loop.is_closed()
+
             def load_extension(self, extension):
                 loaded_extensions.append(extension)
 
             def run(self, token):
                 self.token = token
 
-        fake_bot = FakeBot()
+        fake_bot = None
+
+        def build_fake_bot():
+            nonlocal fake_bot
+            fake_bot = FakeBot()
+            return fake_bot
 
         with patch.object(main, "init_db", fake_init_db), \
-             patch.object(main, "IdleVillageBot", return_value=fake_bot), \
+             patch.object(main, "IdleVillageBot", side_effect=build_fake_bot), \
              patch.object(main.os, "makedirs"):
             main.main()
 
+        self.assertIsNotNone(fake_bot)
+        self.assertTrue(fake_bot.startup_loop_was_open)
         self.assertEqual(
             loaded_extensions,
             ["cogs.general", "cogs.events", "cogs.actions"],

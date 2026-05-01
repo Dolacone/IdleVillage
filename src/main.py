@@ -34,31 +34,39 @@ def main():
     if not validate_env():
         return
 
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
     try:
-        asyncio.run(init_db())
-        print("Database schema initialized.")
-    except RuntimeError as e:
-        print(f"Error: {e}")
-        return
-
-    bot = IdleVillageBot()
-
-    os.makedirs("data", exist_ok=True)
-
-    initial_extensions = [
-        "cogs.general",
-        "cogs.events",
-        "cogs.actions",
-    ]
-
-    for extension in initial_extensions:
         try:
-            bot.load_extension(extension)
-            print(f"Loaded extension: {extension}")
-        except Exception as e:
-            print(f"Failed to load extension {extension}. Error: {e}")
+            loop.run_until_complete(init_db())
+            print("Database schema initialized.")
+        except RuntimeError as e:
+            print(f"Error: {e}")
+            return
 
-    bot.run(get_discord_token())
+        bot = IdleVillageBot()
+
+        os.makedirs("data", exist_ok=True)
+
+        initial_extensions = [
+            "cogs.general",
+            "cogs.events",
+            "cogs.actions",
+        ]
+
+        for extension in initial_extensions:
+            try:
+                bot.load_extension(extension)
+                print(f"Loaded extension: {extension}")
+            except Exception as e:
+                print(f"Failed to load extension {extension}. Error: {e}")
+
+        bot.run(get_discord_token())
+    finally:
+        if not loop.is_closed():
+            loop.close()
+        asyncio.set_event_loop(None)
 
 if __name__ == "__main__":
     main()
