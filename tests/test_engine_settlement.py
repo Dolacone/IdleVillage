@@ -643,6 +643,12 @@ class PartialCycleTest(SettlementTestBase):
         player = await self._get_player()
         self.assertIsNone(player["action_target"])
 
+    async def test_building_action_rejects_invalid_target(self):
+        """Building action must target a documented building row."""
+        await self._insert_player(action=None, completion_time=None, last_update_time=None)
+        with self.assertRaises(ValueError):
+            await change_action(self.TEST_USER, "building", "not_a_building", _now())
+
 
 # ---------------------------------------------------------------------------
 # Burst tests
@@ -756,24 +762,24 @@ class BurstTest(SettlementTestBase):
 class APTest(SettlementTestBase):
     async def test_full_ap_when_past_ap_full_time(self):
         """Player returns AP_CAP when ap_full_time is in the past."""
-        from core.settlement import _get_ap, _read_player
+        from managers import player_manager
         now = _now()
         ap_full_time = now - timedelta(minutes=1)
         await self._insert_player(ap_full_time=ap_full_time)
         async with schema.get_connection() as db:
-            ap = await _get_ap(db, self.TEST_USER, now)
+            ap = await player_manager.get_ap(db, self.TEST_USER, now)
         self.assertEqual(ap, int(ALL_TEST_ENV["AP_CAP"]))
 
     async def test_zero_ap_when_just_spent(self):
         """Player returns 0 AP when ap_full_time is AP_CAP × recovery from now."""
-        from core.settlement import _get_ap
+        from managers import player_manager
         ap_cap = int(ALL_TEST_ENV["AP_CAP"])
         recovery_mins = int(ALL_TEST_ENV["AP_RECOVERY_MINUTES"])
         now = _now()
         ap_full_time = now + timedelta(minutes=ap_cap * recovery_mins)
         await self._insert_player(ap_full_time=ap_full_time)
         async with schema.get_connection() as db:
-            ap = await _get_ap(db, self.TEST_USER, now)
+            ap = await player_manager.get_ap(db, self.TEST_USER, now)
         self.assertEqual(ap, 0)
 
 
