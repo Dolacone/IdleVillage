@@ -1,5 +1,6 @@
 import os
 import tempfile
+from datetime import datetime, timedelta, timezone
 
 import aiosqlite
 
@@ -170,9 +171,41 @@ class WatcherIsV2Safe(DatabaseTestCase):
         except Exception as e:
             self.fail(f"process_watcher() raised {type(e).__name__} on v2 schema: {e}")
 
-    async def test_process_watcher_skips_when_villages_table_absent(self):
-        # Confirms no settlement queries run against missing v1 tables.
-        # After the guard, the v2 players table must remain empty (no writes attempted).
+    async def test_process_watcher_settles_due_v2_player(self):
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        cycle_end = now - timedelta(minutes=1)
+        last_update = now - timedelta(minutes=11)
+
+        async with schema.get_connection() as db:
+            await db.execute(
+                """INSERT INTO players
+                   (user_id, created_at, updated_at, action, action_target,
+                    completion_time, last_update_time, ap_full_time)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (
+                    "watcher-player",
+                    last_update.isoformat(),
+                    last_update.isoformat(),
+                    "gathering",
+                    None,
+                    cycle_end.isoformat(),
+                    last_update.isoformat(),
+                    now.isoformat(),
+                ),
+            )
+            await db.commit()
+
         await Engine.process_watcher()
-        row = await self.fetchone("SELECT COUNT(*) FROM players")
-        self.assertEqual(row[0], 0)
+
+        wood = await self.fetchone(
+            "SELECT amount FROM village_resources WHERE resource_type='wood'"
+        )
+        player = await self.fetchone(
+            "SELECT completion_time FROM players WHERE user_id='watcher-player'"
+        )
+
+        self.assertEqual(wood[0], 10)
+        result_ct = datetime.fromisoformat(player[0])
+        if result_ct.tzinfo is None:
+            result_ct = result_ct.replace(tzinfo=timezone.utc)
+        self.assertGreater(result_ct, cycle_end.replace(tzinfo=timezone.utc))

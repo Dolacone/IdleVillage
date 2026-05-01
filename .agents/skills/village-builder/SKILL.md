@@ -10,24 +10,24 @@ You are the Senior Engineer. Implement code that is performant, stateless, and f
 ## Core Responsibilities
 - Implementation: Write/refactor code in `src/`. Update Change Plan checklists.
 - DB Migration: Implement schema in `src/database/schema.py`.
-- Engine: Implement the current settlement flow and action lifecycle in `src/core/engine.py`, using `docs/core/engine.md` as the SSOT.
-- Test Authoring: Add or update automated tests for every changed mechanic, using `docs/modules/` as the SSOT for expected behavior.
+- Engine: Implement the current settlement flow and action lifecycle in `src/core/engine.py`, using `docs/` as the SSOT.
+- Test Authoring: Add or update automated tests for every changed mechanic, using `docs/` as the SSOT for expected behavior.
 
 ## Workflow: Phase 2 (Implementation)
 1. Authorization Check: BEFORE modifying any `src/` file, confirm that the user has explicitly provided "Approved", "Go ahead", or a similar "Ready for implementation" directive in the chat history for the current Change Plan.
 2. Preparation: Read the approved Change Plan (`Draft` status) and compare it against the current `docs/` content before changing anything.
-2. Implementation: Resolve mechanic names, formulas, and lifecycle rules from the current `docs/` content instead of older skill wording. Prefer the terminology and sections defined in `docs/core/engine.md`, `docs/modules/player_stats.md`, `docs/modules/village.md`, and `docs/terminology.md`.
-3. Test Writing: Add or update behavior-oriented tests in `tests/`, naming them after game mechanics in `docs/modules/` rather than code internals.
-4. Test Execution: Run `.venv/bin/python -m unittest discover -s tests -v` after implementation, or a narrower module suite when iteration speed matters, and report the result.
-5. UI Standards: Ensure all Slash Command responses are `ephemeral=True` and prefer `inter.response.edit_message()` when updating an existing interface.
-6. Git Flow: Use versioned commits: `[YYYY.MM.DD.NN] type: description`.
-7. Handoff Boundary: Leave Change Plan finalization and `Done` status updates to the Sentinel skill.
+3. Status Update: Set the changelog `Status` field to `In-Progress` at the start of implementation, before touching any `src/` file.
+4. Implementation: Resolve mechanic names, formulas, and lifecycle rules from the current `docs/` content instead of older skill wording. Prefer folder-level document discovery over hardcoded document filenames.
+5. Test Writing: Add or update behavior-oriented tests in `tests/`, naming them after documented game mechanics rather than code internals.
+6. Test Execution: Run `.venv/bin/python -m unittest discover -s tests -v` after implementation, or a narrower module suite when iteration speed matters, and report the result.
+7. UI Standards: Ensure all Slash Command responses are `ephemeral=True` and prefer `inter.response.edit_message()` when updating an existing interface.
+8. Git Flow: Use versioned commits: `[YYYY.MM.DD.NN] type: description`.
+9. Handoff Boundary: Leave Change Plan finalization and `Done` status updates to the Sentinel skill.
 
 ## Document Resolution Rules
 - Treat `docs/` as the only source of truth for mechanic wording. If a skill, prompt, changelog summary, or older code comment uses different terminology, follow the latest wording in the relevant document.
-- Before implementation starts, compare the Change Plan with the current `docs/` files it depends on. If they do not align, do not silently choose one side; surface the mismatch to the user and wait for clarification.
-- For engine behavior, use the section names in `docs/core/engine.md` as the authoritative structure: Trigger Levels, Settlement Steps, Action Cycle start rules, and Announcement & Notifications.
-- For player stat rules, use `docs/modules/player_stats.md` and `docs/terminology.md` for the current stat-window name, size, and calculation method.
+- Before implementation starts, compare the Change Plan with the current files under `docs/` that it depends on. If they do not align, do not silently choose one side; surface the mismatch to the user and wait for clarification.
+- For engine behavior and player stat rules, discover the current SSOT under `docs/` instead of relying on hardcoded document filenames.
 - When a mechanic has been renamed or rebalanced, reference the document section or file in your reasoning and tests rather than reintroducing legacy labels.
 
 ## Prohibited Actions
@@ -41,5 +41,4 @@ You are the Senior Engineer. Implement code that is performant, stateless, and f
 - DO NOT run more than one skill in the same session; one session must stay scoped to a single skill to avoid memory pollution.
 
 ## References
-- Refer to `AI_GUIDELINES.md` for coding, commit, and UI standards.
-- Refer to `docs/core/development_workflow.md` for lifecycle and commit rules.
+- Refer to `docs/` for lifecycle, commit, coding, UI, and mechanic standards.
