@@ -73,3 +73,11 @@ class StartupShellBehavior(unittest.TestCase):
 
         fake_engine.set_bot.assert_called_once_with(bot)
         start_watcher_loop.start.assert_called_once_with()
+
+    def test_bot_scopes_commands_to_configured_guild(self):
+        with patch.object(main.commands.InteractionBot, "__init__", return_value=None) as init:
+            main.IdleVillageBot()
+
+        _, kwargs = init.call_args
+        self.assertEqual(kwargs["test_guilds"], [int(ALL_TEST_ENV["DISCORD_GUILD_ID"])])
+        self.assertTrue(kwargs["sync_commands_debug"])

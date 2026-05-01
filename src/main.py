@@ -7,7 +7,7 @@ load_dotenv()
 
 import disnake
 from disnake.ext import commands
-from core.config import validate_env, get_discord_token, get_env_int
+from core.config import validate_env, get_discord_token, get_discord_guild_id, get_env_int
 from core.engine import Engine
 from database.schema import init_db
 
@@ -16,7 +16,14 @@ class IdleVillageBot(commands.InteractionBot):
     def __init__(self):
         intents = disnake.Intents.default()
         intents.message_content = True
-        super().__init__(intents=intents)
+        super().__init__(
+            intents=intents,
+            test_guilds=[int(get_discord_guild_id())],
+            sync_commands_debug=True,
+        )
+
+    async def on_connect(self):
+        print("Connected to Discord gateway.")
 
     async def on_ready(self):
         Engine.set_bot(self)
@@ -62,6 +69,7 @@ def main():
             except Exception as e:
                 print(f"Failed to load extension {extension}. Error: {e}")
 
+        print("Starting Discord bot connection.")
         bot.run(get_discord_token())
     finally:
         if not loop.is_closed():
