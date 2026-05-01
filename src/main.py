@@ -1,22 +1,24 @@
+import asyncio
 import os
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import disnake
 from disnake.ext import commands
-from dotenv import load_dotenv
+from core.config import validate_env
 from core.engine import Engine
 from database.schema import init_db
 
-load_dotenv()
 
 class IdleVillageBot(commands.InteractionBot):
     def __init__(self):
         intents = disnake.Intents.default()
-        intents.message_content = True # Enable message content for tracking user activity
+        intents.message_content = True
         super().__init__(intents=intents)
 
     async def on_ready(self):
-        print("Initializing database schemas...")
-        await init_db()
-
         Engine.set_bot(self)
         if not Engine.start_watcher_loop.is_running():
             Engine.start_watcher_loop.start()
@@ -25,10 +27,20 @@ class IdleVillageBot(commands.InteractionBot):
         print(f"Logged in as {self.user} (ID: {self.user.id})")
         print("------")
 
+
 def main():
+    if not validate_env():
+        return
+
+    try:
+        asyncio.run(init_db())
+        print("Database schema initialized.")
+    except RuntimeError as e:
+        print(f"Error: {e}")
+        return
+
     bot = IdleVillageBot()
 
-    # Runtime state lives outside the package tree.
     os.makedirs("data", exist_ok=True)
 
     initial_extensions = [
@@ -45,10 +57,6 @@ def main():
             print(f"Failed to load extension {extension}. Error: {e}")
 
     token = os.getenv("DISCORD_TOKEN")
-    if not token:
-        print("Error: DISCORD_TOKEN not found in environment variables.")
-        return
-
     bot.run(token)
 
 if __name__ == "__main__":

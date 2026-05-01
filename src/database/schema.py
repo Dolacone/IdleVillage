@@ -1,12 +1,16 @@
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 
 import aiosqlite
 
-from core.config import get_action_cycle_minutes
+from core.config import (
+    get_announcement_channel_id,
+    get_database_path,
+    get_discord_guild_id,
+    get_stage_base_target,
+)
 
-DB_PATH = os.getenv("DATABASE_PATH", "data/village.db")
-
+# v1 constants kept as shims for engine.py and cogs that still reference them.
 RESOURCE_TYPES = ("food", "wood", "stone", "gold")
 BUFF_FOOD_EFFICIENCY = 1
 BUFF_STORAGE_CAPACITY = 2
@@ -17,374 +21,189 @@ STATS_BASE_VALUE = 50
 TOKEN_TYPES = ("gathering", "exploring", "building", "attacking")
 PLAYER_BUFF_TYPES = TOKEN_TYPES
 
+DB_PATH: str | None = None  # Override in tests; production resolves lazily via config.
 
-async def _ensure_column(db, table_name: str, column_name: str, definition: str):
-    async with db.execute(f"PRAGMA table_info({table_name})") as cursor:
-        columns = await cursor.fetchall()
-    existing_names = {column[1] for column in columns}
-    if column_name not in existing_names:
-        await db.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
-
-
-async def _table_columns(db, table_name: str):
-    async with db.execute(f"PRAGMA table_info({table_name})") as cursor:
-        columns = await cursor.fetchall()
-    return [column[1] for column in columns]
-
-
-async def _table_exists(db, table_name: str):
-    async with db.execute(
-        """
-        SELECT 1
-        FROM sqlite_master
-        WHERE type = 'table'
-          AND name = ?
-        """,
-        (table_name,),
-    ) as cursor:
-        return await cursor.fetchone() is not None
+V1_TABLE_NAMES = (
+    "villages",
+    "buffs",
+    "player_stats",
+    "resource_nodes",
+    "monsters",
+    "tokens",
+    "player_buffs",
+    "player_actions_log",
+)
 
 
-async def _migrate_monsters_table_if_needed(db):
-    if not await _table_exists(db, "monsters"):
-        return
+def _resolve_db_path() -> str:
+    return DB_PATH or get_database_path()
 
-    columns = await _table_columns(db, "monsters")
-    if "expires_at" not in columns:
-        return
 
-    await db.execute("ALTER TABLE monsters RENAME TO monsters_legacy_2026_04_13")
+async def _detect_v1_tables(db) -> list:
+    found = []
+    for table in V1_TABLE_NAMES:
+        async with db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        ) as cursor:
+            if await cursor.fetchone():
+                found.append(table)
+    return found
+
+
+async def _create_v2_tables(db):
     await db.execute(
         """
-        CREATE TABLE monsters (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            village_id INTEGER NOT NULL UNIQUE,
-            name TEXT NOT NULL,
-            reward_resource_type TEXT NOT NULL DEFAULT 'food',
-            quality INTEGER NOT NULL,
-            hp INTEGER NOT NULL,
-            max_hp INTEGER NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (village_id) REFERENCES villages(id)
+        CREATE TABLE IF NOT EXISTS village_state (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            dashboard_channel_id TEXT,
+            dashboard_message_id TEXT,
+            announcement_channel_id TEXT
         )
         """
     )
     await db.execute(
         """
-        INSERT INTO monsters (id, village_id, name, reward_resource_type, quality, hp, max_hp, created_at)
-        SELECT
-            id,
-            village_id,
-            COALESCE(name, 'Monsters'),
-            COALESCE(reward_resource_type, 'food'),
-            quality,
-            hp,
-            max_hp,
-            COALESCE(created_at, CURRENT_TIMESTAMP)
-        FROM monsters_legacy_2026_04_13
-        """
-    )
-    await db.execute("DROP TABLE monsters_legacy_2026_04_13")
-
-
-def _parse_timestamp(value):
-    if not value:
-        return None
-    return datetime.fromisoformat(value)
-
-
-def _action_cycle_seconds():
-    return get_action_cycle_minutes() * 60
-
-
-def _action_deltas(action_type: str):
-    mapping = {
-        "idle": (0, 0, 1, 1, 0),
-        "gathering_food": (0, 0, 1, 1, 0),
-        "gathering_wood": (1, 0, 0, 0, 1),
-        "gathering_stone": (1, 0, 0, 0, 1),
-        "exploring": (0, 1, 1, 0, 0),
-        "building": (0, 0, 0, 1, 1),
-        "attack": (1, 1, 0, 0, 0),
-    }
-    return mapping.get(action_type)
-
-
-async def _create_player_actions_log_table(db):
-    await db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS player_actions_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            player_discord_id INTEGER NOT NULL,
-            village_id INTEGER NOT NULL,
-            strength_delta INTEGER NOT NULL DEFAULT 0,
-            agility_delta INTEGER NOT NULL DEFAULT 0,
-            perception_delta INTEGER NOT NULL DEFAULT 0,
-            knowledge_delta INTEGER NOT NULL DEFAULT 0,
-            endurance_delta INTEGER NOT NULL DEFAULT 0,
-            cycle_end_time TIMESTAMP NOT NULL,
-            FOREIGN KEY (player_discord_id, village_id) REFERENCES players(discord_id, village_id)
+        CREATE TABLE IF NOT EXISTS stage_state (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            stages_cleared INTEGER NOT NULL DEFAULT 0,
+            current_stage_index INTEGER NOT NULL DEFAULT 0,
+            current_stage_type TEXT NOT NULL,
+            current_stage_progress INTEGER NOT NULL DEFAULT 0,
+            current_stage_target INTEGER NOT NULL,
+            stage_started_at TEXT NOT NULL,
+            overtime_notified INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL
         )
         """
     )
-    columns = await _table_columns(db, "player_actions_log")
-    if "cycle_end_time" in columns:
-        await db.execute(
-            """
-            CREATE INDEX IF NOT EXISTS idx_actions_log_player
-            ON player_actions_log (player_discord_id, village_id, cycle_end_time DESC, id DESC)
-            """
-        )
-
-
-async def _migrate_player_actions_log_if_needed(db):
-    if not await _table_exists(db, "player_actions_log"):
-        await _create_player_actions_log_table(db)
-        return
-
-    columns = await _table_columns(db, "player_actions_log")
-    if "action_type" not in columns:
-        await _create_player_actions_log_table(db)
-        return
-
-    await db.execute("ALTER TABLE player_actions_log RENAME TO player_actions_log_legacy_2026_04_14")
-    await _create_player_actions_log_table(db)
-
-    async with db.execute(
-        """
-        SELECT player_discord_id, village_id, action_type, start_time, end_time
-        FROM player_actions_log_legacy_2026_04_14
-        ORDER BY player_discord_id, village_id, end_time, id
-        """
-    ) as cursor:
-        legacy_rows = await cursor.fetchall()
-
-    converted_rows = []
-    cycle_seconds = _action_cycle_seconds()
-    for player_discord_id, village_id, action_type, start_time, end_time in legacy_rows:
-        deltas = _action_deltas(action_type)
-        if deltas is None:
-            continue
-
-        start_dt = _parse_timestamp(start_time)
-        end_dt = _parse_timestamp(end_time)
-        if start_dt is None or end_dt is None or end_dt <= start_dt:
-            continue
-
-        full_cycles = int((end_dt - start_dt).total_seconds() // cycle_seconds)
-        for cycle_index in range(full_cycles):
-            cycle_end_time = start_dt + timedelta(seconds=cycle_seconds * (cycle_index + 1))
-            converted_rows.append(
-                (
-                    player_discord_id,
-                    village_id,
-                    deltas[0],
-                    deltas[1],
-                    deltas[2],
-                    deltas[3],
-                    deltas[4],
-                    cycle_end_time.isoformat(),
-                )
-            )
-
-    if converted_rows:
-        await db.executemany(
-            """
-            INSERT INTO player_actions_log (
-                player_discord_id,
-                village_id,
-                strength_delta,
-                agility_delta,
-                perception_delta,
-                knowledge_delta,
-                endurance_delta,
-                cycle_end_time
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            converted_rows,
-        )
-
-        await db.execute(
-            """
-            DELETE FROM player_actions_log
-            WHERE id IN (
-                SELECT id
-                FROM (
-                    SELECT
-                        id,
-                        ROW_NUMBER() OVER (
-                            PARTITION BY player_discord_id, village_id
-                            ORDER BY cycle_end_time DESC, id DESC
-                        ) AS row_num
-                    FROM player_actions_log
-                )
-                WHERE row_num > 150
-            )
-            """
-        )
-
-    await db.execute("DROP TABLE player_actions_log_legacy_2026_04_14")
-
-
-async def _create_current_tables(db):
-    await db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS villages (
-            id INTEGER PRIMARY KEY,
-            last_tick_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            announcement_channel_id TEXT,
-            announcement_message_id TEXT,
-            last_announcement_updated TIMESTAMP,
-            active_command TEXT,
-            protection_expires_at TIMESTAMP
-        )
-        """
-    )
-
     await db.execute(
         """
         CREATE TABLE IF NOT EXISTS village_resources (
-            village_id INTEGER NOT NULL,
-            resource_type TEXT NOT NULL,
-            amount INTEGER DEFAULT 0,
-            PRIMARY KEY (village_id, resource_type),
-            FOREIGN KEY (village_id) REFERENCES villages(id)
+            resource_type TEXT PRIMARY KEY,
+            amount INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL
         )
         """
     )
-
     await db.execute(
         """
-        CREATE TABLE IF NOT EXISTS buffs (
-            village_id INTEGER NOT NULL,
-            buff_id INTEGER NOT NULL,
-            xp INTEGER DEFAULT 0,
-            PRIMARY KEY (village_id, buff_id),
-            FOREIGN KEY (village_id) REFERENCES villages(id)
+        CREATE TABLE IF NOT EXISTS buildings (
+            building_type TEXT PRIMARY KEY,
+            level INTEGER NOT NULL DEFAULT 0,
+            xp_progress INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL
         )
         """
     )
-
     await db.execute(
         """
         CREATE TABLE IF NOT EXISTS players (
-            discord_id INTEGER NOT NULL,
-            village_id INTEGER NOT NULL,
-            last_message_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            last_command_time TIMESTAMP DEFAULT '',
-            status TEXT DEFAULT 'idle',
-            target_id INTEGER,
-            last_update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            completion_time TIMESTAMP,
-            PRIMARY KEY (discord_id, village_id),
-            FOREIGN KEY (village_id) REFERENCES villages(id)
+            user_id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            action TEXT,
+            action_target TEXT,
+            completion_time TEXT,
+            last_update_time TEXT,
+            ap_full_time TEXT NOT NULL,
+            materials_gathering INTEGER NOT NULL DEFAULT 0,
+            materials_building INTEGER NOT NULL DEFAULT 0,
+            materials_combat INTEGER NOT NULL DEFAULT 0,
+            materials_research INTEGER NOT NULL DEFAULT 0,
+            gear_gathering INTEGER NOT NULL DEFAULT 0,
+            gear_building INTEGER NOT NULL DEFAULT 0,
+            gear_combat INTEGER NOT NULL DEFAULT 0,
+            gear_research INTEGER NOT NULL DEFAULT 0,
+            pity_gathering INTEGER NOT NULL DEFAULT 0,
+            pity_building INTEGER NOT NULL DEFAULT 0,
+            pity_combat INTEGER NOT NULL DEFAULT 0,
+            pity_research INTEGER NOT NULL DEFAULT 0
         )
         """
     )
-
-    await db.execute(
-        f"""
-        CREATE TABLE IF NOT EXISTS player_stats (
-            player_discord_id INTEGER NOT NULL,
-            village_id INTEGER NOT NULL,
-            strength INTEGER DEFAULT {STATS_BASE_VALUE},
-            agility INTEGER DEFAULT {STATS_BASE_VALUE},
-            perception INTEGER DEFAULT {STATS_BASE_VALUE},
-            knowledge INTEGER DEFAULT {STATS_BASE_VALUE},
-            endurance INTEGER DEFAULT {STATS_BASE_VALUE},
-            last_calc_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            PRIMARY KEY (player_discord_id, village_id),
-            FOREIGN KEY (player_discord_id, village_id) REFERENCES players(discord_id, village_id)
-        )
-        """
-    )
-
-    await _create_player_actions_log_table(db)
-
     await db.execute(
         """
-        CREATE TABLE IF NOT EXISTS resource_nodes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            village_id INTEGER,
-            type TEXT,
-            quality INTEGER,
-            remaining_amount INTEGER,
-            expiry_time TIMESTAMP,
-            FOREIGN KEY (village_id) REFERENCES villages(id)
+        CREATE TABLE IF NOT EXISTS guild_installations (
+            guild_id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            is_active INTEGER NOT NULL DEFAULT 1
         )
+        """
+    )
+    await db.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_players_completion_time
+        ON players (completion_time)
+        """
+    )
+    await db.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_players_action
+        ON players (action)
         """
     )
 
-    await db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS monsters (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            village_id INTEGER NOT NULL UNIQUE,
-            name TEXT NOT NULL,
-            reward_resource_type TEXT NOT NULL DEFAULT 'food',
-            quality INTEGER NOT NULL,
-            hp INTEGER NOT NULL,
-            max_hp INTEGER NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (village_id) REFERENCES villages(id)
-        )
-        """
-    )
+
+async def _seed_initial_rows(db):
+    now = datetime.now(timezone.utc).isoformat()
 
     await db.execute(
         """
-        CREATE TABLE IF NOT EXISTS tokens (
-            player_discord_id INTEGER NOT NULL,
-            village_id INTEGER NOT NULL,
-            token_type TEXT NOT NULL,
-            amount INTEGER DEFAULT 0,
-            PRIMARY KEY (player_discord_id, village_id, token_type),
-            FOREIGN KEY (player_discord_id, village_id) REFERENCES players(discord_id, village_id)
-        )
-        """
+        INSERT OR IGNORE INTO village_state (id, created_at, updated_at, announcement_channel_id)
+        VALUES (1, ?, ?, ?)
+        """,
+        (now, now, get_announcement_channel_id()),
     )
 
+    stage_target = get_stage_base_target()
     await db.execute(
         """
-        CREATE TABLE IF NOT EXISTS player_buffs (
-            player_discord_id INTEGER NOT NULL,
-            village_id INTEGER NOT NULL,
-            buff_type TEXT,
-            expires_at TIMESTAMP,
-            PRIMARY KEY (player_discord_id, village_id),
-            FOREIGN KEY (player_discord_id, village_id) REFERENCES players(discord_id, village_id)
-        )
-        """
+        INSERT OR IGNORE INTO stage_state (
+            id, stages_cleared, current_stage_index, current_stage_type,
+            current_stage_progress, current_stage_target,
+            stage_started_at, overtime_notified, updated_at
+        ) VALUES (1, 0, 0, 'gathering', 0, ?, ?, 0, ?)
+        """,
+        (stage_target, now, now),
     )
 
-    await _ensure_column(db, "villages", "active_command", "TEXT")
-    await _ensure_column(db, "villages", "protection_expires_at", "TIMESTAMP")
-    await _migrate_monsters_table_if_needed(db)
-    await _ensure_column(db, "monsters", "reward_resource_type", "TEXT NOT NULL DEFAULT 'food'")
-    await _ensure_column(db, "monsters", "created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+    for resource_type in ("food", "wood", "knowledge"):
+        await db.execute(
+            "INSERT OR IGNORE INTO village_resources (resource_type, amount, updated_at) VALUES (?, 0, ?)",
+            (resource_type, now),
+        )
 
-    await _migrate_player_actions_log_if_needed(db)
+    for building_type in ("gathering_field", "workshop", "hunting_ground", "research_lab"):
+        await db.execute(
+            "INSERT OR IGNORE INTO buildings (building_type, level, xp_progress, updated_at) VALUES (?, 0, 0, ?)",
+            (building_type, now),
+        )
+
+    await db.execute(
+        "INSERT OR IGNORE INTO guild_installations (guild_id, created_at, updated_at, is_active) VALUES (?, ?, ?, 1)",
+        (get_discord_guild_id(), now, now),
+    )
+
 
 async def init_db():
-    """Initializes the SQLite database with the required schemas."""
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    path = _resolve_db_path()
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
 
-    async with aiosqlite.connect(DB_PATH) as db:
-        await _create_current_tables(db)
+    async with aiosqlite.connect(path) as db:
+        v1_tables = await _detect_v1_tables(db)
+        if v1_tables:
+            raise RuntimeError(
+                f"Startup failed: v1 database tables detected ({', '.join(v1_tables)}). "
+                "Delete or replace the database file before starting v2."
+            )
+        await _create_v2_tables(db)
+        await _seed_initial_rows(db)
         await db.commit()
 
 
 def get_connection():
-    """Returns a new aiosqlite connection/context manager.
-    Use either:
-    async with get_connection() as db:
-    or:
-    db = await get_connection()
-    """
-    return aiosqlite.connect(DB_PATH)
+    return aiosqlite.connect(_resolve_db_path())
 
-
-if __name__ == "__main__":
-    asyncio.run(init_db())
-    print("Database schema initialized successfully.")
