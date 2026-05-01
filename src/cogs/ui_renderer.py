@@ -201,6 +201,11 @@ def build_main_components(
     pending_target: str | None = None,
 ) -> list:
     ap = player_row.get("_ap", 0)
+    gear_cap = buildings.get("research_lab", {}).get("level", 0)
+    all_gear_at_cap = all(
+        player_row.get(f"gear_{gear_type}", 0) >= gear_cap
+        for gear_type in ("gathering", "building", "combat", "research")
+    )
 
     action_options = [
         disnake.SelectOption(
@@ -279,7 +284,7 @@ def build_main_components(
                 label="🔨 強化裝備",
                 style=disnake.ButtonStyle.secondary,
                 custom_id="open_gear_upgrade",
-                disabled=(ap < 1),
+                disabled=(ap < 1 or all_gear_at_cap),
             ),
         )
     )

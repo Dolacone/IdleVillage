@@ -284,6 +284,41 @@ class TestRendererMainEmbed(unittest.TestCase):
         self.assertIn("Lv3", embed.description)
 
 
+class TestRendererMainComponents(unittest.TestCase):
+    """build_main_components follows documented button enablement rules."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def _make_player(self, ap=1, gear_level=2):
+        return {
+            "_ap": ap,
+            "action": "gathering",
+            "gear_gathering": gear_level,
+            "gear_building": gear_level,
+            "gear_combat": gear_level,
+            "gear_research": gear_level,
+        }
+
+    def test_gear_upgrade_disabled_when_all_gear_at_cap(self):
+        from cogs.ui_renderer import build_main_components
+
+        buildings = {"research_lab": {"level": 2, "xp_progress": 0}}
+        rows = build_main_components(self._make_player(ap=1, gear_level=2), buildings)
+        gear_button = next(
+            component
+            for row in rows
+            for component in row.children
+            if getattr(component, "custom_id", None) == "open_gear_upgrade"
+        )
+
+        self.assertTrue(
+            gear_button.disabled,
+            "Gear upgrade button should be disabled when all gear is at research-lab cap",
+        )
+
+
 class TestRendererGearEmbed(unittest.TestCase):
     """build_gear_embed shows upgrade info and results."""
 
