@@ -72,6 +72,7 @@ async def get_upgrade_info(db, user_id: str, gear_type: str, now: datetime) -> d
         "ap": ap,
         "can_attempt": can_attempt,
         "gear_cap": gear_cap,
+        "materials": materials,
     }
 
 

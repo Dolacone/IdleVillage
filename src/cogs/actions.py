@@ -1,916 +1,233 @@
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import disnake
 from disnake.ext import commands
 
-from core.engine import Engine
-from core.observability import log_event, new_request_id
+from cogs.ui_renderer import (
+    UI_BUILDING_TARGETS,
+    build_gear_components,
+    build_gear_embed,
+    build_main_components,
+    build_main_embed,
+)
+from core.config import get_discord_guild_id, get_env_int
+from core.settlement import change_action, settle_burst, settle_complete_cycles
+from core.utils import dt_str
 from database.schema import get_connection
-
-
-async def _village_exists(db, village_id: int):
-    async with db.execute(
-        "SELECT 1 FROM villages WHERE id = ?",
-        (village_id,),
-    ) as cursor:
-        return await cursor.fetchone() is not None
-
-
-async def _get_or_create_player(db, village_id: int, discord_id: int):
-    async with db.execute(
-        "SELECT discord_id FROM players WHERE discord_id = ? AND village_id = ?",
-        (discord_id, village_id),
-    ) as cursor:
-        player_row = await cursor.fetchone()
-
-    if player_row:
-        return discord_id
-
-    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-    await db.execute(
-        """
-        INSERT INTO players (discord_id, village_id, last_message_time, last_command_time)
-        VALUES (?, ?, ?, ?)
-        """,
-        (discord_id, village_id, "", now),
-    )
-    await db.commit()
-    return discord_id
-
-
-async def _update_player_command_time(db, player_discord_id: int, village_id: int):
-    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-    await db.execute(
-        """
-        UPDATE players
-        SET last_command_time = ?
-        WHERE discord_id = ?
-          AND village_id = ?
-        """,
-        (now, player_discord_id, village_id),
-    )
-    await db.commit()
-
-
-async def _load_submenu_options(db, village_id: int, action: str):
-    if action == "interact":
-        async with db.execute(
-            """
-            SELECT id, type, remaining_amount, quality
-            FROM resource_nodes
-            WHERE village_id = ?
-              AND remaining_amount > 0
-            ORDER BY type, quality DESC, id DESC
-            """,
-            (village_id,),
-        ) as cursor:
-            nodes = await cursor.fetchall()
-
-        options = []
-        for node_id, node_type, remaining_amount, quality in nodes:
-            options.append(
-                disnake.SelectOption(
-                    label=f"{node_type.title()} Node",
-                    description=f"Stock {remaining_amount} | Quality {quality}%",
-                    value=f"node:{node_id}",
-                )
-            )
-
-        async with db.execute(
-            """
-            SELECT id, name, hp, max_hp, quality
-            FROM monsters
-            WHERE village_id = ?
-            """,
-            (village_id,),
-        ) as cursor:
-            monster = await cursor.fetchone()
-        if monster:
-            monster_id, name, hp, max_hp, quality = monster
-            options.append(
-                disnake.SelectOption(
-                    label=name,
-                    description=f"HP {hp}/{max_hp} | Quality {quality}%",
-                    value=f"monster:{monster_id}",
-                )
-            )
-        return options
-
-    if action == "building":
-        return [
-            disnake.SelectOption(label="廚房", description="Food cost reduction (materials: food & wood)", value="1"),
-            disnake.SelectOption(label="倉庫", description="Storage capacity (materials: wood & stone)", value="2"),
-            disnake.SelectOption(label="加工", description="Resource yield (materials: wood & stone)", value="3"),
-            disnake.SelectOption(label="狩獵", description="Attack damage bonus (materials: stone & gold)", value="4"),
-        ]
-
-    return []
-
-
-async def _build_embed(inter, db, village_id: int, player_discord_id: int):
-    async with db.execute(
-        """
-        SELECT 1
-        FROM villages
-        WHERE id = ?
-        """,
-        (village_id,),
-    ) as cursor:
-        village = await cursor.fetchone()
-
-    async with db.execute(
-        """
-        SELECT status, target_id, last_update_time, completion_time
-        FROM players
-        WHERE discord_id = ?
-          AND village_id = ?
-        """,
-        (player_discord_id, village_id),
-    ) as cursor:
-        player = await cursor.fetchone()
-
-    async with db.execute(
-        """
-        SELECT strength, agility, perception, knowledge, endurance
-        FROM player_stats
-        WHERE player_discord_id = ?
-          AND village_id = ?
-        """,
-        (player_discord_id, village_id),
-    ) as cursor:
-        stats = await cursor.fetchone()
-
-    if not village or not player:
-        return None
-
-    status, target_id, last_update_str, completion_time_str = player
-    p_str, p_agi, p_per, p_kno, p_end = stats if stats else (50, 50, 50, 50, 50)
-
-    last_update = Engine._parse_timestamp(last_update_str)
-    completion_time = Engine._parse_timestamp(completion_time_str)
-    status_text = await Engine._get_target_description(db, status, target_id)
-    if last_update:
-        last_activity_text = f"<t:{Engine._to_discord_unix(last_update)}:t>"
-    else:
-        last_activity_text = "Unknown"
-
-    next_check_time = completion_time
-    if status == "idle":
-        next_check_time = Engine._next_idle_completion(last_update)
-
-    if next_check_time:
-        next_check_text = _format_discord_relative_time(next_check_time)
-    else:
-        next_check_text = "Manual refresh"
-
-    guild_name = inter.guild.name if inter.guild else f"Village {village_id}"
-    embed = disnake.Embed(title=f"Idle Village - {guild_name}", color=disnake.Color.green())
-    
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    unified_description = await Engine.render_announcement(
-        village_id, 
-        db=db, 
-        bot=getattr(inter, "bot", None), 
-        rendered_at=now
-    )
-    if unified_description:
-        embed.description = unified_description
-
-    embed.add_field(
-        name="Player Status",
-        value=(
-            f"Stats: 💪 STR {p_str} | 🏃 AGI {p_agi} | 👁️ PER {p_per} | 🧠 KNO {p_kno} | 🔋 END {p_end}\n"
-            f"Status: {status_text} (Last activity: {last_activity_text}, Next check: {next_check_text})"
-        ),
-        inline=False,
-    )
-    return embed
-
-
-async def _ensure_player_ready(db, village_id: int, player_discord_id: int):
-    if not await _village_exists(db, village_id):
-        return False, "Village not initialized for this server. Ask an admin to run `/idlevillage-initial`."
-    await Engine.settle_village(village_id, db)
-    player_discord_id = await _get_or_create_player(db, village_id, player_discord_id)
-    await _update_player_command_time(db, player_discord_id, village_id)
-    await Engine.settle_player(player_discord_id, village_id, db, is_ui_refresh=True)
-    return True, player_discord_id
-
-
-def _format_token_status(tokens: dict):
-    return (
-        f"Gathering: {tokens['gathering']}\n"
-        f"Exploring: {tokens['exploring']}\n"
-        f"Building: {tokens['building']}\n"
-        f"Attacking: {tokens['attacking']}"
-    )
-
-
-def _token_type_label(token_type: str) -> str:
-    return {
-        "gathering": "Gathering",
-        "exploring": "Exploring",
-        "building": "Building",
-        "attacking": "Attacking",
-    }.get(str(token_type or ""), str(token_type or "Unknown").replace("_", " ").title())
-
-
-def _format_token_usage(quantity: int, token_type: str) -> str:
-    quantity = int(quantity or 0)
-    label = _token_type_label(token_type)
-    return f"{quantity} {label} token" if quantity == 1 else f"{quantity} {label} tokens"
-
-
-def _village_command_label(command: str | None) -> str:
-    return {
-        "gathering_food": "Gather Food",
-        "gathering_wood": "Gather Wood",
-        "gathering_stone": "Gather Stone",
-        "exploring": "Explore",
-        "attack": "Attack Monsters",
-    }.get(str(command or ""), "None")
-
-
-def _format_discord_relative_time(dt: datetime) -> str:
-    """Format datetime as Discord relative timestamp."""
-    return f"<t:{Engine._to_discord_unix(dt)}:R>"
-
-
-async def _build_token_embed(
-    inter,
-    db,
-    village_id: int,
-    player_discord_id: int,
-    selected_quantity: int = 1,
-    selected_mode: str | None = None,
-):
-    tokens = await Engine._fetch_player_tokens(db, player_discord_id, village_id)
-    active_buff = await Engine._fetch_player_buff(db, player_discord_id, village_id)
-    protection_expires_at = await Engine._fetch_protection_expires_at(db, village_id)
-    active_command = await Engine._fetch_village_command(db, village_id)
-    guild_name = inter.guild.name if inter.guild else f"Village {village_id}"
-    total_tokens = sum(tokens.values())
-
-    embed = disnake.Embed(title=f"Idle Village Tokens - {guild_name}", color=disnake.Color.blurple())
-    embed.description = (
-        "Use the menus below to spend tokens on a personal buff, village protection, "
-        "or the village command. Village command changes consume 10 tokens from the selected token type."
-    )
-    embed.add_field(
-        name="Token Inventory",
-        value=f"Total: {total_tokens}\n{_format_token_status(tokens)}",
-        inline=False,
-    )
-
-    buff_line = "Inactive"
-    if active_buff:
-        buff_line = f"{_token_type_label(active_buff['buff_type'])} until {_format_discord_relative_time(active_buff['expires_at'])}"
-
-    protection_line = "Inactive"
-    if protection_expires_at:
-        protection_line = _format_discord_relative_time(protection_expires_at)
-
-    embed.add_field(
-        name="Active Effects",
-        value=(
-            f"Personal Buff: {buff_line}\n"
-            f"Village Protection: {protection_line}\n"
-            f"Village Command: {_village_command_label(active_command)}"
-        ),
-        inline=False,
-    )
-    embed.add_field(
-        name="Costs",
-        value=(
-            "Personal Buff: 1 matching token = 3 cycles\n"
-            "Village Protection: 1 selected token = 1 cycle\n"
-            f"Village Command: {Engine.VILLAGE_COMMAND_TOKEN_COST} tokens from the selected token type"
-        ),
-        inline=False,
-    )
-    if selected_mode in ("buff", "protect") and int(selected_quantity or 1) > 1:
-        embed.add_field(
-            name="Selected Quantity",
-            value=(
-                f"Personal Buff: {selected_quantity} tokens = {selected_quantity * Engine.BUFF_DURATION_CYCLES} cycles\n"
-                f"Village Protection: {selected_quantity} tokens = {selected_quantity} cycles"
-            ),
-            inline=False,
-        )
-    return embed
-
-
-async def _render_interface(
-    inter,
-    *,
-    content: str = None,
-    create_response: bool = False,
-    view=None,
-    req_id: str = None,
-    user_id=None,
-    update_command_activity: bool = False,
-):
-    if not inter.guild:
-        if create_response:
-            await inter.response.send_message("This command must be run in a server.", ephemeral=True)
-        else:
-            await inter.response.edit_message(content="This command must be run in a server.", embed=None, view=None)
-        return
-
-    village_id = int(inter.guild.id)
-    player_discord_id = int(inter.author.id)
-
-    async with get_connection() as db:
-        if not await _village_exists(db, village_id):
-            message = "Village not initialized for this server. Ask an admin to run `/idlevillage-initial`."
-            if create_response:
-                await inter.response.send_message(message, ephemeral=True)
-            else:
-                await inter.response.edit_message(content=message, embed=None, view=None)
-            return
-
-        await Engine.settle_village(village_id, db, req_id=req_id, user_id=user_id)
-        player_discord_id = await _get_or_create_player(db, village_id, player_discord_id)
-        if update_command_activity:
-            await _update_player_command_time(db, player_discord_id, village_id)
-        await Engine.settle_player(player_discord_id, village_id, db, is_ui_refresh=True, req_id=req_id, user_id=user_id)
-        embed = await _build_embed(inter, db, village_id, player_discord_id)
-        await Engine.sync_announcement(village_id, db=db, bot=getattr(inter, "bot", None), req_id=req_id, user_id=user_id)
-
-    active_view = view or VillageView()
-    if create_response:
-        await inter.response.send_message(content=content, embed=embed, view=active_view, ephemeral=True)
-    else:
-        await inter.response.edit_message(content=content, embed=embed, view=active_view)
-
-
-async def _render_token_interface(
-    inter,
-    *,
-    content: str = None,
-    create_response: bool = False,
-    view=None,
-    req_id: str = None,
-    user_id=None,
-):
-    if not inter.guild:
-        if create_response:
-            await inter.response.send_message("This command must be run in a server.", ephemeral=True)
-        else:
-            await inter.response.edit_message(content="This command must be run in a server.", embed=None, view=None)
-        return
-
-    village_id = int(inter.guild.id)
-    player_discord_id = int(inter.author.id)
-
-    async with get_connection() as db:
-        ready, result = await _ensure_player_ready(db, village_id, player_discord_id)
-        if not ready:
-            if create_response:
-                await inter.response.send_message(str(result), ephemeral=True)
-            else:
-                await inter.response.edit_message(content=str(result), embed=None, view=None)
-            return
-        player_discord_id = result
-        selected_quantity = getattr(view, "quantity", 1) if view is not None else 1
-        selected_mode = getattr(view, "mode", None) if view is not None else None
-        embed = await _build_token_embed(
-            inter,
-            db,
-            village_id,
-            player_discord_id,
-            selected_quantity=selected_quantity,
-            selected_mode=selected_mode,
-        )
-
-    active_view = view or TokenView()
-    if create_response:
-        await inter.response.send_message(content=content, embed=embed, view=active_view, ephemeral=True)
-    else:
-        await inter.response.edit_message(content=content, embed=embed, view=active_view)
-
-
-class RefreshButton(disnake.ui.Button):
-    def __init__(self):
-        super().__init__(label="Refresh Status", style=disnake.ButtonStyle.gray)
-
-    async def callback(self, inter: disnake.MessageInteraction):
-        now_monotonic = time.monotonic()
-        if now_monotonic < self.view.refresh_available_at:
-            remaining_seconds = max(1, int(self.view.refresh_available_at - now_monotonic))
-            await inter.response.edit_message(content=f"Refresh available in {remaining_seconds}s.", view=self.view)
-            return
-
-        self.view.refresh_available_at = now_monotonic + 5
-        await _render_interface(
-            inter,
-            content="Status refreshed.",
-            view=VillageView(refresh_available_at=self.view.refresh_available_at),
-            req_id=new_request_id(),
-            user_id=inter.author.id,
-        )
-
-
-class ActionSubmitButton(disnake.ui.Button):
-    def __init__(self, action: str, target: str = None):
-        super().__init__(label="Start Action", style=disnake.ButtonStyle.green)
-        self.action = action
-        self.target = target
-
-    async def callback(self, inter: disnake.MessageInteraction):
-        req_id = new_request_id()
-        log_event(req_id, inter.author.id, "CMD", f"action-submit:{self.action}")
-
-        village_id = int(inter.guild.id)
-        player_discord_id = int(inter.author.id)
-
-        async with get_connection() as db:
-            if not await _village_exists(db, village_id):
-                await inter.response.edit_message(content="Village not initialized.", embed=None, view=None)
-                return
-
-            player_discord_id = await _get_or_create_player(db, village_id, player_discord_id)
-            await Engine.settle_village(village_id, db, req_id=req_id, user_id=inter.author.id)
-
-            async with db.execute(
-                """
-                SELECT status
-                FROM players
-                WHERE discord_id = ?
-                  AND village_id = ?
-                """,
-                (player_discord_id, village_id),
-            ) as cursor:
-                player_row = await cursor.fetchone()
-
-            current_status = player_row[0] if player_row else "idle"
-            if current_status != "idle":
-                await Engine.settle_player(
-                    player_discord_id,
-                    village_id,
-                    db,
-                    interrupted=True,
-                    req_id=req_id,
-                    user_id=inter.author.id,
-                )
-            else:
-                await Engine.settle_player(
-                    player_discord_id,
-                    village_id,
-                    db,
-                    req_id=req_id,
-                    user_id=inter.author.id,
-                )
-
-            action_to_start = self.action
-            target_id = int(self.target) if self.target and self.target.isdigit() else None
-            if self.action == "interact":
-                if not self.target:
-                    await _render_interface(
-                        inter,
-                        content="Choose an interaction target first.",
-                        view=VillageView(refresh_available_at=self.view.refresh_available_at),
-                        req_id=req_id,
-                        user_id=inter.author.id,
-                    )
-                    return
-                if self.target.startswith("node:"):
-                    action_to_start = "gathering"
-                    target_id = int(self.target.split(":", 1)[1])
-                elif self.target.startswith("monster:"):
-                    action_to_start = "attack"
-                    target_id = int(self.target.split(":", 1)[1])
-                else:
-                    await _render_interface(
-                        inter,
-                        content="Invalid interaction target.",
-                        view=VillageView(refresh_available_at=self.view.refresh_available_at),
-                        req_id=req_id,
-                        user_id=inter.author.id,
-                    )
-                    return
-
-            success = True
-            if action_to_start != "idle":
-                success = await Engine.start_action(
-                    player_discord_id,
-                    village_id,
-                    action_to_start,
-                    target_id,
-                    db,
-                    req_id=req_id,
-                    user_id=inter.author.id,
-                )
-
-            if not success:
-                log_event(req_id, inter.author.id, "RESP", f"Failed to start {action_to_start}")
-                await _render_interface(
-                    inter,
-                    content=f"Failed to start {action_to_start}. Check resources or target availability.",
-                    view=VillageView(refresh_available_at=self.view.refresh_available_at),
-                    req_id=req_id,
-                    user_id=inter.author.id,
-                )
-                return
-
-            await Engine.sync_announcement(village_id, db=db, bot=inter.bot, req_id=req_id, user_id=inter.author.id)
-
-        log_event(req_id, inter.author.id, "RESP", f"Started action {action_to_start}")
-        await _render_interface(
-            inter,
-            content="Action updated.",
-            view=VillageView(refresh_available_at=self.view.refresh_available_at),
-            req_id=req_id,
-            user_id=inter.author.id,
-        )
-
-
-class SubMenuDropdown(disnake.ui.Select):
-    def __init__(self, action: str, options: list, selected_value: str = None):
-        self.action = action
-        cloned_options = []
-        for option in options:
-            cloned_options.append(
-                disnake.SelectOption(
-                    label=option.label,
-                    description=option.description,
-                    value=option.value,
-                    default=(option.value == selected_value),
-                )
-            )
-        super().__init__(
-            placeholder=f"Select target for {action}...",
-            min_values=1,
-            max_values=1,
-            options=cloned_options,
-        )
-
-    async def callback(self, inter: disnake.MessageInteraction):
-        target = self.values[0]
-        self.view.reset(action=self.action, options=self.options, target=target, selected_value=target)
-        await inter.response.edit_message(view=self.view)
-
-
-class ActionDropdown(disnake.ui.Select):
-    def __init__(self, default_value: str = None):
-        options = [
-            disnake.SelectOption(label="Interact", description="Gather nodes or attack monsters", value="interact", default=(default_value == "interact")),
-            disnake.SelectOption(label="Build", description="Work on a village structure", value="building", default=(default_value == "building")),
-            disnake.SelectOption(label="Explore", description="Search for fresh resource nodes", value="exploring", default=(default_value == "exploring")),
-            disnake.SelectOption(label="Return", description="Return to idle village support", value="idle", default=(default_value == "idle")),
-        ]
-        super().__init__(placeholder="Choose an action...", min_values=1, max_values=1, options=options)
-
-    async def callback(self, inter: disnake.MessageInteraction):
-        action = self.values[0]
-        if action in ("idle", "exploring"):
-            self.view.reset(action=action, options=None, target="none")
-            await inter.response.edit_message(view=self.view)
-            return
-
-        async with get_connection() as db:
-            village_id = int(inter.guild.id)
-            options = await _load_submenu_options(db, village_id, action) if village_id else []
-
-        self.view.reset(action=action, options=options, target=None)
-        await inter.response.edit_message(view=self.view)
-
-
-class VillageView(disnake.ui.View):
-    def __init__(self, refresh_available_at: float = 0.0):
-        super().__init__(timeout=300.0)
-        self.refresh_available_at = refresh_available_at
-        self.reset()
-
-    def reset(self, action: str = None, options=None, target: str = None, selected_value: str = None):
-        self.clear_items()
-        self.add_item(ActionDropdown(default_value=action))
-
-        if options:
-            self.add_item(SubMenuDropdown(action=action, options=options, selected_value=selected_value))
-
-        if action in ("idle", "exploring"):
-            self.add_item(ActionSubmitButton(action=action, target=target))
-        elif target and target != "none":
-            self.add_item(ActionSubmitButton(action=action, target=target))
-
-        self.add_item(RefreshButton())
-
-
-class TokenRefreshButton(disnake.ui.Button):
-    def __init__(self):
-        super().__init__(label="Refresh Tokens", style=disnake.ButtonStyle.gray)
-
-    async def callback(self, inter: disnake.MessageInteraction):
-        now_monotonic = time.monotonic()
-        if now_monotonic < self.view.refresh_available_at:
-            remaining_seconds = max(1, int(self.view.refresh_available_at - now_monotonic))
-            await inter.response.edit_message(content=f"Refresh available in {remaining_seconds}s.", view=self.view)
-            return
-
-        self.view.refresh_available_at = now_monotonic + 5
-        await _render_token_interface(
-            inter,
-            content="Token status refreshed.",
-            view=TokenView(
-                mode=self.view.mode,
-                token_type=self.view.token_type,
-                command=self.view.command,
-                quantity=self.view.quantity,
-                refresh_available_at=self.view.refresh_available_at,
-            ),
-            req_id=new_request_id(),
-            user_id=inter.author.id,
-        )
-
-
-class TokenModeDropdown(disnake.ui.Select):
-    def __init__(self, default_value: str | None = None):
-        options = [
-            disnake.SelectOption(
-                label="Personal Buff",
-                description="Spend 1 token for a 3-cycle self-buff.",
-                value="buff",
-                default=(default_value == "buff"),
-            ),
-            disnake.SelectOption(
-                label="Village Protection",
-                description="Spend 1 selected token to reduce decay by 50% for 1 cycle.",
-                value="protect",
-                default=(default_value == "protect"),
-            ),
-            disnake.SelectOption(
-                label="Village Command",
-                description="Spend 10 tokens from the selected type to guide idle villagers.",
-                value="command",
-                default=(default_value == "command"),
-            ),
-        ]
-        super().__init__(placeholder="Choose a token action...", min_values=1, max_values=1, options=options)
-
-    async def callback(self, inter: disnake.MessageInteraction):
-        next_mode = self.values[0]
-        next_quantity = self.view.quantity if next_mode in ("buff", "protect") else 1
-        self.view.reset(mode=next_mode, quantity=next_quantity)
-        await _render_token_interface(
-            inter,
-            view=self.view,
-            req_id=new_request_id(),
-            user_id=inter.author.id,
-        )
-
-
-class TokenTypeDropdown(disnake.ui.Select):
-    def __init__(self, mode: str, selected_value: str | None = None):
-        descriptions = {
-            "buff": "Use 1 token to boost matching actions.",
-            "protect": "Use 1 token to extend village protection.",
-            "command": f"Spend {Engine.VILLAGE_COMMAND_TOKEN_COST} of this type for the village command.",
-        }
-        options = [
-            disnake.SelectOption(label="Gathering", description=descriptions[mode], value="gathering", default=(selected_value == "gathering")),
-            disnake.SelectOption(label="Exploring", description=descriptions[mode], value="exploring", default=(selected_value == "exploring")),
-            disnake.SelectOption(label="Building", description=descriptions[mode], value="building", default=(selected_value == "building")),
-            disnake.SelectOption(label="Attacking", description=descriptions[mode], value="attacking", default=(selected_value == "attacking")),
-        ]
-        placeholder = "Choose which token type to spend..."
-        super().__init__(placeholder=placeholder, min_values=1, max_values=1, options=options)
-        self.mode = mode
-
-    async def callback(self, inter: disnake.MessageInteraction):
-        self.view.reset(
-            mode=self.view.mode,
-            token_type=self.values[0],
-            command=self.view.command,
-            quantity=self.view.quantity,
-        )
-        await inter.response.edit_message(view=self.view)
-
-
-class TokenQuantityDropdown(disnake.ui.Select):
-    QUANTITIES = (1, 2, 3, 5, 10, 25, 50)
-
-    def __init__(self, selected_value: int | None = None):
-        options = [
-            disnake.SelectOption(
-                label=str(quantity),
-                description=f"Spend {quantity} tokens in one action.",
-                value=str(quantity),
-                default=(int(selected_value or 1) == quantity),
-            )
-            for quantity in self.QUANTITIES
-        ]
-        super().__init__(placeholder="Choose token quantity...", min_values=1, max_values=1, options=options)
-
-    async def callback(self, inter: disnake.MessageInteraction):
-        self.view.reset(
-            mode=self.view.mode,
-            token_type=self.view.token_type,
-            command=self.view.command,
-            quantity=int(self.values[0]),
-        )
-        await _render_token_interface(
-            inter,
-            view=self.view,
-            req_id=new_request_id(),
-            user_id=inter.author.id,
-        )
-
-
-class VillageCommandDropdown(disnake.ui.Select):
-    def __init__(self, selected_value: str | None = None):
-        options = [
-            disnake.SelectOption(label="Gather Food", description="Idle villagers gather food when possible.", value="gathering_food", default=(selected_value == "gathering_food")),
-            disnake.SelectOption(label="Gather Wood", description="Idle villagers gather wood when possible.", value="gathering_wood", default=(selected_value == "gathering_wood")),
-            disnake.SelectOption(label="Gather Stone", description="Idle villagers gather stone when possible.", value="gathering_stone", default=(selected_value == "gathering_stone")),
-            disnake.SelectOption(label="Explore", description="Idle villagers explore when resources allow.", value="exploring", default=(selected_value == "exploring")),
-            disnake.SelectOption(label="Attack Monsters", description="Idle villagers attack the current monster when one exists.", value="attack", default=(selected_value == "attack")),
-        ]
-        super().__init__(placeholder="Choose the village command...", min_values=1, max_values=1, options=options)
-
-    async def callback(self, inter: disnake.MessageInteraction):
-        self.view.reset(
-            mode=self.view.mode,
-            token_type=self.view.token_type,
-            command=self.values[0],
-            quantity=self.view.quantity,
-        )
-        await inter.response.edit_message(view=self.view)
-
-
-class TokenApplyButton(disnake.ui.Button):
-    def __init__(self, mode: str, disabled: bool = False):
-        labels = {
-            "buff": "Use Personal Buff",
-            "protect": "Apply Village Protection",
-            "command": "Set Village Command",
-        }
-        super().__init__(label=labels.get(mode, "Apply"), style=disnake.ButtonStyle.green, disabled=disabled)
-
-    async def callback(self, inter: disnake.MessageInteraction):
-        req_id = new_request_id()
-        log_event(req_id, inter.author.id, "CMD", f"token-apply:{self.view.mode}")
-
-        if not self.view.mode:
-            await _render_token_interface(inter, content="Choose a token action first.", view=self.view, req_id=req_id, user_id=inter.author.id)
-            return
-
-        if not self.view.token_type:
-            await _render_token_interface(inter, content="Choose which token type to spend first.", view=self.view, req_id=req_id, user_id=inter.author.id)
-            return
-
-        if self.view.mode == "command" and not self.view.command:
-            await _render_token_interface(inter, content="Choose a village command first.", view=self.view, req_id=req_id, user_id=inter.author.id)
-            return
-
-        village_id = int(inter.guild.id)
-        player_discord_id = int(inter.author.id)
-
-        async with get_connection() as db:
-            ready, result = await _ensure_player_ready(db, village_id, player_discord_id)
-            if not ready:
-                await inter.response.edit_message(content=str(result), embed=None, view=None)
-                return
-
-            player_discord_id = result
-            if self.view.mode == "buff":
-                success, action_result = await Engine.use_player_buff_token(
-                    db,
-                    player_discord_id,
-                    village_id,
-                    self.view.token_type,
-                    quantity=self.view.quantity,
-                )
-                if success:
-                    message = (
-                        f"Used {_format_token_usage(self.view.quantity, self.view.token_type)}. "
-                        f"Matching actions now gain +100 total stats until {_format_discord_relative_time(action_result)}."
-                    )
-            elif self.view.mode == "protect":
-                success, action_result = await Engine.use_village_protection_token(
-                    db,
-                    player_discord_id,
-                    village_id,
-                    self.view.token_type,
-                    quantity=self.view.quantity,
-                )
-                if success:
-                    message = (
-                        f"Used {_format_token_usage(self.view.quantity, self.view.token_type)}. "
-                        f"Village protection is active until {_format_discord_relative_time(action_result)}."
-                    )
-            else:
-                success, action_result = await Engine.set_village_command_with_tokens(
-                    db,
-                    player_discord_id,
-                    village_id,
-                    self.view.command,
-                    token_type=self.view.token_type,
-                )
-                if success:
-                    message = (
-                        f"Village command set to `{action_result}`. "
-                        f"This consumed {Engine.VILLAGE_COMMAND_TOKEN_COST} {_token_type_label(self.view.token_type).lower()} tokens."
-                    )
-
-            if not success:
-                await _render_token_interface(inter, content=str(action_result), view=self.view, req_id=req_id, user_id=inter.author.id)
-                return
-
-            await db.commit()
-
-        await _render_token_interface(
-            inter,
-            content=message,
-            view=TokenView(
-                mode=self.view.mode,
-                token_type=self.view.token_type,
-                command=self.view.command,
-                quantity=self.view.quantity,
-                refresh_available_at=self.view.refresh_available_at,
-            ),
-            req_id=req_id,
-            user_id=inter.author.id,
-        )
-
-
-class TokenView(disnake.ui.View):
-    def __init__(
-        self,
-        mode: str | None = None,
-        token_type: str | None = None,
-        command: str | None = None,
-        quantity: int = 1,
-        refresh_available_at: float = 0.0,
-    ):
-        super().__init__(timeout=300.0)
-        self.refresh_available_at = refresh_available_at
-        self.mode = mode
-        self.token_type = token_type
-        self.command = command
-        self.quantity = int(quantity or 1)
-        self.reset(mode=mode, token_type=token_type, command=command, quantity=self.quantity)
-
-    def reset(self, mode: str | None = None, token_type: str | None = None, command: str | None = None, quantity: int = 1):
-        self.mode = mode
-        self.token_type = token_type
-        self.command = command if mode == "command" else None
-        self.quantity = int(quantity or 1) if mode in ("buff", "protect") else 1
-
-        self.clear_items()
-        self.add_item(TokenModeDropdown(default_value=self.mode))
-
-        if self.mode in ("buff", "protect", "command"):
-            self.add_item(TokenTypeDropdown(self.mode, selected_value=self.token_type))
-
-        if self.mode in ("buff", "protect"):
-            self.add_item(TokenQuantityDropdown(selected_value=self.quantity))
-
-        if self.mode == "command":
-            self.add_item(VillageCommandDropdown(selected_value=self.command))
-
-        is_ready = bool(self.mode and self.token_type and (self.mode != "command" or self.command))
-        if self.mode:
-            self.add_item(TokenApplyButton(self.mode, disabled=not is_ready))
-
-        self.add_item(TokenRefreshButton())
+from managers import gear_manager, player_manager
+
+_OWN_BUTTONS = frozenset(
+    {"refresh", "burst_execute", "open_gear_upgrade", "back_to_main"}
+)
+_OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:")
+_OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "gear_type_select"})
+_VALID_GEAR_TYPES = frozenset({"gathering", "building", "combat", "research"})
+_VALID_ACTIONS = frozenset({"gathering", "building", "combat", "research"})
+
+
+def _is_own_button(cid: str) -> bool:
+    return cid in _OWN_BUTTONS or any(cid.startswith(p) for p in _OWN_BUTTON_PREFIXES)
 
 
 class ActionsCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        Engine.set_bot(bot)
+        self._refresh_cooldowns: dict[str, float] = {}
 
-    @commands.slash_command(name="idlevillage", description="Open the Idle Village interface")
-    async def idlevillage(self, inter: disnake.ApplicationCommandInteraction):
-        req_id = new_request_id()
-        log_event(req_id, inter.author.id, "CMD", "/idlevillage")
-        await _render_interface(
-            inter,
-            content="Village status loaded.",
-            create_response=True,
-            view=VillageView(),
-            req_id=req_id,
-            user_id=inter.author.id,
-            update_command_activity=True,
+    def _check_guild(self, inter) -> bool:
+        return str(inter.guild_id) == get_discord_guild_id()
+
+    async def _get_or_create_player(self, db, user_id: str, now: datetime) -> None:
+        ap_cap = get_env_int("AP_CAP")
+        recovery_mins = get_env_int("AP_RECOVERY_MINUTES")
+        ap_full_time = now + timedelta(minutes=ap_cap * recovery_mins)
+        now_str = dt_str(now)
+        ap_full_time_str = dt_str(ap_full_time)
+        await db.execute(
+            """INSERT OR IGNORE INTO players
+               (user_id, created_at, updated_at, ap_full_time)
+               VALUES (?, ?, ?, ?)""",
+            (user_id, now_str, now_str, ap_full_time_str),
         )
-        log_event(req_id, inter.author.id, "RESP", "/idlevillage rendered")
+        await db.commit()
 
-    @commands.slash_command(name="idlevillage-tokens", description="Open the token and village command interface")
-    async def idlevillage_tokens(self, inter: disnake.ApplicationCommandInteraction):
-        req_id = new_request_id()
-        log_event(req_id, inter.author.id, "CMD", "/idlevillage-tokens")
-        await _render_token_interface(
-            inter,
-            content="Token interface loaded.",
-            create_response=True,
-            view=TokenView(),
-            req_id=req_id,
-            user_id=inter.author.id,
+    async def _fetch_all_data(
+        self, db, user_id: str
+    ) -> tuple[dict, dict, dict, list, dict]:
+        async with db.execute("SELECT * FROM stage_state WHERE id=1") as cur:
+            row = await cur.fetchone()
+            cols = [d[0] for d in cur.description]
+            stage_data = dict(zip(cols, row)) if row else {}
+
+        resources: dict = {}
+        async with db.execute(
+            "SELECT resource_type, amount FROM village_resources"
+        ) as cur:
+            async for r in cur:
+                resources[r[0]] = r[1]
+
+        buildings: dict = {}
+        async with db.execute(
+            "SELECT building_type, level, xp_progress FROM buildings"
+        ) as cur:
+            async for r in cur:
+                buildings[r[0]] = {"level": r[1], "xp_progress": r[2]}
+
+        action_counts: list = []
+        async with db.execute(
+            "SELECT action, action_target, COUNT(*) FROM players"
+            " WHERE action IS NOT NULL GROUP BY action, action_target"
+        ) as cur:
+            async for r in cur:
+                action_counts.append((r[0], r[1], r[2]))
+
+        async with db.execute(
+            "SELECT * FROM players WHERE user_id=?", (user_id,)
+        ) as cur:
+            row = await cur.fetchone()
+            cols = [d[0] for d in cur.description]
+            player_row = dict(zip(cols, row)) if row else {}
+
+        return stage_data, resources, buildings, action_counts, player_row
+
+    async def _render_main(
+        self,
+        inter,
+        *,
+        pending_action: str | None = None,
+        pending_target: str | None = None,
+    ) -> None:
+        user_id = str(inter.user.id)
+        now = datetime.now(timezone.utc)
+        await settle_complete_cycles(user_id, now)
+
+        async with get_connection() as db:
+            await self._get_or_create_player(db, user_id, now)
+            stage_data, resources, buildings, action_counts, player_row = (
+                await self._fetch_all_data(db, user_id)
+            )
+            ap = await player_manager.get_ap(db, user_id, now)
+
+        player_row["_ap"] = ap
+        embed = build_main_embed(stage_data, resources, buildings, action_counts, player_row)
+        components = build_main_components(
+            player_row, buildings, pending_action=pending_action, pending_target=pending_target
         )
-        log_event(req_id, inter.author.id, "RESP", "/idlevillage-tokens rendered")
+        await inter.edit_original_response(embed=embed, components=components)
+
+    async def _render_gear(
+        self, inter, gear_type: str, *, result: dict | None = None
+    ) -> None:
+        user_id = str(inter.user.id)
+        now = datetime.now(timezone.utc)
+        async with get_connection() as db:
+            upgrade_info = await gear_manager.get_upgrade_info(db, user_id, gear_type, now)
+
+        embed = build_gear_embed(upgrade_info, gear_type, result)
+        components = build_gear_components(gear_type, upgrade_info["can_attempt"])
+        await inter.edit_original_response(embed=embed, components=components)
+
+    @commands.slash_command(name="idlevillage", description="開啟 Idle Village 個人介面")
+    async def idlevillage(self, inter: disnake.ApplicationCommandInteraction) -> None:
+        if not self._check_guild(inter):
+            return await inter.response.send_message(
+                "此指令僅限指定伺服器使用。", ephemeral=True
+            )
+        await inter.response.defer(ephemeral=True)
+        await self._render_main(inter)
+
+    @commands.Cog.listener("on_button_click")
+    async def on_button_click(self, inter: disnake.MessageInteraction) -> None:
+        if not self._check_guild(inter):
+            return
+        cid = inter.component.custom_id
+        if not _is_own_button(cid):
+            return
+
+        user_id = str(inter.user.id)
+
+        if cid == "refresh":
+            now_mono = time.monotonic()
+            last = self._refresh_cooldowns.get(user_id, 0.0)
+            cooldown = get_env_int("REFRESH_COOLDOWN_SECONDS")
+            if now_mono - last < cooldown:
+                remaining = max(1, int(cooldown - (now_mono - last)))
+                return await inter.response.send_message(
+                    f"冷卻中，請 {remaining} 秒後再試。", ephemeral=True
+                )
+            self._refresh_cooldowns[user_id] = now_mono
+            await inter.response.defer()
+            await self._render_main(inter)
+
+        elif cid == "burst_execute":
+            await inter.response.defer()
+            now = datetime.now(timezone.utc)
+            await settle_burst(user_id, now)
+            await self._render_main(inter)
+
+        elif cid == "open_gear_upgrade":
+            await inter.response.defer()
+            await self._render_gear(inter, "gathering")
+
+        elif cid == "back_to_main":
+            await inter.response.defer()
+            await self._render_main(inter)
+
+        elif cid.startswith("confirm_action:"):
+            parts = cid.split(":")
+            if len(parts) < 2:
+                return
+            action = parts[1]
+            target = parts[2] if len(parts) >= 3 else None
+
+            if action not in _VALID_ACTIONS:
+                return
+            if action == "building" and target not in UI_BUILDING_TARGETS:
+                return
+
+            await inter.response.defer()
+            now = datetime.now(timezone.utc)
+            try:
+                await change_action(user_id, action, target, now)
+            except ValueError:
+                pass
+            await self._render_main(inter)
+
+        elif cid.startswith("attempt_upgrade:"):
+            gear_type = cid.split(":", 1)[1]
+            if gear_type not in _VALID_GEAR_TYPES:
+                return
+            await inter.response.defer()
+            now = datetime.now(timezone.utc)
+            result: dict | None = None
+            try:
+                async with get_connection() as db:
+                    result = await gear_manager.attempt_upgrade(db, user_id, gear_type, now)
+                    await db.commit()
+            except ValueError as exc:
+                result = {"success": False, "new_level": 0, "rate": 0.0, "error": str(exc)}
+            await self._render_gear(inter, gear_type, result=result)
+
+    @commands.Cog.listener("on_dropdown")
+    async def on_dropdown(self, inter: disnake.MessageInteraction) -> None:
+        if not self._check_guild(inter):
+            return
+        cid = inter.component.custom_id
+        if cid not in _OWN_DROPDOWNS:
+            return
+
+        value = inter.values[0]
+        await inter.response.defer()
+
+        if cid == "action_select":
+            await self._render_main(inter, pending_action=value)
+        elif cid == "building_target_select":
+            await self._render_main(inter, pending_action="building", pending_target=value)
+        elif cid == "gear_type_select":
+            if value in _VALID_GEAR_TYPES:
+                await self._render_gear(inter, value)
 
 
-def setup(bot: commands.Bot):
+def setup(bot: commands.Bot) -> None:
     bot.add_cog(ActionsCog(bot))

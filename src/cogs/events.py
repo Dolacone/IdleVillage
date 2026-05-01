@@ -1,35 +1,10 @@
-from datetime import datetime, timezone
-
-import disnake
 from disnake.ext import commands
 
-from database.schema import get_connection
 
 class EventsCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @commands.Cog.listener()
-    async def on_message(self, message: disnake.Message):
-        """Track user message activity to keep 'last_message_time' updated."""
-        if message.author.bot or not message.guild:
-            return
-
-        village_id = int(message.guild.id)
-        player_discord_id = int(message.author.id)
-
-        async with get_connection() as db:
-            now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
-            await db.execute(
-                """
-                UPDATE players
-                SET last_message_time = ?
-                WHERE discord_id = ?
-                  AND village_id = ?
-                """,
-                (now, player_discord_id, village_id),
-            )
-            await db.commit()
 
 def setup(bot: commands.Bot):
     bot.add_cog(EventsCog(bot))

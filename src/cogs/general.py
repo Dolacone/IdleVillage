@@ -3,623 +3,304 @@ from datetime import datetime, timezone
 import disnake
 from disnake.ext import commands
 
-from core.config import is_admin
-from core.engine import Engine
-from core.observability import log_event, new_request_id
+from cogs.ui_renderer import (
+    build_admin_components,
+    build_admin_embed,
+    build_village_embed,
+)
+from core.config import get_discord_guild_id, get_env_int, is_admin
 from database.schema import get_connection
+from managers import resource_manager
 
-RESOURCE_EMOJIS = {
-    "food": "🍎",
-    "wood": "🪵",
-    "stone": "🪨",
-    "gold": "💰",
-}
+_OWN_BUTTON_PREFIXES = (
+    "resource_add_small:",
+    "resource_add_large:",
+    "resource_sub_small:",
+    "resource_sub_large:",
+    "resource_set_custom:",
+)
+_VALID_RESOURCES = frozenset({"food", "wood", "knowledge"})
+_VALID_ACTIONS = frozenset({"gathering", "building", "combat", "research"})
+_VALID_GEAR_TYPES = frozenset({"gathering", "building", "combat", "research"})
 
-RESOURCE_LABELS = {
-    "food": "Food",
-    "wood": "Wood",
-    "stone": "Stone",
-    "gold": "Gold",
-}
-
-MANAGE_MODE_LABELS = {
-    "resources": "Manage Resources",
-    "nodes": "Manage Nodes",
-}
-
-
-async def _fetch_village_row(village_id: int):
-    async with get_connection() as db:
-        async with db.execute("SELECT id FROM villages WHERE id = ?", (village_id,)) as cursor:
-            village = await cursor.fetchone()
-        if not village:
-            return None
-        resources = await Engine._fetch_village_resources(db, village_id)
-        return (village[0], resources["food"], resources["wood"], resources["stone"], resources["gold"])
+HELP_TEXT = (
+    "**Idle Village 指令說明**\n\n"
+    "`/idlevillage` — 開啟個人主介面，查看村莊狀態、管理行動與裝備強化。\n"
+    "`/idlevillage-help` — 顯示此說明。\n\n"
+    "**行動類型**\n"
+    "🌾 採集、🔨 建設、⚔️ 戰鬥、🔬 研究\n\n"
+    "**AP 系統**\n"
+    "AP 會隨時間自動回復，可用於爆發執行（即時結算 3 個週期）或裝備強化。\n\n"
+    "**裝備強化**\n"
+    "消耗 1 AP + 對應素材，成功升等裝備；失敗時保底計數 +1 以提高下次成功率。"
+)
 
 
-async def _fetch_active_nodes(village_id: int):
-    async with get_connection() as db:
-        async with db.execute(
-            """
-            SELECT id, type, remaining_amount, quality
-            FROM resource_nodes
-            WHERE village_id = ?
-              AND remaining_amount > 0
-            ORDER BY type, quality DESC, id DESC
-            """,
-            (village_id,),
-        ) as cursor:
-            resource_nodes = await cursor.fetchall()
-        async with db.execute(
-            """
-            SELECT id, name, hp, max_hp, quality
-            FROM monsters
-            WHERE village_id = ?
-            """,
-            (village_id,),
-        ) as cursor:
-            monster = await cursor.fetchone()
-
-    entries = [
-        {
-            "token": f"node:{node_id}",
-            "id": node_id,
-            "kind": "node",
-            "name": node_type.title(),
-            "amount": remaining_amount,
-            "max_amount": None,
-            "quality": quality,
-        }
-        for node_id, node_type, remaining_amount, quality in resource_nodes
-    ]
-    if monster:
-        monster_id, name, hp, max_hp, quality = monster
-        entries.append(
-            {
-                "token": f"monster:{monster_id}",
-                "id": monster_id,
-                "kind": "monster",
-                "name": name,
-                "amount": hp,
-                "max_amount": max_hp,
-                "quality": quality,
-            }
-        )
-    return entries
+def _is_own_button(cid: str) -> bool:
+    return any(cid.startswith(p) for p in _OWN_BUTTON_PREFIXES)
 
 
-async def _set_village_resource(village_id: int, resource_type: str, amount: int):
-    normalized_amount = max(0, int(amount))
-    async with get_connection() as db:
-        resources = await Engine._fetch_village_resources(db, village_id)
-        resources[resource_type] = normalized_amount
-        await Engine._write_village_resources(db, village_id, resources)
-        await db.commit()
-    return normalized_amount
-
-
-async def _adjust_village_resource(village_id: int, resource_type: str, delta: int):
-    async with get_connection() as db:
-        resources = await Engine._fetch_village_resources(db, village_id)
-        new_amount = max(0, resources[resource_type] + delta)
-        resources[resource_type] = new_amount
-        await Engine._write_village_resources(db, village_id, resources)
-        await db.commit()
-    return new_amount
-
-
-async def _remove_village_node(village_id: int, target_token: str):
-    if isinstance(target_token, int):
-        target_kind = "node"
-        target_id = int(target_token)
-    else:
-        if not target_token or ":" not in target_token:
-            return None
-        target_kind, raw_id = target_token.split(":", 1)
-        if not raw_id.isdigit():
-            return None
-        target_id = int(raw_id)
-
-    async with get_connection() as db:
-        if target_kind == "node":
-            async with db.execute(
-                """
-                SELECT type
-                FROM resource_nodes
-                WHERE id = ?
-                  AND village_id = ?
-                """,
-                (target_id, village_id),
-            ) as cursor:
-                node_row = await cursor.fetchone()
-            if not node_row:
-                return None
-            await db.execute(
-                """
-                DELETE FROM resource_nodes
-                WHERE id = ?
-                  AND village_id = ?
-                """,
-                (target_id, village_id),
-            )
-            removed_label = node_row[0]
-        elif target_kind == "monster":
-            async with db.execute(
-                """
-                SELECT name
-                FROM monsters
-                WHERE id = ?
-                  AND village_id = ?
-                """,
-                (target_id, village_id),
-            ) as cursor:
-                monster_row = await cursor.fetchone()
-            if not monster_row:
-                return None
-            await db.execute(
-                """
-                DELETE FROM monsters
-                WHERE id = ?
-                  AND village_id = ?
-                """,
-                (target_id, village_id),
-            )
-            removed_label = f"Monster {monster_row[0]}"
-        else:
-            return None
-        await db.commit()
-        return removed_label
-
-
-class ManageModeSelect(disnake.ui.StringSelect):
-    def __init__(self, mode: str):
-        options = [
-            disnake.SelectOption(
-                label="Manage Resources",
-                description="Adjust village food, wood, stone, and gold totals",
-                value="resources",
-                default=(mode == "resources"),
-            ),
-            disnake.SelectOption(
-                label="Manage Nodes",
-                description="Remove active resource nodes from the village",
-                value="nodes",
-                default=(mode == "nodes"),
-            ),
-        ]
-        super().__init__(placeholder="Choose admin mode...", options=options, min_values=1, max_values=1, row=0)
-
-    async def callback(self, inter: disnake.MessageInteraction):
-        self.view.mode = self.values[0]
-        await self.view.refresh_state()
-        await self.view.render(inter, content=f"{MANAGE_MODE_LABELS[self.view.mode]} loaded.")
-
-
-class ResourceTypeSelect(disnake.ui.StringSelect):
-    def __init__(self, selected_resource: str):
-        options = [
-            disnake.SelectOption(
-                label=RESOURCE_LABELS[resource_type],
-                description=f"Adjust village {resource_type}",
-                value=resource_type,
-                default=(selected_resource == resource_type),
-            )
-            for resource_type in ("food", "wood", "stone", "gold")
-        ]
-        super().__init__(placeholder="Choose a resource...", options=options, min_values=1, max_values=1, row=1)
-
-    async def callback(self, inter: disnake.MessageInteraction):
-        self.view.selected_resource = self.values[0]
-        await self.view.refresh_state()
-        await self.view.render(inter, content=f"{RESOURCE_LABELS[self.view.selected_resource]} selected.")
-
-
-class NodeSelect(disnake.ui.StringSelect):
-    def __init__(self, nodes, selected_node_token: str = None):
-        if nodes:
-            options = [
-                disnake.SelectOption(
-                    label=(
-                        f"#{entry['id']} [Monster] {entry['name']}"
-                        if entry["kind"] == "monster"
-                        else f"#{entry['id']} {entry['name']}"
-                    ),
-                    description=(
-                        f"HP {entry['amount']}/{entry['max_amount']} | Quality {entry['quality']}%"
-                        if entry["kind"] == "monster"
-                        else f"Stock {entry['amount']} | Quality {entry['quality']}%"
-                    ),
-                    value=entry["token"],
-                    default=(selected_node_token == entry["token"]),
-                )
-                for entry in nodes
-            ]
-            disabled = False
-            placeholder = "Choose a node to remove..."
-        else:
-            options = [
-                disnake.SelectOption(
-                    label="No active nodes",
-                    description="There are no active nodes to manage",
-                    value="none",
-                    default=True,
-                )
-            ]
-            disabled = True
-            placeholder = "No active nodes available"
-
-        super().__init__(
-            placeholder=placeholder,
-            options=options,
-            min_values=1,
-            max_values=1,
-            disabled=disabled,
-            row=1,
-        )
-
-    async def callback(self, inter: disnake.MessageInteraction):
-        value = self.values[0]
-        self.view.selected_node_token = None if value == "none" else value
-        if self.view.selected_node_token:
-            self.view.selected_node_id = int(self.view.selected_node_token.split(":", 1)[1])
-        else:
-            self.view.selected_node_id = None
-        await self.view.refresh_state()
-        await self.view.render(inter, content="Node selection updated.")
-
-
-class ResourceDeltaButton(disnake.ui.Button):
-    def __init__(self, delta: int):
-        label = f"{delta:+,}"
-        style = disnake.ButtonStyle.green if delta > 0 else disnake.ButtonStyle.red
-        super().__init__(label=label, style=style, row=2)
-        self.delta = delta
-
-    async def callback(self, inter: disnake.MessageInteraction):
-        new_amount = await _adjust_village_resource(self.view.village_id, self.view.selected_resource, self.delta)
-        await Engine.sync_announcement(self.view.village_id, bot=self.view.bot, force=True, req_id=self.view.req_id, user_id=inter.author.id)
-        await self.view.refresh_state()
-        await self.view.render(
-            inter,
-            content=f"{RESOURCE_LABELS[self.view.selected_resource]} updated to {new_amount:,}.",
-        )
-
-
-class SetCustomButton(disnake.ui.Button):
-    def __init__(self):
-        super().__init__(label="Set Custom", style=disnake.ButtonStyle.blurple, row=2)
-
-    async def callback(self, inter: disnake.MessageInteraction):
-        await inter.response.send_modal(ResourceAmountModal(self.view))
-
-
-class RemoveNodeButton(disnake.ui.Button):
-    def __init__(self, disabled: bool):
-        super().__init__(label="Remove Node", style=disnake.ButtonStyle.red, disabled=disabled, row=2)
-
-    async def callback(self, inter: disnake.MessageInteraction):
-        if self.view.selected_node_token is None:
-            await self.view.render(inter, content="Choose a node before removing it.")
-            return
-
-        removed_label = await _remove_village_node(self.view.village_id, self.view.selected_node_token)
-        if removed_label is None:
-            await self.view.refresh_state()
-            await self.view.render(inter, content="That node is no longer available.")
-            return
-
-        removed_node_id = int(self.view.selected_node_token.split(":", 1)[1])
-        await Engine.sync_announcement(self.view.village_id, bot=self.view.bot, force=True, req_id=self.view.req_id, user_id=inter.author.id)
-        await self.view.refresh_state()
-        await self.view.render(inter, content=f"Removed {removed_label} #{removed_node_id}.")
-
-
-class ResourceAmountModal(disnake.ui.Modal):
-    def __init__(self, manage_view):
-        self.manage_view = manage_view
-        current_amount = manage_view.resource_amounts.get(manage_view.selected_resource, 0)
-        super().__init__(
-            title=f"Set {RESOURCE_LABELS[manage_view.selected_resource]} Amount",
-            custom_id=f"idlevillage-manage:{manage_view.village_id}:{manage_view.selected_resource}",
-            components=[
-                disnake.ui.TextInput(
-                    label="Absolute Amount",
-                    custom_id="amount",
-                    placeholder="Enter a non-negative integer",
-                    value=str(current_amount),
-                    style=disnake.TextInputStyle.short,
-                    max_length=12,
-                )
-            ],
-        )
-
-    async def callback(self, inter: disnake.ModalInteraction):
-        raw_amount = inter.text_values.get("amount", "").strip()
-        if not raw_amount.isdigit():
-            await inter.response.send_message("Enter a non-negative integer amount.", ephemeral=True)
-            return
-
-        amount = await _set_village_resource(self.manage_view.village_id, self.manage_view.selected_resource, int(raw_amount))
-        await Engine.sync_announcement(
-            self.manage_view.village_id,
-            bot=self.manage_view.bot,
-            force=True,
-            req_id=self.manage_view.req_id,
-            user_id=inter.author.id,
-        )
-        await self.manage_view.refresh_state()
-        await self.manage_view.render(
-            inter,
-            content=f"{RESOURCE_LABELS[self.manage_view.selected_resource]} set to {amount:,}.",
-        )
-
-
-class ManageView(disnake.ui.View):
-    def __init__(self, village_id: int, bot, req_id: str):
-        super().__init__(timeout=300.0)
-        self.village_id = village_id
-        self.bot = bot
-        self.req_id = req_id
-        self.mode = "resources"
-        self.selected_resource = "food"
-        self.selected_node_token = None
-        self.selected_node_id = None
-        self.resource_amounts = {"food": 0, "wood": 0, "stone": 0, "gold": 0}
-        self.nodes = []
-
-    async def refresh_state(self):
-        village = await _fetch_village_row(self.village_id)
-        if village:
-            _, food, wood, stone, gold = village
-            self.resource_amounts = {
-                "food": food,
-                "wood": wood,
-                "stone": stone,
-                "gold": gold,
-            }
-
-        self.nodes = await _fetch_active_nodes(self.village_id)
-        valid_tokens = {entry["token"] for entry in self.nodes}
-        if self.selected_node_token not in valid_tokens:
-            self.selected_node_token = self.nodes[0]["token"] if self.nodes else None
-        if self.selected_node_token:
-            self.selected_node_id = int(self.selected_node_token.split(":", 1)[1])
-        else:
-            self.selected_node_id = None
-        self._rebuild_items()
-        return self
-
-    def _rebuild_items(self):
-        self.clear_items()
-        self.add_item(ManageModeSelect(self.mode))
-
-        if self.mode == "resources":
-            self.add_item(ResourceTypeSelect(self.selected_resource))
-            self.add_item(ResourceDeltaButton(100))
-            self.add_item(ResourceDeltaButton(1000))
-            self.add_item(ResourceDeltaButton(-100))
-            self.add_item(ResourceDeltaButton(-1000))
-            self.add_item(SetCustomButton())
-            return
-
-        self.add_item(NodeSelect(self.nodes, self.selected_node_token))
-        self.add_item(RemoveNodeButton(disabled=(self.selected_node_token is None)))
-
-    async def build_embed(self):
-        village_name = await Engine._resolve_village_name(self.bot, self.village_id)
-        embed = disnake.Embed(title=f"Idle Village Admin - {village_name}", color=disnake.Color.orange())
-
-        if self.mode == "resources":
-            amount = self.resource_amounts[self.selected_resource]
-            emoji = RESOURCE_EMOJIS[self.selected_resource]
-            embed.description = "Adjust village stockpiles with quick buttons or set an exact amount."
-            embed.add_field(
-                name=f"{RESOURCE_LABELS[self.selected_resource]}",
-                value=f"{emoji} Current amount: {amount:,}",
-                inline=False,
-            )
-            embed.add_field(
-                name="Available Resources",
-                value=(
-                    f"🍎 Food: {self.resource_amounts['food']:,}\n"
-                    f"🪵 Wood: {self.resource_amounts['wood']:,}\n"
-                    f"🪨 Stone: {self.resource_amounts['stone']:,}\n"
-                    f"💰 Gold: {self.resource_amounts['gold']:,}"
-                ),
-                inline=False,
-            )
-            return embed
-
-        embed.description = "Select a node and remove it from the village board."
-        if self.selected_node_token is None:
-            embed.add_field(name="Selected Node", value="No active nodes are available.", inline=False)
-            return embed
-
-        selected_node = next((node for node in self.nodes if node["token"] == self.selected_node_token), None)
-        if not selected_node:
-            embed.add_field(name="Selected Node", value="No active nodes are available.", inline=False)
-            return embed
-
-        node_id = selected_node["id"]
-        node_name = selected_node["name"]
-        remaining_amount = selected_node["amount"]
-        quality = selected_node["quality"]
-        is_monster = selected_node["kind"] == "monster"
-        embed.add_field(
-            name=f"Node #{node_id}",
-            value=(
-                f"Type: {'Monster' if is_monster else node_name}\n"
-                f"{'HP' if is_monster else 'Stock'}: {remaining_amount:,}"
-                + (f"/{selected_node['max_amount']:,}" if is_monster else "")
-                + "\n"
-                f"Quality: {quality}%"
-            ),
-            inline=False,
-        )
-        embed.add_field(name="Active Node Count", value=str(len(self.nodes)), inline=False)
-        return embed
-
-    async def render(self, inter, *, content: str):
-        embed = await self.build_embed()
-        if hasattr(inter.response, "edit_message"):
-            await inter.response.edit_message(content=content, embed=embed, view=self)
-            return
-        await inter.response.send_message(content=content, embed=embed, view=self, ephemeral=True)
-
-
-class General(commands.Cog):
+class GeneralCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        Engine.set_bot(bot)
 
-    @commands.slash_command(description="Ping the bot")
-    async def ping(self, inter: disnake.ApplicationCommandInteraction):
-        await inter.response.send_message(
-            f"Pong! Latency: {round(self.bot.latency * 1000)}ms",
-            ephemeral=True,
-        )
+    def _check_guild(self, inter) -> bool:
+        return str(inter.guild_id) == get_discord_guild_id()
 
-    @commands.slash_command(name="idlevillage-initial", description="[Owner Only] Initialize a new village for this server")
-    async def idlevillage_initial(self, inter: disnake.ApplicationCommandInteraction):
-        req_id = new_request_id()
-        log_event(req_id, inter.author.id, "CMD", "/idlevillage-initial")
+    def _check_admin(self, inter) -> bool:
+        return is_admin(inter.user.id)
 
-        if not is_admin(inter.author.id):
-            log_event(req_id, inter.author.id, "ERROR", "Unauthorized idlevillage-initial attempt")
-            await inter.response.send_message("You do not have permission to use this command.", ephemeral=True)
-            return
+    async def _fetch_village_data(self, db) -> tuple[dict, dict, dict, list]:
+        async with db.execute("SELECT * FROM stage_state WHERE id=1") as cur:
+            row = await cur.fetchone()
+            cols = [d[0] for d in cur.description]
+            stage_data = dict(zip(cols, row)) if row else {}
 
-        if not inter.guild:
-            log_event(req_id, inter.author.id, "ERROR", "idlevillage-initial used outside a guild")
-            await inter.response.send_message("This command must be run in a server.", ephemeral=True)
-            return
+        resources: dict = {}
+        async with db.execute(
+            "SELECT resource_type, amount FROM village_resources"
+        ) as cur:
+            async for r in cur:
+                resources[r[0]] = r[1]
 
-        village_id = int(inter.guild.id)
+        buildings: dict = {}
+        async with db.execute(
+            "SELECT building_type, level, xp_progress FROM buildings"
+        ) as cur:
+            async for r in cur:
+                buildings[r[0]] = {"level": r[1], "xp_progress": r[2]}
+
+        action_counts: list = []
+        async with db.execute(
+            "SELECT action, action_target, COUNT(*) FROM players"
+            " WHERE action IS NOT NULL GROUP BY action, action_target"
+        ) as cur:
+            async for r in cur:
+                action_counts.append((r[0], r[1], r[2]))
+
+        return stage_data, resources, buildings, action_counts
+
+    @commands.slash_command(
+        name="idlevillage-help", description="顯示 Idle Village 遊戲說明"
+    )
+    async def help_cmd(self, inter: disnake.ApplicationCommandInteraction) -> None:
+        if not self._check_guild(inter):
+            return await inter.response.send_message(
+                "此指令僅限指定伺服器使用。", ephemeral=True
+            )
+        await inter.response.send_message(HELP_TEXT, ephemeral=True)
+
+    @commands.slash_command(
+        name="idlevillage-announcement",
+        description="（管理員）設定村莊公告頻道並發布公告",
+    )
+    async def announcement(self, inter: disnake.ApplicationCommandInteraction) -> None:
+        if not self._check_guild(inter):
+            return await inter.response.send_message(
+                "此指令僅限指定伺服器使用。", ephemeral=True
+            )
+        if not self._check_admin(inter):
+            return await inter.response.send_message(
+                "此指令僅限管理員使用。", ephemeral=True
+            )
+        await inter.response.defer(ephemeral=True)
+
+        channel_id = str(inter.channel_id)
+        now_str = datetime.now(timezone.utc).isoformat()
+        async with get_connection() as db:
+            await db.execute(
+                "UPDATE village_state SET announcement_channel_id=?, updated_at=? WHERE id=1",
+                (channel_id, now_str),
+            )
+            await db.commit()
+            stage_data, resources, buildings, action_counts = (
+                await self._fetch_village_data(db)
+            )
+
+        embed = build_village_embed(stage_data, resources, buildings, action_counts)
+        await inter.channel.send(embed=embed)
+        await inter.edit_original_response(content="✅ 公告頻道已設定，村莊狀態公告已發布。")
+
+    @commands.slash_command(
+        name="idlevillage-manage",
+        description="（管理員）管理村莊資源與 Dashboard",
+    )
+    async def manage(self, inter: disnake.ApplicationCommandInteraction) -> None:
+        if not self._check_guild(inter):
+            return await inter.response.send_message(
+                "此指令僅限指定伺服器使用。", ephemeral=True
+            )
+        if not self._check_admin(inter):
+            return await inter.response.send_message(
+                "此指令僅限管理員使用。", ephemeral=True
+            )
+        await inter.response.defer(ephemeral=True)
 
         async with get_connection() as db:
-            async with db.execute("SELECT id FROM villages WHERE id = ?", (village_id,)) as cursor:
-                village_min = await cursor.fetchone()
+            async with db.execute(
+                "SELECT dashboard_channel_id, dashboard_message_id FROM village_state WHERE id=1"
+            ) as cur:
+                row = await cur.fetchone()
+            dash_channel_id = row[0] if row else None
+            dash_message_id = row[1] if row else None
 
-            if village_min:
-                log_event(req_id, inter.author.id, "RESP", f"Village already exists for guild {village_id}")
-                await inter.response.send_message(
-                    "A village already exists for this server. Resetting existing villages is not allowed via this command.",
-                    ephemeral=True,
+            stage_data, resources, buildings, action_counts = (
+                await self._fetch_village_data(db)
+            )
+
+        # Try to fetch existing dashboard message; create if not found
+        dashboard_ok = False
+        if dash_channel_id and dash_message_id:
+            try:
+                channel = self.bot.get_channel(int(dash_channel_id))
+                if channel:
+                    await channel.fetch_message(int(dash_message_id))
+                    dashboard_ok = True
+            except Exception:
+                dashboard_ok = False
+
+        if not dashboard_ok:
+            embed = build_village_embed(stage_data, resources, buildings, action_counts)
+            new_msg = await inter.channel.send(embed=embed)
+            now_str = datetime.now(timezone.utc).isoformat()
+            async with get_connection() as db:
+                await db.execute(
+                    "UPDATE village_state SET dashboard_channel_id=?, dashboard_message_id=?, updated_at=? WHERE id=1",
+                    (str(inter.channel_id), str(new_msg.id), now_str),
                 )
-                return
+                await db.commit()
 
-            await db.execute(
-                """
-                INSERT INTO villages (id)
-                VALUES (?)
-                """,
-                (village_id,),
+        resource_type = "food"
+        async with get_connection() as db:
+            amount = await resource_manager.balance(db, resource_type)
+
+        embed = build_admin_embed(resource_type, amount)
+        components = build_admin_components(resource_type)
+        await inter.edit_original_response(embed=embed, components=components)
+
+    @commands.Cog.listener("on_button_click")
+    async def on_button_click(self, inter: disnake.MessageInteraction) -> None:
+        cid = inter.component.custom_id
+        if not _is_own_button(cid):
+            return
+        if not self._check_guild(inter):
+            return
+        if not self._check_admin(inter):
+            return await inter.response.send_message(
+                "此操作僅限管理員。", ephemeral=True
             )
-            await Engine._write_village_resources(
-                db,
-                village_id,
-                {"food": 1000, "wood": 1000, "stone": 1000, "gold": 0},
-            )
-            await Engine._write_village_buffs(db, village_id, {1: 0, 2: 0, 3: 0, 4: 0})
-            await db.commit()
 
-        log_event(req_id, inter.author.id, "RESP", f"Village initialized for guild {village_id}")
-        await inter.response.send_message(
-            "Village successfully initialized for this server with 1,000 food, 1,000 wood, 1,000 stone, 0 gold, and Lv 0 buildings.",
-            ephemeral=True,
-        )
+        parts = cid.split(":", 1)
+        operation = parts[0]
+        resource_type = parts[1] if len(parts) > 1 else "food"
 
-    @commands.slash_command(name="idlevillage-announcement", description="[Owner Only] Publish or refresh the public village dashboard")
-    async def idlevillage_announcement(self, inter: disnake.ApplicationCommandInteraction):
-        req_id = new_request_id()
-        log_event(req_id, inter.author.id, "CMD", "/idlevillage-announcement")
-
-        if not is_admin(inter.author.id):
-            log_event(req_id, inter.author.id, "ERROR", "Unauthorized idlevillage-announcement attempt")
-            await inter.response.send_message("You do not have permission to use this command.", ephemeral=True)
+        if resource_type not in _VALID_RESOURCES:
             return
 
-        if not inter.guild or not inter.channel:
-            log_event(req_id, inter.author.id, "ERROR", "idlevillage-announcement used outside a guild")
-            await inter.response.send_message("This command must be run in a server channel.", ephemeral=True)
-            return
+        if operation == "resource_set_custom":
+            return await inter.response.send_modal(
+                title=f"設定 {resource_type} 數量",
+                custom_id=f"modal_set_resource:{resource_type}",
+                components=[
+                    disnake.ui.TextInput(
+                        label="數量（整數 ≥ 0）",
+                        custom_id="amount",
+                        style=disnake.TextInputStyle.short,
+                        required=True,
+                        placeholder="請輸入整數",
+                    )
+                ],
+            )
 
-        village_id = int(inter.guild.id)
-        channel_id_str = str(inter.channel.id)
+        await inter.response.defer()
+
+        small = get_env_int("ADMIN_RESOURCE_DELTA_SMALL")
+        large = get_env_int("ADMIN_RESOURCE_DELTA_LARGE")
+        delta_map = {
+            "resource_add_small": small,
+            "resource_add_large": large,
+            "resource_sub_small": -small,
+            "resource_sub_large": -large,
+        }
+        delta = delta_map.get(operation, 0)
+        now = datetime.now(timezone.utc)
 
         async with get_connection() as db:
-            async with db.execute("SELECT id FROM villages WHERE id = ?", (village_id,)) as cursor:
-                village_row = await cursor.fetchone()
+            if delta > 0:
+                await resource_manager.deposit(db, resource_type, delta, now)
+            elif delta < 0:
+                await resource_manager.withdraw(db, resource_type, abs(delta), now)
+            await db.commit()
+            amount = await resource_manager.balance(db, resource_type)
 
-            if not village_row:
-                log_event(req_id, inter.author.id, "ERROR", f"No village found for guild {village_id}")
-                await inter.response.send_message("Village not initialized for this server. Run `/idlevillage-initial` first.", ephemeral=True)
-                return
+        embed = build_admin_embed(resource_type, amount)
+        components = build_admin_components(resource_type)
+        await inter.edit_original_response(embed=embed, components=components)
 
-            await db.execute(
-                """
-                UPDATE villages
-                SET announcement_channel_id = ?
-                WHERE id = ?
-                """,
-                (channel_id_str, village_id),
+    @commands.Cog.listener("on_dropdown")
+    async def on_dropdown(self, inter: disnake.MessageInteraction) -> None:
+        cid = inter.component.custom_id
+        if cid != "resource_select":
+            return
+        if not self._check_guild(inter):
+            return
+        if not self._check_admin(inter):
+            return await inter.response.send_message(
+                "此操作僅限管理員。", ephemeral=True
             )
+
+        resource_type = inter.values[0]
+        if resource_type not in _VALID_RESOURCES:
+            return
+
+        await inter.response.defer()
+        now = datetime.now(timezone.utc)
+        async with get_connection() as db:
+            amount = await resource_manager.balance(db, resource_type)
+
+        embed = build_admin_embed(resource_type, amount)
+        components = build_admin_components(resource_type)
+        await inter.edit_original_response(embed=embed, components=components)
+
+    @commands.Cog.listener("on_modal_submit")
+    async def on_modal_submit(self, inter: disnake.ModalInteraction) -> None:
+        if not inter.custom_id.startswith("modal_set_resource:"):
+            return
+        if not self._check_guild(inter):
+            return
+        if not self._check_admin(inter):
+            return await inter.response.send_message(
+                "此操作僅限管理員。", ephemeral=True
+            )
+
+        resource_type = inter.custom_id.split(":", 1)[1]
+        if resource_type not in _VALID_RESOURCES:
+            return
+
+        raw = inter.text_values.get("amount", "").strip()
+        try:
+            new_amount = int(raw)
+            if new_amount < 0:
+                raise ValueError
+        except ValueError:
+            return await inter.response.send_message(
+                "請輸入 ≥ 0 的整數。", ephemeral=True
+            )
+
+        await inter.response.defer()
+        now = datetime.now(timezone.utc)
+        async with get_connection() as db:
+            current = await resource_manager.balance(db, resource_type)
+            if new_amount >= current:
+                await resource_manager.deposit(db, resource_type, new_amount - current, now)
+            else:
+                await resource_manager.withdraw(db, resource_type, current - new_amount, now)
             await db.commit()
 
-            message = await Engine.sync_announcement(
-                village_id,
-                db=db,
-                bot=self.bot,
-                force=True,
-                req_id=req_id,
-                user_id=inter.author.id,
-            )
-
-        if message is None:
-            log_event(req_id, inter.author.id, "ERROR", f"Failed to publish announcement for village {village_id}")
-            await inter.response.send_message(
-                "Failed to publish the village announcement. Check bot channel permissions and try again.",
-                ephemeral=True,
-            )
-            return
-
-        log_event(req_id, inter.author.id, "RESP", f"Announcement synced to channel {channel_id_str}")
-        await inter.response.send_message(
-            f"Village announcement is now tracked in {inter.channel.mention}.",
-            ephemeral=True,
-        )
-
-    @commands.slash_command(name="idlevillage-manage", description="[Owner Only] Open the interactive village admin panel")
-    async def idlevillage_manage(self, inter: disnake.ApplicationCommandInteraction):
-        req_id = new_request_id()
-        log_event(req_id, inter.author.id, "CMD", "/idlevillage-manage")
-
-        if not is_admin(inter.author.id):
-            log_event(req_id, inter.author.id, "ERROR", "Unauthorized idlevillage-manage attempt")
-            await inter.response.send_message("You do not have permission to use this command.", ephemeral=True)
-            return
-
-        if not inter.guild:
-            log_event(req_id, inter.author.id, "ERROR", "idlevillage-manage used outside a guild")
-            await inter.response.send_message("This command must be run in a server.", ephemeral=True)
-            return
-
-        village_id = int(inter.guild.id)
-        village = await _fetch_village_row(village_id)
-        if not village:
-            await inter.response.send_message("Village not initialized for this server. Run `/idlevillage-initial` first.", ephemeral=True)
-            return
-
-        view = await ManageView(village_id, self.bot, req_id).refresh_state()
-        embed = await view.build_embed()
-        await inter.response.send_message(
-            "Manage village resources and nodes.",
-            embed=embed,
-            view=view,
-            ephemeral=True,
-        )
+        embed = build_admin_embed(resource_type, new_amount)
+        components = build_admin_components(resource_type)
+        await inter.edit_original_response(embed=embed, components=components)
 
 
-def setup(bot: commands.Bot):
-    bot.add_cog(General(bot))
+def setup(bot: commands.Bot) -> None:
+    bot.add_cog(GeneralCog(bot))

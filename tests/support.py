@@ -18,6 +18,7 @@ except ImportError:
     ext_module = types.ModuleType("disnake.ext")
     tasks_module = types.ModuleType("disnake.ext.tasks")
     commands_module = types.ModuleType("disnake.ext.commands")
+    ui_module = types.ModuleType("disnake.ui")
 
     def loop(*args, **kwargs):
         def decorator(func):
@@ -39,6 +40,97 @@ except ImportError:
     class Bot:
         latency = 0
 
+    # --- disnake stub classes ---
+
+    class _Color:
+        def __init__(self, value=0):
+            self.value = value
+
+        @staticmethod
+        def blue(): return 0x5865F2
+
+        @staticmethod
+        def green(): return 0x57F287
+
+        @staticmethod
+        def red(): return 0xED4245
+
+        @staticmethod
+        def yellow(): return 0xFEE75C
+
+        @staticmethod
+        def gray(): return 0x95A5A6
+
+    class _Embed:
+        def __init__(self, *, title="", description="", color=0):
+            self.title = title
+            self.description = description
+            self.color = color
+            self.fields = []
+
+        def add_field(self, *, name, value, inline=False):
+            self.fields.append({"name": name, "value": value, "inline": inline})
+            return self
+
+    class _ButtonStyle:
+        primary = 1
+        blurple = 1
+        secondary = 2
+        gray = 2
+        grey = 2
+        success = 3
+        green = 3
+        danger = 4
+        red = 4
+        link = 5
+
+    class _SelectOption:
+        def __init__(self, *, label="", value="", description="", default=False, emoji=None):
+            self.label = label
+            self.value = value
+            self.description = description
+            self.default = default
+            self.emoji = emoji
+
+    class _TextInputStyle:
+        short = 1
+        paragraph = 2
+        long = 2
+
+    class _Button:
+        def __init__(self, *, label="", style=1, custom_id="", disabled=False, emoji=None, url=None):
+            self.label = label
+            self.style = style
+            self.custom_id = custom_id
+            self.disabled = disabled
+            self.emoji = emoji
+            self.url = url
+
+    class _StringSelect:
+        def __init__(self, *, custom_id="", placeholder="", options=None, disabled=False, min_values=1, max_values=1):
+            self.custom_id = custom_id
+            self.placeholder = placeholder
+            self.options = options or []
+            self.disabled = disabled
+
+    class _ActionRow:
+        def __init__(self, *children):
+            self.children = list(children)
+
+    class _TextInput:
+        def __init__(self, *, label="", custom_id="", style=1, placeholder="", required=True, min_length=0, max_length=4000):
+            self.label = label
+            self.custom_id = custom_id
+            self.style = style
+            self.placeholder = placeholder
+            self.required = required
+
+    class _Modal:
+        def __init__(self, *, title="", custom_id="", components=None):
+            self.title = title
+            self.custom_id = custom_id
+            self.components = components or []
+
     tasks_module.loop = loop
     commands_module.Cog = Cog
     commands_module.Bot = Bot
@@ -46,10 +138,22 @@ except ImportError:
     ext_module.tasks = tasks_module
     ext_module.commands = commands_module
     disnake_module.ext = ext_module
+    disnake_module.Color = _Color
+    disnake_module.Embed = _Embed
+    disnake_module.ButtonStyle = _ButtonStyle
+    disnake_module.SelectOption = _SelectOption
+    disnake_module.TextInputStyle = _TextInputStyle
+    ui_module.Button = _Button
+    ui_module.StringSelect = _StringSelect
+    ui_module.ActionRow = _ActionRow
+    ui_module.TextInput = _TextInput
+    ui_module.Modal = _Modal
+    disnake_module.ui = ui_module
     sys.modules["disnake"] = disnake_module
     sys.modules["disnake.ext"] = ext_module
     sys.modules["disnake.ext.tasks"] = tasks_module
     sys.modules["disnake.ext.commands"] = commands_module
+    sys.modules["disnake.ui"] = ui_module
 
 
 from database import schema
