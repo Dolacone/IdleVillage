@@ -680,13 +680,11 @@ class BurstTest(SettlementTestBase):
     async def test_burst_with_no_ap_returns_false(self):
         """Burst returns False when player has 0 AP."""
         await self._insert_player_with_ap(0)
-        result = await settle_burst(self.TEST_USER, _now())
+        result, _events = await settle_burst(self.TEST_USER, _now())
         self.assertFalse(result)
-
-    async def test_burst_with_sufficient_ap_returns_true(self):
         """Burst returns True when player has >= 1 AP."""
         await self._insert_player_with_ap(1)
-        result = await settle_burst(self.TEST_USER, _now())
+        result, _events = await settle_burst(self.TEST_USER, _now())
         self.assertTrue(result)
 
     async def test_burst_runs_exactly_3_cycles(self):
@@ -751,7 +749,7 @@ class BurstTest(SettlementTestBase):
             action=None,
             ap_full_time=now - timedelta(minutes=1),
         )
-        result = await settle_burst(self.TEST_USER, now)
+        result, _events = await settle_burst(self.TEST_USER, now)
         self.assertFalse(result)
 
 

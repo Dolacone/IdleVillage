@@ -11,6 +11,7 @@ from cogs.ui_renderer import (
     build_main_components,
     build_main_embed,
 )
+from core import notification
 from core.config import get_discord_guild_id, get_env_int
 from core.settlement import change_action, settle_burst, settle_complete_cycles
 from core.utils import dt_str
@@ -100,7 +101,8 @@ class ActionsCog(commands.Cog):
     ) -> None:
         user_id = str(inter.user.id)
         now = datetime.now(timezone.utc)
-        await settle_complete_cycles(user_id, now)
+        events = await settle_complete_cycles(user_id, now)
+        await notification.dispatch_events(self.bot, events)
 
         async with get_connection() as db:
             await self._get_or_create_player(db, user_id, now)
@@ -163,7 +165,9 @@ class ActionsCog(commands.Cog):
         elif cid == "burst_execute":
             await inter.response.defer()
             now = datetime.now(timezone.utc)
-            await settle_burst(user_id, now)
+            success, events = await settle_burst(user_id, now)
+            if success:
+                await notification.dispatch_events(self.bot, events)
             await self._render_main(inter)
 
         elif cid == "open_gear_upgrade":
@@ -207,6 +211,23 @@ class ActionsCog(commands.Cog):
                     await db.commit()
             except ValueError as exc:
                 result = {"success": False, "new_level": 0, "rate": 0.0, "error": str(exc)}
+            if result and "error" not in result:
+                if result.get("success"):
+                    gear_event = {
+                        "type": "gear_success",
+                        "user_display_name": inter.user.display_name,
+                        "gear_type": gear_type,
+                        "new_level": result.get("new_level", 0),
+                    }
+                else:
+                    gear_event = {
+                        "type": "gear_fail",
+                        "user_display_name": inter.user.display_name,
+                        "gear_type": gear_type,
+                        "current_level": result.get("current_level", 0),
+                        "pity_count": result.get("pity_after", 0),
+                    }
+                await notification.dispatch_events(self.bot, [gear_event])
             await self._render_gear(inter, gear_type, result=result)
 
     @commands.Cog.listener("on_dropdown")

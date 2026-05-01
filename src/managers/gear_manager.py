@@ -128,8 +128,16 @@ async def attempt_upgrade(db, user_id: str, gear_type: str, now: datetime) -> di
         await player_manager.set_gear_level(db, user_id, gear_type, target_level, now)
         await player_manager.set_pity(db, user_id, gear_type, 0, now)
         new_level = target_level
+        pity_after = 0
     else:
         await player_manager.set_pity(db, user_id, gear_type, pity + 1, now)
         new_level = gear_level
+        pity_after = pity + 1
 
-    return {"success": success, "new_level": new_level, "rate": rate}
+    return {
+        "success": success,
+        "new_level": new_level,
+        "current_level": gear_level,
+        "rate": rate,
+        "pity_after": pity_after,
+    }

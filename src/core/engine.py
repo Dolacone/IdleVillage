@@ -2157,6 +2157,7 @@ class Engine:
     async def _process_watcher_v2(watcher_req_id: str) -> None:
         """Watcher sweep for v2 schema: settle all players with overdue completion_time."""
         from core.settlement import settle_complete_cycles
+        from core import notification
 
         log_event(watcher_req_id, "SYSTEM", "STATUS", "Watcher sweep started (v2)")
         now = datetime.now(timezone.utc)
@@ -2168,8 +2169,16 @@ class Engine:
             ) as cursor:
                 due_players = await cursor.fetchall()
 
+        all_events: list[dict] = []
         for (user_id,) in due_players:
-            await settle_complete_cycles(user_id, now)
+            events = await settle_complete_cycles(user_id, now)
+            all_events.extend(events)
+
+        if Engine.bot is not None and all_events:
+            await notification.dispatch_events(Engine.bot, all_events)
+
+        if Engine.bot is not None:
+            await notification.update_dashboard(Engine.bot)
 
         log_event(watcher_req_id, "SYSTEM", "STATUS", "Watcher sweep completed (v2)")
 

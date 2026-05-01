@@ -7,7 +7,7 @@ load_dotenv()
 
 import disnake
 from disnake.ext import commands
-from core.config import validate_env, get_discord_token
+from core.config import validate_env, get_discord_token, get_env_int
 from core.engine import Engine
 from database.schema import init_db
 
@@ -20,9 +20,11 @@ class IdleVillageBot(commands.InteractionBot):
 
     async def on_ready(self):
         Engine.set_bot(self)
+        heartbeat_secs = max(1, get_env_int("WATCHER_HEARTBEAT_SECONDS"))
         if not Engine.start_watcher_loop.is_running():
+            Engine.start_watcher_loop.change_interval(seconds=heartbeat_secs)
             Engine.start_watcher_loop.start()
-            print("Watcher loop started.")
+            print(f"Watcher loop started (interval: {heartbeat_secs}s).")
 
         print(f"Logged in as {self.user} (ID: {self.user.id})")
         print("------")

@@ -42,17 +42,30 @@ async def _read_player(db, user_id: str) -> dict | None:
 # Core single-cycle logic
 # ---------------------------------------------------------------------------
 
+async def _read_building_levels(db) -> dict[str, int]:
+    """Return {building_type: level} for all buildings."""
+    levels: dict[str, int] = {}
+    async with db.execute("SELECT building_type, level FROM buildings") as cur:
+        async for row in cur:
+            levels[row[0]] = row[1]
+    return levels
+
+
 async def _run_one_cycle(
     db, user_id: str, cycle_end_time: datetime, update_timestamps: bool = True
-) -> None:
+) -> list[dict]:
     """
     Resolve one complete cycle for user_id.
     cycle_end_time is used as the effective timestamp for stage/overtime checks.
     When update_timestamps=False (burst), last_update_time and completion_time are not written.
+    Returns a list of notification events emitted during this cycle.
     """
+    events: list[dict] = []
+    building_pre_events: list[dict] = []  # buffered until after stage events
+
     player = await _read_player(db, user_id)
     if player is None or player["action"] is None:
-        return
+        return events
 
     action: str = player["action"]
 
@@ -69,7 +82,25 @@ async def _run_one_cycle(
     output = await compute_output(db, user_id, action)
     settlement_output = math.floor(output * 0.5) if shortage_flag else output
 
-    # Distribute settlement_output
+    # Overtime detection — must happen BEFORE add_progress which may reset stage state
+    stage_pre = await stage_manager.get_stage_info(db)
+    if stage_pre:
+        overtime_threshold = get_env_int("STAGE_OVERTIME_SECONDS")
+        stage_started = parse_dt(stage_pre["stage_started_at"])
+        elapsed = (cycle_end_time - stage_started).total_seconds()
+        stage_type_pre = stage_pre.get("current_stage_type", "")
+        action_relevant = (stage_type_pre == "upgrade") or (action == stage_type_pre)
+        if (elapsed > overtime_threshold
+                and not stage_pre.get("overtime_notified", 0)
+                and action_relevant):
+            events.append({
+                "type": "overtime",
+                "stages_cleared": stage_pre["stages_cleared"],
+                "progress": stage_pre["current_stage_progress"],
+                "target": stage_pre["current_stage_target"],
+            })
+
+    # Distribute settlement_output (with building upgrade detection)
     if action == "gathering":
         await resource_manager.deposit(db, "food", settlement_output, cycle_end_time)
         await resource_manager.deposit(db, "wood", settlement_output, cycle_end_time)
@@ -80,14 +111,74 @@ async def _run_one_cycle(
             "research_lab" if action == "research" else player["action_target"]
         )
         stages_cleared = await stage_manager.get_stages_cleared(db)
+
+        async with db.execute(
+            "SELECT level FROM buildings WHERE building_type=?", (target_building,)
+        ) as cur:
+            row = await cur.fetchone()
+        pre_level = row[0] if row else 0
+
         await building_manager.add_xp(db, target_building, settlement_output, stages_cleared, cycle_end_time)
+
+        async with db.execute(
+            "SELECT level FROM buildings WHERE building_type=?", (target_building,)
+        ) as cur:
+            row = await cur.fetchone()
+        post_level = row[0] if row else 0
+
+        xp_per = get_env_int("BUILDING_XP_PER_LEVEL")
+        for lvl in range(pre_level + 1, post_level + 1):
+            building_pre_events.append({
+                "type": "building_upgrade",
+                "building_type": target_building,
+                "old_level": lvl - 1,
+                "new_level": lvl,
+                "next_xp_req": (lvl + 1) * xp_per,
+            })
 
     # Stage progress uses pre-penalty output
     new_stages_cleared = await stage_manager.add_progress(db, action, output, cycle_end_time)
 
-    # If upgrade stage was cleared, re-check all building upgrade eligibility
-    if new_stages_cleared is not None and new_stages_cleared % 5 == 0:
-        await building_manager.check_all_upgrades(db, new_stages_cleared, cycle_end_time)
+    if new_stages_cleared is not None:
+        stage_post = await stage_manager.get_stage_info(db)
+        events.append({
+            "type": "stage_clear",
+            "stages_cleared": new_stages_cleared,
+            "next_stage_type": stage_post.get("current_stage_type", ""),
+            "next_target": stage_post.get("current_stage_target", 0),
+        })
+
+        # If upgrade stage cleared (every 5th), emit upgrade_stage_clear and check buildings
+        if new_stages_cleared % 5 == 0:
+            old_cap = (new_stages_cleared - 1) // 5 + 1
+            new_cap = new_stages_cleared // 5 + 1
+            events.append({
+                "type": "upgrade_stage_clear",
+                "round": new_stages_cleared // 5,
+                "old_cap": old_cap,
+                "new_cap": new_cap,
+                "next_stage_type": stage_post.get("current_stage_type", ""),
+                "next_target": stage_post.get("current_stage_target", 0),
+            })
+
+            buildings_before = await _read_building_levels(db)
+            await building_manager.check_all_upgrades(db, new_stages_cleared, cycle_end_time)
+            buildings_after = await _read_building_levels(db)
+
+            xp_per = get_env_int("BUILDING_XP_PER_LEVEL")
+            for btype, pre_lv in buildings_before.items():
+                post_lv = buildings_after.get(btype, pre_lv)
+                for lvl in range(pre_lv + 1, post_lv + 1):
+                    events.append({
+                        "type": "building_upgrade",
+                        "building_type": btype,
+                        "old_level": lvl - 1,
+                        "new_level": lvl,
+                        "next_xp_req": (lvl + 1) * xp_per,
+                    })
+
+    # Emit buffered building upgrades (from add_xp) after stage events
+    events.extend(building_pre_events)
 
     # Material drop
     drop_rate = get_env_float("MATERIAL_DROP_RATE")
@@ -104,24 +195,28 @@ async def _run_one_cycle(
             (dt_str(cycle_end_time), new_completion, dt_str(cycle_end_time), user_id),
         )
 
+    return events
+
 
 # ---------------------------------------------------------------------------
 # Public entrypoints
 # ---------------------------------------------------------------------------
 
-async def settle_complete_cycles(user_id: str, now: datetime) -> None:
+async def settle_complete_cycles(user_id: str, now: datetime) -> list[dict]:
     """
     Catch up all overdue complete cycles for user_id, up to MAX_CYCLES_PER_SETTLEMENT.
     Triggered by the watcher and by the refresh/dashboard path.
+    Returns a list of notification events emitted during settlement.
     """
+    events: list[dict] = []
     async with get_connection() as db:
         player = await _read_player(db, user_id)
         if player is None or player["action"] is None or player["completion_time"] is None:
-            return
+            return events
 
         completion_time = parse_dt(player["completion_time"])
         if completion_time > now:
-            return
+            return events
 
         cycle_mins = get_env_int("ACTION_CYCLE_MINUTES")
         max_cycles = get_env_int("MAX_CYCLES_PER_SETTLEMENT")
@@ -129,11 +224,14 @@ async def settle_complete_cycles(user_id: str, now: datetime) -> None:
         cycles_done = 0
 
         while cycle_end <= now and cycles_done < max_cycles:
-            await _run_one_cycle(db, user_id, cycle_end)
+            cycle_events = await _run_one_cycle(db, user_id, cycle_end)
+            events.extend(cycle_events)
             cycle_end += timedelta(minutes=cycle_mins)
             cycles_done += 1
 
         await db.commit()
+
+    return events
 
 
 async def change_action(
@@ -237,25 +335,28 @@ async def change_action(
         await db.commit()
 
 
-async def settle_burst(user_id: str, now: datetime) -> bool:
+async def settle_burst(user_id: str, now: datetime) -> tuple[bool, list[dict]]:
     """
     Burst: spend 1 AP and immediately settle 3 independent complete cycles.
     completion_time and last_update_time are NOT updated.
-    Returns False if the player has insufficient AP or no active action.
+    Returns (False, []) if the player has insufficient AP or no active action,
+    otherwise (True, events) with all notification events from the 3 cycles.
     """
+    events: list[dict] = []
     async with get_connection() as db:
         player = await _read_player(db, user_id)
         if player is None or player["action"] is None:
-            return False
+            return False, events
 
         ap = await player_manager.get_ap(db, user_id, now)
         if ap < 1:
-            return False
+            return False, events
 
         await player_manager.spend_ap(db, user_id, 1, now)
 
         for _ in range(3):
-            await _run_one_cycle(db, user_id, now, update_timestamps=False)
+            cycle_events = await _run_one_cycle(db, user_id, now, update_timestamps=False)
+            events.extend(cycle_events)
 
         await db.commit()
-        return True
+        return True, events
