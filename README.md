@@ -1,3 +1,10 @@
+---
+title: Idle Colony
+doc_type: overview
+last_reviewed: 2026-05-01
+source_paths:
+---
+
 # Idle Colony
 
 這是一個以 Discord 為平台的社群驅動 (Community-Driven) 集體協作掛機遊戲. 

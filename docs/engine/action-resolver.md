@@ -1,3 +1,11 @@
+---
+title: "Module: action-resolver"
+doc_type: module
+last_reviewed: 2026-05-01
+source_paths:
+  - src/core/settlement.py
+---
+
 # Module: action-resolver
 
 處理單一玩家在單一週期內的行動結算。由 cycle-engine 逐一呼叫。

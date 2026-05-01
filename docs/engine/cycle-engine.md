@@ -1,3 +1,11 @@
+---
+title: "Module: cycle-engine"
+doc_type: module
+last_reviewed: 2026-05-01
+source_paths:
+  - src/core/engine.py
+---
+
 # Module: cycle-engine
 
 管理每位玩家的個人週期計時，並在正確時機觸發行動結算。

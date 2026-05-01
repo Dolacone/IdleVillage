@@ -1,3 +1,11 @@
+---
+title: "Module: resource-manager"
+doc_type: module
+last_reviewed: 2026-05-01
+source_paths:
+  - src/managers/resource_manager.py
+---
+
 # Module: resource-manager
 
 管理村莊共用資源池（食物、木頭、知識）。

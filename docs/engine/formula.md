@@ -1,3 +1,11 @@
+---
+title: "Module: formula"
+doc_type: module
+last_reviewed: 2026-05-01
+source_paths:
+  - src/core/formula.py
+---
+
 # Module: formula
 
 效率公式與全局平衡參數。其他所有模組在計算產出時呼叫此模組。

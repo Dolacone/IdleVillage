@@ -1,3 +1,12 @@
+---
+title: "Module: command-handler"
+doc_type: module
+last_reviewed: 2026-05-01
+source_paths:
+  - src/cogs/actions.py
+  - src/cogs/general.py
+---
+
 # Module: command-handler
 
 定義所有 Discord Slash Commands 與互動元件（Button/Dropdown）的路由與處理。

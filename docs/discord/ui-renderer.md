@@ -1,3 +1,11 @@
+---
+title: "Module: ui-renderer"
+doc_type: module
+last_reviewed: 2026-05-01
+source_paths:
+  - src/cogs/ui_renderer.py
+---
+
 # Module: ui-renderer
 
 負責建構所有 Discord Embed 與互動元件（Button、Dropdown）。不包含業務邏輯，只負責呈現。

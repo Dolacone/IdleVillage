@@ -1,3 +1,11 @@
+---
+title: "Module: notification"
+doc_type: module
+last_reviewed: 2026-05-01
+source_paths:
+  - src/core/notification.py
+---
+
 # Module: notification
 
 負責遊戲事件發生時，Bot 主動在指定頻道發送 Public 訊息。

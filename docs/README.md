@@ -1,3 +1,10 @@
+---
+title: IdleVillage v2 Preview SSOT Map
+doc_type: index
+last_reviewed: 2026-05-01
+source_paths:
+---
+
 # IdleVillage v2 Preview SSOT Map
 
 This directory is the v2 design preview. v2 is a fresh restart and replaces v1 gameplay rules.
@@ -25,3 +32,4 @@ This directory is the v2 design preview. v2 is a fresh restart and replaces v1 g
 | Slash command routing | `discord/command-handler.md` |
 | Embed and component rendering | `discord/ui-renderer.md` |
 | Public notifications and ordering | `discord/notification.md` |
+| Deployment and infrastructure | `deployment.md` |

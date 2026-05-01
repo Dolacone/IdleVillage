@@ -1,3 +1,11 @@
+---
+title: "Module: building-manager"
+doc_type: module
+last_reviewed: 2026-05-01
+source_paths:
+  - src/managers/building_manager.py
+---
+
 # Module: building-manager
 
 管理四棟村莊建築的 XP 進度、等級升級與等級上限。

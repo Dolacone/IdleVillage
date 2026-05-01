@@ -1,3 +1,11 @@
+---
+title: "Module: stage-manager"
+doc_type: module
+last_reviewed: 2026-05-01
+source_paths:
+  - src/managers/stage_manager.py
+---
+
 # Module: stage-manager
 
 管理關卡進度、通關判定、難度縮放與升級關邏輯。

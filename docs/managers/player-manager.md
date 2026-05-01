@@ -1,3 +1,11 @@
+---
+title: "Module: player-manager"
+doc_type: module
+last_reviewed: 2026-05-01
+source_paths:
+  - src/managers/player_manager.py
+---
+
 # Module: player-manager
 
 管理每位玩家的個人狀態，包含行動設定、AP、素材庫存與裝備等級。

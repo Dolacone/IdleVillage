@@ -1,3 +1,11 @@
+---
+title: "Module: db-schema"
+doc_type: reference
+last_reviewed: 2026-05-01
+source_paths:
+  - src/database/schema.py
+---
+
 # Module: db-schema
 
 v2 fresh restart database schema. This file is the SSOT for SQLite tables, columns, indexes, and initialization rows only.

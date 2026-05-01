@@ -1,3 +1,11 @@
+---
+title: "Module: gear-manager"
+doc_type: module
+last_reviewed: 2026-05-01
+source_paths:
+  - src/managers/gear_manager.py
+---
+
 # Module: gear-manager
 
 處理玩家裝備強化邏輯，包含成功率計算、保底機制與素材消耗。
