@@ -17,6 +17,36 @@ from cogs.ui_renderer import BUILDING_LABELS, GEAR_LABELS, STAGE_TYPE_LABELS
 
 logger = logging.getLogger(__name__)
 
+
+async def _fetch_village_dashboard_data(db) -> tuple[dict, dict, dict, list]:
+    async with db.execute("SELECT * FROM stage_state WHERE id=1") as cur:
+        row = await cur.fetchone()
+        cols = [d[0] for d in cur.description]
+        stage_data = dict(zip(cols, row)) if row else {}
+
+    resources: dict = {}
+    async with db.execute("SELECT resource_type, amount FROM village_resources") as cur:
+        async for r in cur:
+            resources[r[0]] = r[1]
+
+    buildings: dict = {}
+    async with db.execute(
+        "SELECT building_type, level, xp_progress FROM buildings"
+    ) as cur:
+        async for r in cur:
+            buildings[r[0]] = {"level": r[1], "xp_progress": r[2]}
+
+    action_counts: list = []
+    async with db.execute(
+        "SELECT action, action_target, COUNT(*) FROM players"
+        " WHERE action IS NOT NULL GROUP BY action, action_target"
+    ) as cur:
+        async for r in cur:
+            action_counts.append((r[0], r[1], r[2]))
+
+    return stage_data, resources, buildings, action_counts
+
+
 # ---------------------------------------------------------------------------
 # Internal formatting
 # ---------------------------------------------------------------------------
@@ -151,6 +181,9 @@ async def update_dashboard(bot) -> None:
             "SELECT dashboard_channel_id, dashboard_message_id FROM village_state"
         ) as cur:
             row = await cur.fetchone()
+        stage_data, resources, buildings, action_counts = (
+            await _fetch_village_dashboard_data(db)
+        )
 
     if row is None or not row[0] or not row[1]:
         return
@@ -164,7 +197,7 @@ async def update_dashboard(bot) -> None:
 
     try:
         message = await channel.fetch_message(message_id)
-        embed = await build_village_embed()
+        embed = build_village_embed(stage_data, resources, buildings, action_counts)
         await message.edit(embed=embed)
     except Exception as exc:
         logger.error("Failed to update dashboard: %s", exc)

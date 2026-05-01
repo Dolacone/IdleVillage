@@ -448,5 +448,38 @@ class TestActionChangeNotificationDispatch(DatabaseTestCase):
         self.assertIn("stage_clear", [event["type"] for event in events])
 
 
+class TestDashboardUpdate(DatabaseTestCase):
+    async def test_update_dashboard_builds_embed_from_database_state(self):
+        from core.notification import update_dashboard
+
+        async with get_connection() as db:
+            await db.execute(
+                "UPDATE village_state SET dashboard_channel_id='123', dashboard_message_id='456' WHERE id=1"
+            )
+            await db.execute(
+                "UPDATE village_resources SET amount=100 WHERE resource_type='food'"
+            )
+            await db.execute(
+                """INSERT OR REPLACE INTO players
+                   (user_id, created_at, updated_at, action, ap_full_time)
+                   VALUES ('dash-user', ?, ?, 'gathering', ?)""",
+                (_now().isoformat(), _now().isoformat(), _now().isoformat()),
+            )
+            await db.commit()
+
+        message = SimpleNamespace(edit=AsyncMock())
+        channel = SimpleNamespace(fetch_message=AsyncMock(return_value=message))
+        bot = SimpleNamespace(get_channel=lambda channel_id: channel if channel_id == 123 else None)
+
+        await update_dashboard(bot)
+
+        channel.fetch_message.assert_awaited_once_with(456)
+        message.edit.assert_awaited_once()
+        embed = message.edit.call_args.kwargs["embed"]
+        self.assertIn("Village Resources", embed.description)
+        self.assertIn("100", embed.description)
+        self.assertIn("Villager Actions", embed.description)
+
+
 if __name__ == "__main__":
     unittest.main()
