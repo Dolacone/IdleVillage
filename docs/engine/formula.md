@@ -3,7 +3,7 @@
 效率公式與全局平衡參數。其他所有模組在計算產出時呼叫此模組。
 
 所有平衡數值必須由環境變數讀取，程式碼不得 hardcode。
-`.env.example` 必須列出所有預設值；啟動時若缺少必要 key，列印 missing key 並啟動失敗。
+`.env.example` 必須列出所有 v2 使用的環境變數。所有列出的 key 都是 required；啟動時若缺少任一 key，列印 missing key 並啟動失敗。
 
 ## 效率公式
 
@@ -28,7 +28,7 @@ $$\text{raw_output} = \text{base_output} \times (1 + \text{stage_bonus} + \text{
 
 ## Environment variables
 
-`.env.example` is the SSOT for default values. This file only defines which modules own each key.
+`.env.example` is the SSOT for startup values. Every key listed here is required at runtime. This file defines which modules own each key.
 
 | Environment variable | Owning module |
 | :--- | :--- |

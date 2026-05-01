@@ -7,7 +7,7 @@ This directory is the v2 design preview. v2 is a fresh restart and replaces v1 g
 - Each gameplay rule belongs to exactly one functional module file.
 - Other files may reference the owning module, but should not redefine the same formula, lifecycle, or notification rule.
 - `.env.example` is the SSOT for default environment values.
-- `preview/db-schema.md` is the SSOT for SQLite structure only, not gameplay logic.
+- `docs/db-schema.md` is the SSOT for SQLite structure only, not gameplay logic.
 
 ## Functional Modules
 

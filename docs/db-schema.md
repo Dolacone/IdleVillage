@@ -2,12 +2,13 @@
 
 v2 fresh restart database schema. This file is the SSOT for SQLite tables, columns, indexes, and initialization rows only.
 
-Gameplay rules live in the functional module files listed in `preview/README.md`.
+Gameplay rules live in the functional module files listed in `docs/README.md`.
 
 ## Conventions
 
 - SQLite is the primary database.
-- v2 preview is a fresh DB and does not migrate or preserve v1 tables.
+- v2 is a fresh DB and does not migrate or preserve v1 tables.
+- Startup must not drop, truncate, rename, or otherwise destroy an existing v1 database. If the configured database already contains v1 tables, startup must fail with a clear message and the operator will manually delete or replace the DB file.
 - Time fields use UTC ISO-8601 text.
 - Boolean fields use integers: `0` = false, `1` = true.
 - Enum values are stored as text and validated by application code.
@@ -36,7 +37,7 @@ Initial row:
 id = 1
 dashboard_channel_id = null
 dashboard_message_id = null
-announcement_channel_id = ANNOUNCEMENT_CHANNEL_ID if provided
+announcement_channel_id = ANNOUNCEMENT_CHANNEL_ID
 ```
 
 ### stage_state
@@ -65,7 +66,7 @@ stages_cleared = 0
 current_stage_index = 0
 current_stage_type = gathering
 current_stage_progress = 0
-current_stage_target = initial target from stage-manager
+current_stage_target = initial target from stage-manager using STAGE_BASE_TARGET
 stage_started_at = current_time
 overtime_notified = 0
 ```
