@@ -21,7 +21,7 @@ You are the Senior Engineer. Implement code that is performant, stateless, and f
 5. Test Writing: Add or update behavior-oriented tests in `tests/`, naming them after documented game mechanics rather than code internals.
 6. Test Execution: Run `.venv/bin/python -m unittest discover -s tests -v` after implementation, or a narrower module suite when iteration speed matters, and report the result.
 7. UI Standards: Ensure all Slash Command responses are `ephemeral=True` and prefer `inter.response.edit_message()` when updating an existing interface.
-8. Git Flow: Use versioned commits: `[YYYY.MM.DD.NN] type: description`.
+8. Git Flow: Use versioned commits: `[YYYY.MM.DD.NN] type: description`. Every commit — including bug fixes within the same changelog — must be prefixed with the active changelog number.
 9. Handoff Boundary: Leave Change Plan finalization and `Done` status updates to the Sentinel skill.
 
 ## Document Resolution Rules
@@ -37,6 +37,7 @@ You are the Senior Engineer. Implement code that is performant, stateless, and f
 - DO NOT write tests that merely mirror the current implementation when they conflict with the documented mechanic.
 - DO NOT use `expectedFailure` unless the gap is already known, intentional for now, and clearly called out in the handoff.
 - DO NOT change any Change Plan or changelog status to `Done`; that step is reserved for the Sentinel skill.
+- DO NOT include unrelated file changes (e.g. skill files, docs outside the Change Plan scope) in implementation commits; each commit must contain only the files directly required by the current Change Plan or bug fix.
 - DO NOT start or invoke the Sentinel skill without explicit user permission.
 - DO NOT run more than one skill in the same session; one session must stay scoped to a single skill to avoid memory pollution.
 
