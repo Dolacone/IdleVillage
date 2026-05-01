@@ -130,6 +130,52 @@ class TestNewPlayerCreation(DatabaseTestCase):
         self.assertEqual(count, 1, "Duplicate INSERT OR IGNORE should result in exactly 1 row")
 
 
+class TestAnnouncementCommand(DatabaseTestCase):
+    async def test_announcement_command_stores_sent_dashboard_reference(self):
+        from cogs.general import GeneralCog
+        from database.schema import get_connection
+
+        sent_message = MagicMock()
+        sent_message.id = 456
+        inter = MagicMock()
+        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+        inter.channel_id = 123
+        inter.user.id = int(ALL_TEST_ENV["ADMIN_IDS"].split(",")[0])
+        inter.response.defer = AsyncMock()
+        inter.channel.send = AsyncMock(return_value=sent_message)
+        inter.edit_original_response = AsyncMock()
+
+        cog = GeneralCog(bot=MagicMock())
+        await GeneralCog.announcement.callback(cog, inter)
+
+        async with get_connection() as db:
+            async with db.execute(
+                "SELECT announcement_channel_id, dashboard_channel_id, dashboard_message_id FROM village_state WHERE id=1"
+            ) as cur:
+                row = await cur.fetchone()
+
+        self.assertEqual(row, ("123", "123", "456"))
+
+
+class TestManageCommand(DatabaseTestCase):
+    async def test_manage_command_does_not_create_dashboard_message(self):
+        from cogs.general import GeneralCog
+
+        inter = MagicMock()
+        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+        inter.channel_id = 123
+        inter.user.id = int(ALL_TEST_ENV["ADMIN_IDS"].split(",")[0])
+        inter.response.defer = AsyncMock()
+        inter.channel.send = AsyncMock()
+        inter.edit_original_response = AsyncMock()
+
+        cog = GeneralCog(bot=MagicMock())
+        await GeneralCog.manage.callback(cog, inter)
+
+        inter.channel.send.assert_not_called()
+        inter.edit_original_response.assert_awaited_once()
+
+
 class TestUIBuildingTargets(unittest.TestCase):
     """UI_BUILDING_TARGETS must not include research_lab."""
 

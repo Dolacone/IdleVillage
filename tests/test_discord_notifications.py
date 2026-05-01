@@ -480,6 +480,31 @@ class TestDashboardUpdate(DatabaseTestCase):
         self.assertIn("100", embed.description)
         self.assertIn("Villager Actions", embed.description)
 
+    async def test_update_dashboard_clears_deleted_message_reference(self):
+        from core import notification
+
+        class FakeNotFound(Exception):
+            pass
+
+        async with get_connection() as db:
+            await db.execute(
+                "UPDATE village_state SET dashboard_channel_id='123', dashboard_message_id='456' WHERE id=1"
+            )
+            await db.commit()
+
+        channel = SimpleNamespace(fetch_message=AsyncMock(side_effect=FakeNotFound()))
+        bot = SimpleNamespace(get_channel=lambda channel_id: channel if channel_id == 123 else None)
+
+        with patch.object(notification.disnake, "NotFound", FakeNotFound), \
+             patch.object(notification.logger, "error") as log_error:
+            await notification.update_dashboard(bot)
+
+        log_error.assert_not_called()
+        row = await self.fetchone(
+            "SELECT dashboard_channel_id, dashboard_message_id FROM village_state WHERE id=1"
+        )
+        self.assertEqual(row, (None, None))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -11,7 +11,9 @@ Usage:
 """
 
 import logging
+from datetime import datetime, timezone
 
+import disnake
 from core.config import get_env_float, get_env_int
 from cogs.ui_renderer import BUILDING_LABELS, GEAR_LABELS, STAGE_TYPE_LABELS
 
@@ -45,6 +47,21 @@ async def _fetch_village_dashboard_data(db) -> tuple[dict, dict, dict, list]:
             action_counts.append((r[0], r[1], r[2]))
 
     return stage_data, resources, buildings, action_counts
+
+
+async def _clear_dashboard_reference(channel_id: str, message_id: str) -> None:
+    from database.schema import get_connection
+
+    async with get_connection() as db:
+        await db.execute(
+            """
+            UPDATE village_state
+            SET dashboard_channel_id=NULL, dashboard_message_id=NULL, updated_at=?
+            WHERE id=1 AND dashboard_channel_id=? AND dashboard_message_id=?
+            """,
+            (datetime.now(timezone.utc).isoformat(), channel_id, message_id),
+        )
+        await db.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -188,8 +205,10 @@ async def update_dashboard(bot) -> None:
     if row is None or not row[0] or not row[1]:
         return
 
-    channel_id = int(row[0])
-    message_id = int(row[1])
+    dashboard_channel_id = row[0]
+    dashboard_message_id = row[1]
+    channel_id = int(dashboard_channel_id)
+    message_id = int(dashboard_message_id)
     channel = bot.get_channel(channel_id)
     if channel is None:
         logger.warning("Dashboard channel %d not found or not cached", channel_id)
@@ -199,5 +218,7 @@ async def update_dashboard(bot) -> None:
         message = await channel.fetch_message(message_id)
         embed = build_village_embed(stage_data, resources, buildings, action_counts)
         await message.edit(embed=embed)
+    except disnake.NotFound:
+        await _clear_dashboard_reference(dashboard_channel_id, dashboard_message_id)
     except Exception as exc:
         logger.error("Failed to update dashboard: %s", exc)

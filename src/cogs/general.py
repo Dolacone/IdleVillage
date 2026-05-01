@@ -118,12 +118,19 @@ class GeneralCog(commands.Cog):
             )
 
         embed = build_village_embed(stage_data, resources, buildings, action_counts)
-        await inter.channel.send(embed=embed)
+        dashboard_msg = await inter.channel.send(embed=embed)
+        now_str = datetime.now(timezone.utc).isoformat()
+        async with get_connection() as db:
+            await db.execute(
+                "UPDATE village_state SET dashboard_channel_id=?, dashboard_message_id=?, updated_at=? WHERE id=1",
+                (str(inter.channel_id), str(dashboard_msg.id), now_str),
+            )
+            await db.commit()
         await inter.edit_original_response(content="✅ 公告頻道已設定，村莊狀態公告已發布。")
 
     @commands.slash_command(
         name="idlevillage-manage",
-        description="（管理員）管理村莊資源與 Dashboard",
+        description="（管理員）管理村莊資源",
     )
     async def manage(self, inter: disnake.ApplicationCommandInteraction) -> None:
         if not self._check_guild(inter):
@@ -135,40 +142,6 @@ class GeneralCog(commands.Cog):
                 "此指令僅限管理員使用。", ephemeral=True
             )
         await inter.response.defer(ephemeral=True)
-
-        async with get_connection() as db:
-            async with db.execute(
-                "SELECT dashboard_channel_id, dashboard_message_id FROM village_state WHERE id=1"
-            ) as cur:
-                row = await cur.fetchone()
-            dash_channel_id = row[0] if row else None
-            dash_message_id = row[1] if row else None
-
-            stage_data, resources, buildings, action_counts = (
-                await self._fetch_village_data(db)
-            )
-
-        # Try to fetch existing dashboard message; create if not found
-        dashboard_ok = False
-        if dash_channel_id and dash_message_id:
-            try:
-                channel = self.bot.get_channel(int(dash_channel_id))
-                if channel:
-                    await channel.fetch_message(int(dash_message_id))
-                    dashboard_ok = True
-            except Exception:
-                dashboard_ok = False
-
-        if not dashboard_ok:
-            embed = build_village_embed(stage_data, resources, buildings, action_counts)
-            new_msg = await inter.channel.send(embed=embed)
-            now_str = datetime.now(timezone.utc).isoformat()
-            async with get_connection() as db:
-                await db.execute(
-                    "UPDATE village_state SET dashboard_channel_id=?, dashboard_message_id=?, updated_at=? WHERE id=1",
-                    (str(inter.channel_id), str(new_msg.id), now_str),
-                )
-                await db.commit()
 
         resource_type = "food"
         async with get_connection() as db:
