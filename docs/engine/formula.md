@@ -19,12 +19,17 @@ $$\text{raw_output} = \text{base_output} \times (1 + \text{stage_bonus} + \text{
 
 ## 行動類別與對應關係
 
-| 行動 | 裝備欄位 | 設施欄位 |
-| :--- | :--- | :--- |
-| 採集 | 採集道具等級 | 採集場等級 |
-| 建設 | 建築工具等級 | 加工廠等級 |
-| 戰鬥 | 武器防具等級 | 狩獵場等級 |
-| 研究 | 研究裝備等級 | 研究所等級 |
+Discord UI 顯示使用繁體中文。資料庫與程式內部 enum 一律使用英文 stored value。
+
+| Stored value | UI 顯示 | 裝備欄位 | 設施欄位 |
+| :--- | :--- | :--- | :--- |
+| `gathering` | 採集 | 採集道具等級 | 採集場等級 |
+| `building` | 建設 | 建築工具等級 | 加工廠等級 |
+| `combat` | 戰鬥 | 武器防具等級 | 狩獵場等級 |
+| `research` | 研究 | 研究裝備等級 | 研究所等級 |
+
+`players.action` and stage type values use the same stored values: `gathering`, `building`, `combat`, `research`.
+`players.action_target` is required only when `players.action = building`; it stores a building enum value. Research does not store an `action_target`; the resolver maps `research` to `research_lab`.
 
 ## Environment variables
 

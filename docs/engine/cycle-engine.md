@@ -6,6 +6,7 @@
 
 每位玩家有自己的 `completion_time`，彼此完全獨立。
 - 玩家設定行動後：`completion_time = now + ACTION_CYCLE_MINUTES`
+- 第一次設定行動時若 `last_update_time = null`，不做 partial settlement，直接設定 `last_update_time = now` 與新的 `completion_time`
 - 任何時刻 `completion_time <= now` → 立即觸發該玩家的結算
 - 若玩家長時間未互動導致多個週期積壓，以 while-loop 逐週期補算，不得跳過
 - 單次觸發最多補算 `MAX_CYCLES_PER_SETTLEMENT` 個完整週期；若仍有積壓，留待下一次 Watcher / Refresh / 開啟介面繼續補算
@@ -73,13 +74,20 @@ last_update_time 不變
 elapsed = now - last_update_time
 ratio   = elapsed / ACTION_CYCLE_SECONDS（0 ~ 1）
 
-1. 以 ratio 計算比例成本與比例產出（floor）
-2. 將比例產出計入資源 / building XP
-3. 將比例產出計入 stage-manager，若關卡逾時則只對 stage progress 套用逾時倍率
-4. partial cycle 不掉落素材
-5. 寫入新行動類型與目標
-6. completion_time = now + ACTION_CYCLE_MINUTES
-7. last_update_time = now
+若 `last_update_time = null`：
+  1. 不做 partial settlement
+  2. 寫入新行動類型與目標
+  3. completion_time = now + ACTION_CYCLE_MINUTES
+  4. last_update_time = now
+
+否則：
+  1. 以 ratio 計算比例成本與比例產出（floor）
+  2. 將比例產出計入資源 / building XP
+  3. 將比例產出計入 stage-manager，若關卡逾時則只對 stage progress 套用逾時倍率
+  4. partial cycle 不掉落素材
+  5. 寫入新行動類型與目標
+  6. completion_time = now + ACTION_CYCLE_MINUTES
+  7. last_update_time = now
 ```
 
 ## player 欄位（週期相關）

@@ -11,14 +11,14 @@
 
 | 欄位 | 型別 | 初始值 | 說明 |
 | :--- | :--- | :--- | :--- |
-| `action` | enum / null | null | 當前自動行動（採集/建設/戰鬥/研究） |
-| `action_target` | enum / null | null | 建設目標建築（僅 action=建設 時使用） |
+| `action` | enum / null | null | 當前自動行動。DB 儲存英文 enum；UI 顯示繁中 |
+| `action_target` | enum / null | null | 建設目標建築。僅 `action = building` 時使用 |
 | `completion_time` | timestamp | null | 當前週期結束時間（設定行動時寫入） |
 | `last_update_time` | timestamp | null | 上次結算時間（換行動比例產出計算用） |
 | `ap_full_time` | timestamp | created_at + AP_CAP × AP_RECOVERY_MINUTES | AP 回滿時間，用於倒推當前 AP |
-| `materials_tools` | int | 0 | 工具素材（採集用） |
+| `materials_gathering` | int | 0 | 採集素材（採集裝備用） |
 | `materials_building` | int | 0 | 建設素材（建設用） |
-| `materials_weapon` | int | 0 | 武器素材（戰鬥用） |
+| `materials_combat` | int | 0 | 戰鬥素材（戰鬥裝備用） |
 | `materials_research` | int | 0 | 研究素材（研究用） |
 | `gear_gathering` | int | 0 | 採集道具等級 |
 | `gear_building` | int | 0 | 建築工具等級 |
@@ -50,6 +50,7 @@
 ## 素材系統
 
 - 每次完整 cycle settlement 有 MATERIAL_DROP_RATE 機率獲得 1 個對應類別素材。
+- 素材欄位固定為 `materials_gathering`, `materials_building`, `materials_combat`, `materials_research`。
 - Burst 視為 3 次完整 cycle settlement，每次各自判定素材掉落。
 - Partial cycle 不掉落素材。
 - 素材個人持有，不進入村莊資源池。

@@ -4,8 +4,9 @@
 
 ## 輸入
 
-- 玩家當前行動類型（採集 / 建設 / 戰鬥 / 研究 / 未設定）
-- 玩家當前建設目標（若行動為建設）
+- 玩家當前行動類型。DB stored value: `gathering`, `building`, `combat`, `research`, or null。
+- 玩家當前建設目標。僅 `action = building` 時需要。
+- Discord UI 顯示使用繁體中文，resolver 只處理英文 stored value。
 
 ## 結算流程
 
@@ -30,10 +31,10 @@
    shortage_flag 是 boolean，不會因多種資源不足而多重疊加。
 
 6. 分配產出：
-   採集 → 村莊食物 += settlement_output，村莊木頭 += settlement_output
-   建設 → 目標建築 XP += settlement_output（呼叫 building-manager）
-   戰鬥 → 村莊知識 += settlement_output
-   研究 → 研究所 XP += settlement_output（呼叫 building-manager）
+   gathering → 村莊食物 += settlement_output，村莊木頭 += settlement_output
+   building → 目標建築 XP += settlement_output（呼叫 building-manager）
+   combat → 村莊知識 += settlement_output
+   research → 研究所 XP += settlement_output（呼叫 building-manager；target 固定為 research_lab）
 
 7. 關卡進度 += output（呼叫 stage-manager）
    關卡進度使用資源不足懲罰前的 output。
@@ -45,12 +46,12 @@
 
 ## 行動類型參考表
 
-| 行動 | 食物外額外消耗 | 產出目標 | 玩家素材 |
-| :--- | :--- | :--- | :--- |
-| 採集 | 無 | 食物 + 木頭（各一份 output） | 工具素材（MATERIAL_DROP_RATE） |
-| 建設 | 木頭 WOOD_COST | 指定建築 XP | 建設素材（MATERIAL_DROP_RATE） |
-| 戰鬥 | 木頭 WOOD_COST | 知識 | 武器素材（MATERIAL_DROP_RATE） |
-| 研究 | 知識 KNOWLEDGE_COST | 研究所 XP | 研究素材（MATERIAL_DROP_RATE） |
+| Stored value | UI 顯示 | 食物外額外消耗 | 產出目標 | 玩家素材欄位 |
+| :--- | :--- | :--- | :--- | :--- |
+| `gathering` | 採集 | 無 | 食物 + 木頭（各一份 output） | `materials_gathering` |
+| `building` | 建設 | 木頭 WOOD_COST | 指定建築 XP | `materials_building` |
+| `combat` | 戰鬥 | 木頭 WOOD_COST | 知識 | `materials_combat` |
+| `research` | 研究 | 知識 KNOWLEDGE_COST | 研究所 XP | `materials_research` |
 
 ## Partial cycle
 
