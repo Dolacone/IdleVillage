@@ -61,6 +61,10 @@ def get_env_float(key: str) -> float:
         return 0.0
 
 
+def get_discord_token() -> str:
+    return get_env_str("DISCORD_TOKEN")
+
+
 def get_database_path() -> str:
     return get_env_str("DATABASE_PATH") or "data/village.db"
 
