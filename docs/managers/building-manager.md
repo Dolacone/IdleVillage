@@ -49,8 +49,8 @@ xp_required_for_next_level = (current_level + 1) × BUILDING_XP_PER_LEVEL
 
 - 每通過一個升級關（第 5、10、15… 關），所有建築等級上限同步 +1。
 - 初始等級上限為 1（0 關時 floor(0/5)+1 = 1）。
-- 達到 level cap 時仍可累積 XP，但 `xp_progress` 不得超過 `level × BUILDING_XP_PER_LEVEL`。
-- 顯示範例：LvN capped 時最高顯示 `N × BUILDING_XP_PER_LEVEL / N × BUILDING_XP_PER_LEVEL`，多餘 XP 不再增加。
+- 達到 level cap 時仍可累積 XP，但 `xp_progress` 不得超過 `(level + 1) × BUILDING_XP_PER_LEVEL`（即升級門檻）。
+- 顯示範例：LvN capped 時最高顯示 `(N+1) × BUILDING_XP_PER_LEVEL / (N+1) × BUILDING_XP_PER_LEVEL`（100%），多餘 XP 不再增加。
 - level cap 提升時，立即檢查所有建築是否可升級；可升多級時逐級升級並逐級通知。
 
 ## 操作介面（供其他模組呼叫）
@@ -61,3 +61,7 @@ xp_required_for_next_level = (current_level + 1) × BUILDING_XP_PER_LEVEL
 - `getLevelCap()` — 取得當前等級上限（依 stage-manager 的 stages_cleared 計算）
 - `checkUpgrade(building)` — 檢查是否達到升級門檻，若是則升級並觸發通知
 - `checkAllUpgrades()` — level cap 提升後檢查所有建築
+
+## Changelog
+
+- 2026.05.02.03: Corrected XP cap rule: `xp_progress` cap at `(level + 1) × BUILDING_XP_PER_LEVEL` (upgrade threshold), not `level × BUILDING_XP_PER_LEVEL`. Display example updated accordingly.
