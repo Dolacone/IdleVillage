@@ -116,7 +116,7 @@ def _build_village_section(
         blevel = b.get("level", 0)
         bxp = b.get("xp_progress", 0)
         next_req = (blevel + 1) * xp_per_level
-        bpct = 100 if blevel >= level_cap else math.floor(bxp / next_req * 100)
+        bpct = math.floor(bxp / max(next_req, 1) * 100)
         building_lines.append(f"{blabel} Lv{blevel} ({bpct}%)")
 
     sorted_counts = sorted(action_counts, key=lambda x: (-x[2], x[0]))
