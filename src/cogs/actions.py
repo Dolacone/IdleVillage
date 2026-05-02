@@ -121,9 +121,32 @@ class ActionsCog(commands.Cog):
         now = datetime.now(timezone.utc)
         async with get_connection() as db:
             upgrade_info = await gear_manager.get_upgrade_info(db, user_id, gear_type, now)
+            async with db.execute(
+                """SELECT gear_gathering, gear_building, gear_combat, gear_research
+                   FROM players WHERE user_id=?""",
+                (user_id,),
+            ) as cur:
+                row = await cur.fetchone()
+
+        if row:
+            player_gear = {
+                "gathering": row[0],
+                "building": row[1],
+                "combat": row[2],
+                "research": row[3],
+            }
+        else:
+            player_gear = {
+                "gathering": 0,
+                "building": 0,
+                "combat": 0,
+                "research": 0,
+            }
 
         embed = build_gear_embed(upgrade_info, gear_type, result)
-        components = build_gear_components(gear_type, upgrade_info["can_attempt"])
+        components = build_gear_components(
+            gear_type, upgrade_info["can_attempt"], player_gear, upgrade_info["gear_cap"]
+        )
         await inter.edit_original_response(embed=embed, components=components)
 
     @commands.slash_command(name="idlevillage", description="開啟 Idle Village 個人介面")

@@ -416,6 +416,18 @@ class TestRendererMainComponents(unittest.TestCase):
         self.assertNotIn("refresh", all_ids)
         self.assertEqual(rows[0].children[0].label, "⚡ 消耗AP立刻完成三次行動")
 
+    def test_action_dropdown_options_have_descriptions(self):
+        from cogs.ui_renderer import build_main_components
+
+        rows = build_main_components(self._make_player(), {})
+        action_select = rows[1].children[0]
+        descriptions = {option.value: option.description for option in action_select.options}
+
+        self.assertEqual(descriptions["gathering"], "産出 🌾食物 + 🪵木頭")
+        self.assertEqual(descriptions["building"], "消耗 🪵木頭 | 産出 建築XP")
+        self.assertEqual(descriptions["combat"], "消耗 🪵木頭 | 産出 🧠知識")
+        self.assertEqual(descriptions["research"], "消耗 🧠知識 | 産出 研究所XP")
+
 
 class TestRendererGearEmbed(unittest.TestCase):
     """build_gear_embed shows upgrade info and results."""
@@ -469,6 +481,36 @@ class TestRendererGearEmbed(unittest.TestCase):
         info = self._make_info(materials=7)
         embed = build_gear_embed(info, "gathering")
         self.assertIn("持有素材：7 個", embed.description)
+
+
+class TestRendererGearComponents(unittest.TestCase):
+    """build_gear_components shows documented gear option descriptions."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def test_gear_options_show_level_transition_descriptions(self):
+        from cogs.ui_renderer import build_gear_components
+
+        player_gear = {"gathering": 1, "building": 0, "combat": 2, "research": 1}
+        rows = build_gear_components("combat", True, player_gear, gear_cap=5)
+        gear_select = rows[0].children[0]
+        descriptions = {option.value: option.description for option in gear_select.options}
+
+        self.assertEqual(descriptions["gathering"], "Lv1 → Lv2: 採集産出 +5% → +10%")
+        self.assertEqual(descriptions["building"], "Lv0 → Lv1: 建設産出 +0% → +5%")
+        self.assertEqual(descriptions["combat"], "Lv2 → Lv3: 戰鬥産出 +10% → +15%")
+
+    def test_gear_options_show_cap_description(self):
+        from cogs.ui_renderer import build_gear_components
+
+        player_gear = {"gathering": 3, "building": 1, "combat": 0, "research": 2}
+        rows = build_gear_components("gathering", False, player_gear, gear_cap=3)
+        gear_select = rows[0].children[0]
+        descriptions = {option.value: option.description for option in gear_select.options}
+
+        self.assertEqual(descriptions["gathering"], "已達等級上限 Lv3")
 
 
 class TestAdminCheck(unittest.TestCase):

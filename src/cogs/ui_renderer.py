@@ -16,6 +16,12 @@ ACTION_LABELS = {
     "combat": "戰鬥",
     "research": "研究",
 }
+ACTION_DESCRIPTIONS = {
+    "gathering": "産出 🌾食物 + 🪵木頭",
+    "building": "消耗 🪵木頭 | 産出 建築XP",
+    "combat": "消耗 🪵木頭 | 産出 🧠知識",
+    "research": "消耗 🧠知識 | 産出 研究所XP",
+}
 ACTION_EMOJIS = {
     "gathering": "🌾",
     "building": "🔨",
@@ -211,6 +217,7 @@ def build_main_components(
         disnake.SelectOption(
             label=f"{ACTION_EMOJIS[a]} {ACTION_LABELS[a]}",
             value=a,
+            description=ACTION_DESCRIPTIONS[a],
             default=(pending_action == a),
         )
         for a in ("gathering", "building", "combat", "research")
@@ -337,11 +344,30 @@ def build_gear_embed(
     return disnake.Embed(description="\n".join(lines), color=color)
 
 
-def build_gear_components(gear_type: str, can_attempt: bool) -> list:
+def build_gear_components(
+    gear_type: str,
+    can_attempt: bool,
+    player_gear: dict,
+    gear_cap: int,
+) -> list:
+    bonus_pct = math.floor(get_env_float("GEAR_BONUS_PER_LEVEL") * 100)
+
+    def gear_description(g: str) -> str:
+        current = player_gear.get(g, 0)
+        if current >= gear_cap:
+            return f"已達等級上限 Lv{gear_cap}"
+        current_total = current * bonus_pct
+        next_total = (current + 1) * bonus_pct
+        return (
+            f"Lv{current} → Lv{current + 1}: "
+            f"{ACTION_LABELS[g]}産出 +{current_total}% → +{next_total}%"
+        )
+
     gear_options = [
         disnake.SelectOption(
             label=f"{ACTION_EMOJIS[g]} {GEAR_LABELS[g]}",
             value=g,
+            description=gear_description(g),
             default=(gear_type == g),
         )
         for g in ("gathering", "building", "combat", "research")
