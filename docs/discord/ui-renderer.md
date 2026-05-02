@@ -107,10 +107,10 @@ Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
 - **Dropdown 1**：選擇行動
   - 選項：採集 / 建設 / 戰鬥 / 研究
   - 每個選項附帶描述，說明次要消耗與產出（食物消耗為全行動共用，不另列）：
-    - 採集：`産出 🌾食物 + 🪵木頭`
-    - 建設：`消耗 🪵木頭 | 産出 建築XP`
-    - 戰鬥：`消耗 🪵木頭 | 産出 🧠知識`
-    - 研究：`消耗 🧠知識 | 産出 研究所XP`
+    - 採集：`產出 🌾食物 + 🪵木頭`
+    - 建設：`消耗 🪵木頭 | 產出 建築XP`
+    - 戰鬥：`消耗 🪵木頭 | 產出 🧠知識`
+    - 研究：`消耗 🧠知識 | 產出 研究所XP`
 - **Dropdown 2**（僅選擇「建設」後出現）：選擇建設目標
   - 選項：採集場 / 加工廠 / 狩獵場
   - 顯示格式：`{建築名} Lv{n}（XP: {xp_progress}/{next_requirement}）`
@@ -135,7 +135,7 @@ Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
 ```
 
 裝備類型 Dropdown 每個選項附帶描述：
-- 未達上限：`Lv{n} → Lv{n+1}: {action_label}産出 +{n×pct}% → +{(n+1)×pct}%`（pct = floor(GEAR_BONUS_PER_LEVEL × 100)）
+- 未達上限：`Lv{n} → Lv{n+1}: {action_label}產出 +{n×pct}% → +{(n+1)×pct}%`（pct = floor(GEAR_BONUS_PER_LEVEL × 100)）
 - 已達上限：`已達等級上限 Lv{cap}`
 
 - **Button**：`🎲 強化`（Green，禁用條件：素材不足 / AP 不足 / 已達上限）
@@ -156,4 +156,4 @@ Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
 ## Changelog
 
 - 2026.05.02.00: Stage line format changed to `📋 關卡 {n}: {type_zh}`; deadline prefixed with `期限:`; section headers localised to `公用資源` / `公用設施` / `村民行動` / `個人資訊`; building list moved out of code block with per-row emoji; gear line label changed to `裝備`, category text labels and `Lv` prefix removed; materials line category text labels removed; burst button renamed `⚡ 消耗AP立刻完成三次行動` and moved to Row 1 alongside `🔨 強化裝備`; Refresh button removed.
-- 2026.05.02.02: Action dropdown options now include descriptions showing secondary cost and output per action type. Gear type dropdown options now include descriptions showing the level transition and cumulative stat gain (`Lv{n} → Lv{n+1}: {type}産出 +{n×pct}% → +{(n+1)×pct}%`), or `已達等級上限 Lv{cap}` when at cap.
+- 2026.05.02.02: Action dropdown options now include descriptions showing secondary cost and output per action type. Gear type dropdown options now include descriptions showing the level transition and cumulative stat gain (`Lv{n} → Lv{n+1}: {type}產出 +{n×pct}% → +{(n+1)×pct}%`), or `已達等級上限 Lv{cap}` when at cap.

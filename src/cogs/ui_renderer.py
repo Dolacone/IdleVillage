@@ -17,10 +17,10 @@ ACTION_LABELS = {
     "research": "研究",
 }
 ACTION_DESCRIPTIONS = {
-    "gathering": "産出 🌾食物 + 🪵木頭",
-    "building": "消耗 🪵木頭 | 産出 建築XP",
-    "combat": "消耗 🪵木頭 | 産出 🧠知識",
-    "research": "消耗 🧠知識 | 産出 研究所XP",
+    "gathering": "產出 🌾食物 + 🪵木頭",
+    "building": "消耗 🪵木頭 | 產出 建築XP",
+    "combat": "消耗 🪵木頭 | 產出 🧠知識",
+    "research": "消耗 🧠知識 | 產出 研究所XP",
 }
 ACTION_EMOJIS = {
     "gathering": "🌾",
@@ -360,7 +360,7 @@ def build_gear_components(
         next_total = (current + 1) * bonus_pct
         return (
             f"Lv{current} → Lv{current + 1}: "
-            f"{ACTION_LABELS[g]}産出 +{current_total}% → +{next_total}%"
+            f"{ACTION_LABELS[g]}產出 +{current_total}% → +{next_total}%"
         )
 
     gear_options = [

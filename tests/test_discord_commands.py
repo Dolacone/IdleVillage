@@ -423,10 +423,10 @@ class TestRendererMainComponents(unittest.TestCase):
         action_select = rows[1].children[0]
         descriptions = {option.value: option.description for option in action_select.options}
 
-        self.assertEqual(descriptions["gathering"], "産出 🌾食物 + 🪵木頭")
-        self.assertEqual(descriptions["building"], "消耗 🪵木頭 | 産出 建築XP")
-        self.assertEqual(descriptions["combat"], "消耗 🪵木頭 | 産出 🧠知識")
-        self.assertEqual(descriptions["research"], "消耗 🧠知識 | 産出 研究所XP")
+        self.assertEqual(descriptions["gathering"], "產出 🌾食物 + 🪵木頭")
+        self.assertEqual(descriptions["building"], "消耗 🪵木頭 | 產出 建築XP")
+        self.assertEqual(descriptions["combat"], "消耗 🪵木頭 | 產出 🧠知識")
+        self.assertEqual(descriptions["research"], "消耗 🧠知識 | 產出 研究所XP")
 
 
 class TestRendererGearEmbed(unittest.TestCase):
@@ -498,9 +498,9 @@ class TestRendererGearComponents(unittest.TestCase):
         gear_select = rows[0].children[0]
         descriptions = {option.value: option.description for option in gear_select.options}
 
-        self.assertEqual(descriptions["gathering"], "Lv1 → Lv2: 採集産出 +5% → +10%")
-        self.assertEqual(descriptions["building"], "Lv0 → Lv1: 建設産出 +0% → +5%")
-        self.assertEqual(descriptions["combat"], "Lv2 → Lv3: 戰鬥産出 +10% → +15%")
+        self.assertEqual(descriptions["gathering"], "Lv1 → Lv2: 採集產出 +5% → +10%")
+        self.assertEqual(descriptions["building"], "Lv0 → Lv1: 建設產出 +0% → +5%")
+        self.assertEqual(descriptions["combat"], "Lv2 → Lv3: 戰鬥產出 +10% → +15%")
 
     def test_gear_options_show_cap_description(self):
         from cogs.ui_renderer import build_gear_components
