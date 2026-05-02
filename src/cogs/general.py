@@ -20,20 +20,6 @@ _OWN_BUTTON_PREFIXES = (
     "resource_set_custom:",
 )
 _VALID_RESOURCES = frozenset({"food", "wood", "knowledge"})
-_VALID_ACTIONS = frozenset({"gathering", "building", "combat", "research"})
-_VALID_GEAR_TYPES = frozenset({"gathering", "building", "combat", "research"})
-
-HELP_TEXT = (
-    "**Idle Village 指令說明**\n\n"
-    "`/idlevillage` — 開啟個人主介面，查看村莊狀態、管理行動與裝備強化。\n"
-    "`/idlevillage-help` — 顯示此說明。\n\n"
-    "**行動類型**\n"
-    "🌾 採集、🔨 建設、⚔️ 戰鬥、🔬 研究\n\n"
-    "**AP 系統**\n"
-    "AP 會隨時間自動回復，可用於爆發執行（即時結算 3 個週期）或裝備強化。\n\n"
-    "**裝備強化**\n"
-    "消耗 1 AP + 對應素材，成功升等裝備；失敗時保底計數 +1 以提高下次成功率。"
-)
 
 
 def _is_own_button(cid: str) -> bool:
@@ -79,16 +65,6 @@ class GeneralCog(commands.Cog):
                 action_counts.append((r[0], r[1], r[2]))
 
         return stage_data, resources, buildings, action_counts
-
-    @commands.slash_command(
-        name="idlevillage-help", description="顯示 Idle Village 遊戲說明"
-    )
-    async def help_cmd(self, inter: disnake.ApplicationCommandInteraction) -> None:
-        if not self._check_guild(inter):
-            return await inter.response.send_message(
-                "此指令僅限指定伺服器使用。", ephemeral=True
-            )
-        await inter.response.send_message(HELP_TEXT, ephemeral=True)
 
     @commands.slash_command(
         name="idlevillage-announcement",

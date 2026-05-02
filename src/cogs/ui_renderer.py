@@ -39,7 +39,7 @@ STAGE_TYPE_LABELS = {
     "building": "建設",
     "combat": "戰鬥",
     "research": "研究",
-    "upgrade": "強化",
+    "upgrade": "升級",
 }
 RESOURCE_LABELS = {"food": "食物", "wood": "木頭", "knowledge": "知識"}
 RESOURCE_EMOJIS = {"food": "🌾", "wood": "🪵", "knowledge": "🧠"}
@@ -107,17 +107,17 @@ def _build_village_section(
     xp_per_level = get_env_int("BUILDING_XP_PER_LEVEL")
     building_lines = []
     for btype, blabel in [
-        ("gathering_field", "採集場"),
-        ("workshop", "加工廠"),
-        ("hunting_ground", "狩獵場"),
-        ("research_lab", "研究所"),
+        ("gathering_field", "🌾 採集場"),
+        ("workshop", "🔨 加工廠"),
+        ("hunting_ground", "⚔️ 狩獵場"),
+        ("research_lab", "🔬 研究所"),
     ]:
         b = buildings.get(btype, {"level": 0, "xp_progress": 0})
         blevel = b.get("level", 0)
         bxp = b.get("xp_progress", 0)
         next_req = (blevel + 1) * xp_per_level
-        bpct = math.floor(bxp / next_req * 100) if next_req > 0 else 100
-        building_lines.append(f"{blabel:<4}  Lv{blevel} ({bxp}/{next_req} = {bpct}%)")
+        bpct = 100 if blevel >= level_cap else math.floor(bxp / next_req * 100)
+        building_lines.append(f"{blabel} Lv{blevel} ({bpct}%)")
 
     sorted_counts = sorted(action_counts, key=lambda x: (-x[2], x[0]))
     action_lines = [_action_display_name(a, t) + f": {c}" for a, t, c in sorted_counts]
@@ -127,15 +127,15 @@ def _build_village_section(
     return (
         f"(Last Update: <t:{unix_ts}:R>)\n\n"
         f"**Idle Village**\n\n"
-        f"📋 Stage {stages_cleared}／∞｜{stage_name}\n"
+        f"📋 關卡 {stages_cleared}: {stage_name}\n"
         f"   {bar}  {progress} / {target} ({pct}%)\n"
-        f"   ⏰ <t:{deadline_unix}:R>\n"
+        f"   ⏰ 期限: <t:{deadline_unix}:R>\n"
         f"{overtime_line}"
-        f"\nVillage Resources\n"
+        f"\n公用資源\n"
         f"🌾 {food} | 🪵 {wood} | 🧠 {knowledge}\n"
-        f"\nVillage Buildings (等級上限：Lv{level_cap})\n"
-        f"```\n{building_block}\n```"
-        f"\nVillager Actions\n"
+        f"\n公用設施 (等級上限：Lv{level_cap})\n"
+        f"{building_block}\n"
+        f"\n村民行動\n"
         f"```\n{action_block}\n```"
     )
 
@@ -157,11 +157,11 @@ def build_main_embed(
     village_text = _build_village_section(stage_data, resources, buildings, action_counts)
 
     gear_parts = [
-        f"{ACTION_EMOJIS[a]}{ACTION_LABELS[a]} Lv{player_row.get(f'gear_{a}', 0)}"
+        f"{ACTION_EMOJIS[a]} {player_row.get(f'gear_{a}', 0)}"
         for a in ("gathering", "building", "combat", "research")
     ]
     mat_parts = [
-        f"{ACTION_EMOJIS[a]}{ACTION_LABELS[a]} {player_row.get(f'materials_{a}', 0)}"
+        f"{ACTION_EMOJIS[a]} {player_row.get(f'materials_{a}', 0)}"
         for a in ("gathering", "building", "combat", "research")
     ]
 
@@ -183,8 +183,8 @@ def build_main_embed(
     ap_cap = get_env_int("AP_CAP")
 
     player_section = (
-        f"\n**Player Status**\n"
-        f"🏅 等級：{' | '.join(gear_parts)}\n"
+        f"\n**個人資訊**\n"
+        f"🏅 裝備：{' | '.join(gear_parts)}\n"
         f"🎒 素材：{' | '.join(mat_parts)}\n"
         f"{action_line}\n"
         f"⚡ AP：{ap} / {ap_cap}"
@@ -217,12 +217,26 @@ def build_main_components(
     ]
     rows = [
         disnake.ui.ActionRow(
+            disnake.ui.Button(
+                label="⚡ 消耗AP立刻完成三次行動",
+                style=disnake.ButtonStyle.primary,
+                custom_id="burst_execute",
+                disabled=(ap < 1 or player_row.get("action") is None),
+            ),
+            disnake.ui.Button(
+                label="🔨 強化裝備",
+                style=disnake.ButtonStyle.primary,
+                custom_id="open_gear_upgrade",
+                disabled=(ap < 1 or all_gear_at_cap),
+            ),
+        ),
+        disnake.ui.ActionRow(
             disnake.ui.StringSelect(
                 custom_id="action_select",
                 placeholder="選擇行動...",
                 options=action_options,
             )
-        )
+        ),
     ]
 
     if pending_action == "building":
@@ -268,33 +282,6 @@ def build_main_components(
                 style=disnake.ButtonStyle.success,
                 custom_id=confirm_id,
                 disabled=not confirm_enabled,
-            )
-        )
-    )
-
-    rows.append(
-        disnake.ui.ActionRow(
-            disnake.ui.Button(
-                label=f"⚡ 爆發執行（AP: {ap}）",
-                style=disnake.ButtonStyle.primary,
-                custom_id="burst_execute",
-                disabled=(ap < 1 or player_row.get("action") is None),
-            ),
-            disnake.ui.Button(
-                label="🔨 強化裝備",
-                style=disnake.ButtonStyle.secondary,
-                custom_id="open_gear_upgrade",
-                disabled=(ap < 1 or all_gear_at_cap),
-            ),
-        )
-    )
-
-    rows.append(
-        disnake.ui.ActionRow(
-            disnake.ui.Button(
-                label="🔄 Refresh",
-                style=disnake.ButtonStyle.secondary,
-                custom_id="refresh",
             )
         )
     )

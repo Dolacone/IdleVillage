@@ -249,7 +249,8 @@ class TestRendererVillageEmbed(unittest.TestCase):
         action_counts = [("gathering", None, 3), ("combat", None, 1)]
         embed = build_village_embed(self._make_stage_data(), resources, buildings, action_counts)
         desc = embed.description
-        self.assertIn("Stage 3", desc)
+        self.assertIn("📋 關卡 3: 戰鬥", desc)
+        self.assertIn("⏰ 期限:", desc)
         self.assertIn("50 / 100", desc)
 
     def test_embed_contains_resource_values(self):
@@ -257,9 +258,27 @@ class TestRendererVillageEmbed(unittest.TestCase):
         resources = {"food": 999, "wood": 888, "knowledge": 777}
         embed = build_village_embed(self._make_stage_data(), resources, {}, [])
         desc = embed.description
+        self.assertIn("公用資源", desc)
         self.assertIn("999", desc)
         self.assertIn("888", desc)
         self.assertIn("777", desc)
+
+    def test_building_rows_are_plain_percentage_only(self):
+        from cogs.ui_renderer import build_village_embed
+
+        buildings = {
+            "gathering_field": {"level": 1, "xp_progress": 50},
+            "workshop": {"level": 1, "xp_progress": 25},
+            "hunting_ground": {"level": 1, "xp_progress": 0},
+            "research_lab": {"level": 1, "xp_progress": 100},
+        }
+        embed = build_village_embed(self._make_stage_data(), {}, buildings, [])
+        desc = embed.description
+
+        self.assertIn("公用設施 (等級上限：Lv1)", desc)
+        self.assertIn("🌾 採集場 Lv1 (100%)", desc)
+        self.assertNotIn("50/", desc)
+        self.assertNotIn("Village Buildings", desc)
 
     def test_embed_action_counts_sorted_desc(self):
         from cogs.ui_renderer import build_village_embed
@@ -313,7 +332,7 @@ class TestRendererMainEmbed(unittest.TestCase):
         embed = build_main_embed(
             self._make_stage_data(), {}, {}, [], player
         )
-        self.assertIn("Player Status", embed.description)
+        self.assertIn("個人資訊", embed.description)
         self.assertIn("⚡ AP：5", embed.description)
 
     def test_embed_no_action_shows_unset(self):
@@ -327,7 +346,8 @@ class TestRendererMainEmbed(unittest.TestCase):
         player = self._make_player()
         player["gear_building"] = 3
         embed = build_main_embed(self._make_stage_data(), {}, {}, [], player)
-        self.assertIn("Lv3", embed.description)
+        self.assertIn("🏅 裝備：🌾 0 | 🔨 3 | ⚔️ 0 | 🔬 0", embed.description)
+        self.assertIn("🎒 素材：🌾 3 | 🔨 2 | ⚔️ 1 | 🔬 0", embed.description)
 
 
 class TestRendererMainComponents(unittest.TestCase):
@@ -363,6 +383,23 @@ class TestRendererMainComponents(unittest.TestCase):
             gear_button.disabled,
             "Gear upgrade button should be disabled when all gear is at research-lab cap",
         )
+
+    def test_burst_and_gear_buttons_are_first_row_without_refresh(self):
+        from cogs.ui_renderer import build_main_components
+
+        buildings = {"research_lab": {"level": 3, "xp_progress": 0}}
+        rows = build_main_components(self._make_player(ap=1, gear_level=1), buildings)
+        first_row_ids = [component.custom_id for component in rows[0].children]
+        all_ids = [
+            component.custom_id
+            for row in rows
+            for component in row.children
+            if getattr(component, "custom_id", None)
+        ]
+
+        self.assertEqual(first_row_ids, ["burst_execute", "open_gear_upgrade"])
+        self.assertNotIn("refresh", all_ids)
+        self.assertEqual(rows[0].children[0].label, "⚡ 消耗AP立刻完成三次行動")
 
 
 class TestRendererGearEmbed(unittest.TestCase):
@@ -436,31 +473,22 @@ class TestAdminCheck(unittest.TestCase):
         self.assertFalse(is_admin(999999999999999999))
 
 
-class TestRefreshCooldown(unittest.TestCase):
-    """Refresh cooldown prevents rapid re-renders."""
+class TestRemovedCommandsAndRoutes(unittest.TestCase):
+    """Removed UI commands and routes are no longer registered."""
 
     def setUp(self):
         for k, v in ALL_TEST_ENV.items():
             os.environ[k] = v
 
-    def test_cooldown_logic(self):
-        import time
-        from core.config import get_env_int
+    def test_help_command_removed(self):
+        from cogs.general import GeneralCog
 
-        cooldown = get_env_int("REFRESH_COOLDOWN_SECONDS")
-        cooldowns: dict = {}
-        user_id = "u1"
+        self.assertFalse(hasattr(GeneralCog, "help_cmd"))
 
-        def try_refresh() -> bool:
-            now = time.monotonic()
-            last = cooldowns.get(user_id, 0.0)
-            if now - last < cooldown:
-                return False
-            cooldowns[user_id] = now
-            return True
+    def test_refresh_button_not_owned_by_actions_cog(self):
+        from cogs.actions import _is_own_button
 
-        self.assertTrue(try_refresh(), "First refresh should succeed")
-        self.assertFalse(try_refresh(), "Immediate second refresh should be rejected")
+        self.assertFalse(_is_own_button("refresh"))
 
 
 if __name__ == "__main__":

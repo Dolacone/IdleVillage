@@ -476,9 +476,9 @@ class TestDashboardUpdate(DatabaseTestCase):
         channel.fetch_message.assert_awaited_once_with(456)
         message.edit.assert_awaited_once()
         embed = message.edit.call_args.kwargs["embed"]
-        self.assertIn("Village Resources", embed.description)
+        self.assertIn("公用資源", embed.description)
         self.assertIn("100", embed.description)
-        self.assertIn("Villager Actions", embed.description)
+        self.assertIn("村民行動", embed.description)
 
     async def test_update_dashboard_clears_deleted_message_reference(self):
         from core import notification

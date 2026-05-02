@@ -1,4 +1,3 @@
-import time
 from datetime import datetime, timedelta, timezone
 
 import disnake
@@ -18,9 +17,7 @@ from core.utils import dt_str
 from database.schema import get_connection
 from managers import gear_manager, player_manager
 
-_OWN_BUTTONS = frozenset(
-    {"refresh", "burst_execute", "open_gear_upgrade", "back_to_main"}
-)
+_OWN_BUTTONS = frozenset({"burst_execute", "open_gear_upgrade", "back_to_main"})
 _OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:")
 _OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "gear_type_select"})
 _VALID_GEAR_TYPES = frozenset({"gathering", "building", "combat", "research"})
@@ -34,7 +31,6 @@ def _is_own_button(cid: str) -> bool:
 class ActionsCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self._refresh_cooldowns: dict[str, float] = {}
 
     def _check_guild(self, inter) -> bool:
         return str(inter.guild_id) == get_discord_guild_id()
@@ -149,20 +145,7 @@ class ActionsCog(commands.Cog):
 
         user_id = str(inter.user.id)
 
-        if cid == "refresh":
-            now_mono = time.monotonic()
-            last = self._refresh_cooldowns.get(user_id, 0.0)
-            cooldown = get_env_int("REFRESH_COOLDOWN_SECONDS")
-            if now_mono - last < cooldown:
-                remaining = max(1, int(cooldown - (now_mono - last)))
-                return await inter.response.send_message(
-                    f"冷卻中，請 {remaining} 秒後再試。", ephemeral=True
-                )
-            self._refresh_cooldowns[user_id] = now_mono
-            await inter.response.defer()
-            await self._render_main(inter)
-
-        elif cid == "burst_execute":
+        if cid == "burst_execute":
             await inter.response.defer()
             now = datetime.now(timezone.utc)
             success, events = await settle_burst(user_id, now)
