@@ -1,7 +1,7 @@
 ---
 title: "Module: command-handler"
 doc_type: module
-last_reviewed: 2026-05-01
+last_reviewed: 2026-05-02
 source_paths:
   - src/cogs/actions.py
   - src/cogs/general.py
@@ -53,3 +53,7 @@ source_paths:
 - 管理員指令只允許在 `DISCORD_GUILD_ID` 指定的 Guild 執行。
 - 所有玩家互動均為 Ephemeral（只有本人看得見）。
 - 公告指令回應為 Public。
+
+## Changelog
+
+- 2026.05.02.00: Removed `/idlevillage-help` command. Removed `refresh` interaction route.

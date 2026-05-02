@@ -1,7 +1,7 @@
 ---
 title: "Module: ui-renderer"
 doc_type: module
-last_reviewed: 2026-05-01
+last_reviewed: 2026-05-02
 source_paths:
   - src/cogs/ui_renderer.py
 ---
@@ -95,7 +95,7 @@ Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
 
 ### 瞬間行動
 
-- **Button**：`⚡ 消耗AP立刻完成三次行動`（Yellow）
+- **Button**：`⚡ 消耗AP立刻完成三次行動`（Blue/Primary）
   - 禁用條件：AP < 1 或無當前行動
 
 ### 強化裝備
@@ -143,3 +143,7 @@ Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
 ```
 - **Button**：`+{ADMIN_RESOURCE_DELTA_SMALL}`、`+{ADMIN_RESOURCE_DELTA_LARGE}`、`-{ADMIN_RESOURCE_DELTA_SMALL}`、`-{ADMIN_RESOURCE_DELTA_LARGE}`
 - **Button**：`Set Custom`（觸發 Modal）
+
+## Changelog
+
+- 2026.05.02.00: Stage line format changed to `📋 關卡 {n}: {type_zh}`; deadline prefixed with `期限:`; section headers localised to `公用資源` / `公用設施` / `村民行動` / `個人資訊`; building list moved out of code block with per-row emoji; gear line label changed to `裝備`, category text labels and `Lv` prefix removed; materials line category text labels removed; burst button renamed `⚡ 消耗AP立刻完成三次行動` and moved to Row 1 alongside `🔨 強化裝備`; Refresh button removed.
