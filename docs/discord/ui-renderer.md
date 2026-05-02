@@ -21,28 +21,28 @@ source_paths:
 
 **Idle Village**
 
-📋 Stage {stages_cleared}／{total}｜{stage_name}
+📋 關卡 {stages_cleared}: {stage_type_zh}
    {progress_bar}  {progress} / {target} ({pct}%)
-   ⏰ <t:{deadline}:R>
+   ⏰ 期限: <t:{deadline}:R>
 {if overtime}   ⚠️ 逾時！通關效率已降低（產出計分 ×0.5）{/if}
 
-Village Resources
+公用資源
 🌾 {food} | 🪵 {wood} | 🧠 {knowledge}
 
-Village Buildings (等級上限：Lv{cap})
-[code block]
-採集場  Lv{n} ({xp_progress}/{next_requirement} = {pct}%)
-加工廠  Lv{n} ({pct}%)
-狩獵場  Lv{n} ({pct}%)
-研究所  Lv{n} ({pct}%)
-[/code block]
+公用設施 (等級上限：Lv{cap})
+🌾 採集場 Lv{n} ({pct}%)
+🔨 加工廠 Lv{n} ({pct}%)
+⚔️ 狩獵場 Lv{n} ({pct}%)
+🔬 研究所 Lv{n} ({pct}%)
 
-Villager Actions
+村民行動
 [code block]
 {action_name}: {count}   ← 依人數降序，未設定行動的玩家不列出
 ...
 [/code block]
 ```
+
+`{stage_type_zh}` 對應表：採集 / 建設 / 戰鬥 / 研究 / 升級。
 
 ### Buildings 百分比計算
 
@@ -50,7 +50,9 @@ Villager Actions
 
 例：採集場目前 Lv1，`xp_progress = 50`，升 Lv2 需 `2 × BUILDING_XP_PER_LEVEL`。
 
-若建築已達 level cap 且進度滿，顯示 clamp 後數值。
+若建築已達 level cap，顯示 `100%`。
+
+建築圖示對應：採集場 🌾、加工廠 🔨、狩獵場 ⚔️、研究所 🔬。
 
 ### Villager Actions 動作名稱
 
@@ -71,9 +73,9 @@ Villager Actions
 
 ### 個人狀態區（下半部）
 ```
-**Player Status**
-🏅 等級：🌾採集 Lv{n} | 🔨建設 Lv{n} | ⚔️戰鬥 Lv{n} | 🔬研究 Lv{n}
-🎒 素材：🌾採集 {n} | 🔨建設 {n} | ⚔️戰鬥 {n} | 🔬研究 {n}
+**個人資訊**
+🏅 裝備：🌾 {n} | 🔨 {n} | ⚔️ {n} | 🔬 {n}
+🎒 素材：🌾 {n} | 🔨 {n} | ⚔️ {n} | 🔬 {n}
 🏃 行動：{emoji}{action_name}（下次結算：<t:{next_cycle}:R>）
 ⚡ AP：{ap} / 24
 ```
@@ -81,6 +83,25 @@ Villager Actions
 行動 emoji 對應：🌾採集、🔨建設、⚔️戰鬥、🔬研究
 
 ## 互動元件
+
+### 元件排列順序
+
+  Row 1: Button — ⚡ 消耗AP立刻完成三次行動 | 🔨 強化裝備
+  Row 2: Dropdown — 選擇行動
+  Row 3: Dropdown — 選擇建設目標（僅 building 時出現）
+  Row 4: Button — ✅ 確認行動
+
+Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
+
+### 瞬間行動
+
+- **Button**：`⚡ 消耗AP立刻完成三次行動`（Yellow）
+  - 禁用條件：AP < 1 或無當前行動
+
+### 強化裝備
+
+- **Button**：`🔨 強化裝備`（Blue）
+  - 禁用條件：AP < 1 或所有裝備已達上限
 
 ### 行動選擇組
 - **Dropdown 1**：選擇行動
@@ -90,15 +111,9 @@ Villager Actions
   - 顯示格式：`{建築名} Lv{n}（XP: {xp_progress}/{next_requirement}）`
 - **Button**：`✅ 確認行動`（Green）
 
-### AP 行動組
-- **Button**：`⚡ 爆發執行`（Yellow）
-  - 禁用條件：AP < 1
-  - 顯示剩餘 AP 數
-- **Button**：`🔨 強化裝備`（Blue）
-  - 禁用條件：AP < 1 或所有裝備已達上限
-
 ### 其他
-- **Button**：`🔄 Refresh`（Gray，冷卻時間為 REFRESH_COOLDOWN_SECONDS）
+
+無額外按鈕。
 
 ## 裝備強化子選單 Embed
 

@@ -16,7 +16,6 @@ source_paths:
 | 指令 | 對象 | 行為 |
 | :--- | :--- | :--- |
 | `/idlevillage` | 所有玩家 | 先補算到期完整週期，再渲染個人主介面（Ephemeral），呼叫 ui-renderer |
-| `/idlevillage-help` | 所有玩家 | 顯示遊戲說明文字（Ephemeral） |
 | `/idlevillage-announcement` | 管理員 | 將當前頻道寫入 `announcement_channel_id`，並發布或刷新村莊公告（Public） |
 | `/idlevillage-manage` | 管理員 | 檢查 Dashboard 訊息是否存在（不存在則在當前頻道發送新的），再開啟資源管理介面（Ephemeral） |
 
@@ -30,9 +29,8 @@ source_paths:
 | `action_select` | 選擇行動類型 | 若選建設則顯示 Dropdown 2，否則直接啟用確認按鈕 |
 | `building_target_select` | 選擇建設目標 | 啟用確認按鈕 |
 | `confirm_action` | 點擊確認行動 | 呼叫 `player-manager.setAction()`，更新 Embed |
-| `burst_execute` | 點擊爆發執行 | 確認 AP ≥ 1 → 呼叫 `cycle-engine.burst()`，更新 Embed |
+| `burst_execute` | 點擊瞬間行動 | 確認 AP ≥ 1 → 呼叫 `cycle-engine.burst()`，更新 Embed |
 | `open_gear_upgrade` | 點擊強化裝備 | 渲染裝備強化子選單 |
-| `refresh` | 點擊 Refresh | 先補算到期完整週期，再重新渲染主介面（冷卻時間為 REFRESH_COOLDOWN_SECONDS） |
 
 ### 裝備強化子選單
 | 元件 ID | 觸發條件 | 處理邏輯 |
