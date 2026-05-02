@@ -41,7 +41,7 @@ async def add_xp(
 ) -> None:
     """
     Add XP to a building and run the upgrade loop against the current level_cap.
-    - If already at level_cap: clamp xp_progress to level × BUILDING_XP_PER_LEVEL.
+    - If already at level_cap: clamp xp_progress to (level + 1) × BUILDING_XP_PER_LEVEL.
     - Excess XP from an upgrade carries to the next level's progress bar.
     - If the new level reaches level_cap, clamp any remaining overflow.
     """
@@ -57,7 +57,7 @@ async def add_xp(
     xp_per = get_env_int("BUILDING_XP_PER_LEVEL")
 
     if level >= level_cap:
-        clamped = min(xp_progress + xp, level * xp_per)
+        clamped = min(xp_progress + xp, (level + 1) * xp_per)
         await db.execute(
             "UPDATE buildings SET xp_progress=?, updated_at=? WHERE building_type=?",
             (clamped, dt_str(ts), building_type),
@@ -74,7 +74,7 @@ async def add_xp(
             break
 
     if level >= level_cap:
-        xp_progress = min(xp_progress, level * xp_per)
+        xp_progress = min(xp_progress, (level + 1) * xp_per)
 
     await db.execute(
         "UPDATE buildings SET level=?, xp_progress=?, updated_at=? WHERE building_type=?",

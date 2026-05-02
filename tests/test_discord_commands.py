@@ -295,6 +295,17 @@ class TestRendererVillageEmbed(unittest.TestCase):
         self.assertIn("🔨 加工廠 Lv0 (0%)", desc)
         self.assertIn("⚔️ 狩獵場 Lv1 (100%)", desc)
 
+    def test_capped_building_at_full_xp_shows_100_percent(self):
+        from cogs.ui_renderer import build_village_embed
+
+        xp_per = int(ALL_TEST_ENV["BUILDING_XP_PER_LEVEL"])
+        buildings = {
+            "gathering_field": {"level": 1, "xp_progress": 2 * xp_per},
+        }
+        embed = build_village_embed(self._make_stage_data(), {}, buildings, [])
+
+        self.assertIn("🌾 採集場 Lv1 (100%)", embed.description)
+
     def test_embed_action_counts_sorted_desc(self):
         from cogs.ui_renderer import build_village_embed
         action_counts = [("gathering", None, 1), ("combat", None, 5)]

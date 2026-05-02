@@ -527,7 +527,8 @@ class BuildingUpgradeTest(SettlementTestBase):
             from datetime import timezone
             now_str = datetime.now(timezone.utc).isoformat()
             await db.execute(
-                "UPDATE buildings SET level=1, xp_progress=0 WHERE building_type='gathering_field'",
+                "UPDATE buildings SET level=1, xp_progress=? WHERE building_type='gathering_field'",
+                (2 * xp_per - 1,),
             )
             await db.commit()
 
@@ -540,9 +541,9 @@ class BuildingUpgradeTest(SettlementTestBase):
         )
         await settle_complete_cycles(self.TEST_USER, _now())
         bld_after = await self._get_building("gathering_field")
-        # Level should remain 1 (cap), xp_progress capped at 1×xp_per
+        # Level should remain 1 (cap), xp_progress capped at (level+1)×xp_per.
         self.assertEqual(bld_after["level"], 1)
-        self.assertLessEqual(bld_after["xp_progress"], xp_per)
+        self.assertEqual(bld_after["xp_progress"], 2 * xp_per)
 
 
 # ---------------------------------------------------------------------------
