@@ -1,12 +1,8 @@
 import os
-import tempfile
 from datetime import datetime, timedelta, timezone
-
-import aiosqlite
 
 from support import DatabaseTestCase
 from database import schema
-from core.config import REQUIRED_KEYS
 from core.engine import Engine
 
 V2_TABLE_NAMES = {
@@ -26,13 +22,6 @@ class SchemaCreatesOnlyV2Tables(DatabaseTestCase):
         )
         actual = {row[0] for row in rows}
         self.assertEqual(actual, V2_TABLE_NAMES)
-
-    async def test_no_v1_tables_exist_after_init(self):
-        for v1_table in schema.V1_TABLE_NAMES:
-            row = await self.fetchone(
-                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (v1_table,)
-            )
-            self.assertIsNone(row, f"v1 table '{v1_table}' must not exist after v2 init")
 
 
 class SeedRowsExistAfterInit(DatabaseTestCase):
@@ -92,44 +81,6 @@ class SeedRowsExistAfterInit(DatabaseTestCase):
         self.assertEqual(row[1], 1)
 
 
-class V1DetectionPreventsStartup(DatabaseTestCase):
-    async def test_v1_table_causes_init_db_to_raise(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            db_path = os.path.join(tmp, "legacy.db")
-            async with aiosqlite.connect(db_path) as db:
-                await db.execute("CREATE TABLE villages (id INTEGER PRIMARY KEY)")
-                await db.commit()
-
-            original = schema.DB_PATH
-            schema.DB_PATH = db_path
-            try:
-                with self.assertRaises(RuntimeError) as ctx:
-                    await schema.init_db()
-                self.assertIn("villages", str(ctx.exception))
-                self.assertIn("v1", str(ctx.exception))
-            finally:
-                schema.DB_PATH = original
-
-    async def test_error_message_lists_all_detected_v1_tables(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            db_path = os.path.join(tmp, "legacy.db")
-            async with aiosqlite.connect(db_path) as db:
-                await db.execute("CREATE TABLE villages (id INTEGER PRIMARY KEY)")
-                await db.execute("CREATE TABLE buffs (id INTEGER PRIMARY KEY)")
-                await db.commit()
-
-            original = schema.DB_PATH
-            schema.DB_PATH = db_path
-            try:
-                with self.assertRaises(RuntimeError) as ctx:
-                    await schema.init_db()
-                msg = str(ctx.exception)
-                self.assertIn("villages", msg)
-                self.assertIn("buffs", msg)
-            finally:
-                schema.DB_PATH = original
-
-
 class SchemaInitIsIdempotent(DatabaseTestCase):
     async def test_calling_init_db_twice_does_not_raise(self):
         await schema.init_db()
@@ -164,8 +115,6 @@ class PlayerIndexesExist(DatabaseTestCase):
 
 class WatcherIsV2Safe(DatabaseTestCase):
     async def test_process_watcher_does_not_raise_on_v2_schema(self):
-        # Watcher must skip gracefully on a v2 DB (no villages table).
-        # An exception here would mean the background loop crashes every heartbeat.
         try:
             await Engine.process_watcher()
         except Exception as e:

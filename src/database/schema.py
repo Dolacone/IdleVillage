@@ -10,44 +10,11 @@ from core.config import (
     get_stage_base_target,
 )
 
-# v1 constants kept as shims for engine.py and cogs that still reference them.
-RESOURCE_TYPES = ("food", "wood", "stone", "gold")
-BUFF_FOOD_EFFICIENCY = 1
-BUFF_STORAGE_CAPACITY = 2
-BUFF_RESOURCE_YIELD = 3
-BUFF_HUNTING = 4
-BUFF_IDS = (BUFF_FOOD_EFFICIENCY, BUFF_STORAGE_CAPACITY, BUFF_RESOURCE_YIELD, BUFF_HUNTING)
-STATS_BASE_VALUE = 50
-TOKEN_TYPES = ("gathering", "exploring", "building", "attacking")
-PLAYER_BUFF_TYPES = TOKEN_TYPES
-
 DB_PATH: str | None = None  # Override in tests; production resolves lazily via config.
-
-V1_TABLE_NAMES = (
-    "villages",
-    "buffs",
-    "player_stats",
-    "resource_nodes",
-    "monsters",
-    "tokens",
-    "player_buffs",
-    "player_actions_log",
-)
 
 
 def _resolve_db_path() -> str:
     return DB_PATH or get_database_path()
-
-
-async def _detect_v1_tables(db) -> list:
-    found = []
-    for table in V1_TABLE_NAMES:
-        async with db.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
-        ) as cursor:
-            if await cursor.fetchone():
-                found.append(table)
-    return found
 
 
 async def _create_v2_tables(db):
@@ -193,12 +160,6 @@ async def init_db():
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
 
     async with aiosqlite.connect(path) as db:
-        v1_tables = await _detect_v1_tables(db)
-        if v1_tables:
-            raise RuntimeError(
-                f"Startup failed: v1 database tables detected ({', '.join(v1_tables)}). "
-                "Delete or replace the database file before starting v2."
-            )
         await _create_v2_tables(db)
         await _seed_initial_rows(db)
         await db.commit()
@@ -206,4 +167,3 @@ async def init_db():
 
 def get_connection():
     return aiosqlite.connect(_resolve_db_path())
-
