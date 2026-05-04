@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import disnake
 
 from core.config import get_env_float, get_env_int
+from core.formula import ACTION_FACILITY_BUILDING
 
 ACTION_LABELS = {
     "gathering": "採集",
@@ -170,6 +171,24 @@ def build_main_embed(
         f"{ACTION_EMOJIS[a]} {player_row.get(f'materials_{a}', 0)}"
         for a in ("gathering", "building", "combat", "research")
     ]
+    base_output = get_env_int("BASE_OUTPUT")
+    stage_bonus_per = get_env_float("STAGE_BONUS_PER_CLEAR")
+    gear_bonus_per = get_env_float("GEAR_BONUS_PER_LEVEL")
+    facility_bonus_per = get_env_float("FACILITY_BONUS_PER_LEVEL")
+    stages_cleared = stage_data.get("stages_cleared", 0)
+    efficiency_parts = []
+    for action_type in ("gathering", "building", "combat", "research"):
+        gear_level = player_row.get(f"gear_{action_type}", 0)
+        facility = ACTION_FACILITY_BUILDING[action_type]
+        facility_level = buildings.get(facility, {}).get("level", 0)
+        bonus = (
+            stages_cleared * stage_bonus_per
+            + gear_level * gear_bonus_per
+            + facility_level * facility_bonus_per
+        )
+        output = math.floor(base_output * (1 + bonus))
+        pct = math.floor(bonus * 100)
+        efficiency_parts.append(f"{ACTION_EMOJIS[action_type]} {output}(+{pct}%)")
 
     action = player_row.get("action")
     action_target = player_row.get("action_target")
@@ -190,6 +209,7 @@ def build_main_embed(
 
     player_section = (
         f"\n**個人資訊**\n"
+        f"📊 效率：{' | '.join(efficiency_parts)}\n"
         f"🏅 裝備：{' | '.join(gear_parts)}\n"
         f"🎒 素材：{' | '.join(mat_parts)}\n"
         f"{action_line}\n"

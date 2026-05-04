@@ -375,6 +375,25 @@ class TestRendererMainEmbed(unittest.TestCase):
         self.assertIn("🏅 裝備：🌾 0 | 🔨 3 | ⚔️ 0 | 🔬 0", embed.description)
         self.assertIn("🎒 素材：🌾 3 | 🔨 2 | ⚔️ 1 | 🔬 0", embed.description)
 
+    def test_embed_efficiency_line_uses_documented_formula(self):
+        from cogs.ui_renderer import build_main_embed
+
+        stage_data = self._make_stage_data()
+        stage_data["stages_cleared"] = 10
+        buildings = {
+            "gathering_field": {"level": 3, "xp_progress": 0},
+            "workshop": {"level": 2, "xp_progress": 0},
+            "hunting_ground": {"level": 1, "xp_progress": 0},
+            "research_lab": {"level": 4, "xp_progress": 0},
+        }
+        player = self._make_player()
+        player["gear_gathering"] = 2
+        embed = build_main_embed(stage_data, {}, buildings, [], player)
+
+        efficiency_line = "📊 效率：🌾 24(+23%) | 🔨 23(+17%) | ⚔️ 22(+11%) | 🔬 22(+14%)"
+        self.assertIn(efficiency_line, embed.description)
+        self.assertLess(embed.description.index("📊 效率"), embed.description.index("🏅 裝備"))
+
 
 class TestRendererMainComponents(unittest.TestCase):
     """build_main_components follows documented button enablement rules."""
