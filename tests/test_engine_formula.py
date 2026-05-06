@@ -144,19 +144,24 @@ class ComputeOutputTest(DatabaseTestCase):
             result = await compute_output(db, self.TEST_USER, "gathering")
         self.assertEqual(result, expected)
 
-    async def test_stage_bonus_increases_output(self):
-        """stages_cleared=5 increases output by 5 × STAGE_BONUS_PER_CLEAR × BASE_OUTPUT."""
+    async def test_stage_bonus_counts_completed_upgrade_stages(self):
+        """Stage bonus increases only after every fifth cleared stage."""
         await self._insert_player()
         from database import schema
-        async with schema.get_connection() as db:
-            await db.execute("UPDATE stage_state SET stages_cleared=5 WHERE id=1")
-            await db.commit()
         base = int(ALL_TEST_ENV["BASE_OUTPUT"])
         stage_bonus = float(ALL_TEST_ENV["STAGE_BONUS_PER_CLEAR"])
-        expected = math.floor(base * (1 + 5 * stage_bonus))
-        async with schema.get_connection() as db:
-            result = await compute_output(db, self.TEST_USER, "gathering")
-        self.assertEqual(result, expected)
+
+        for stages_cleared, upgrade_clears in ((4, 0), (5, 1), (19, 3)):
+            with self.subTest(stages_cleared=stages_cleared):
+                async with schema.get_connection() as db:
+                    await db.execute(
+                        "UPDATE stage_state SET stages_cleared=? WHERE id=1",
+                        (stages_cleared,),
+                    )
+                    await db.commit()
+                    result = await compute_output(db, self.TEST_USER, "gathering")
+                expected = math.floor(base * (1 + upgrade_clears * stage_bonus))
+                self.assertEqual(result, expected)
 
     async def test_output_is_floored(self):
         """Output is floor(BASE_OUTPUT × (1 + bonuses)) — not rounded."""

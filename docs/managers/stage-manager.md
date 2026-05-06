@@ -62,7 +62,7 @@ round_difficulty = STAGE_BASE_TARGET × (1 + (round_number - 1) × STAGE_TARGET_
 
 ```
 當 current_stage_progress >= target：
-  1. stages_cleared += 1（觸發 STAGE_BONUS_PER_CLEAR 關卡加成）
+  1. stages_cleared += 1（若通過升級關，使已通過總關卡數達 5、10、15...，才增加 STAGE_BONUS_PER_CLEAR 關卡加成）
   2. 若 current_stage_index == 4（升級關）：
        → 建築等級上限自然提升
        → 呼叫 building-manager.checkAllUpgrades()

@@ -21,9 +21,13 @@ $$\text{raw_output} = \text{base_output} \times (1 + \text{stage_bonus} + \text{
 
 | 加成項 | 計算方式 | 作用範圍 |
 | :--- | :--- | :--- |
-| 關卡加成 | 已通過總關卡數 × `STAGE_BONUS_PER_CLEAR` | 全局，所有行動共用 |
+| 關卡加成 | floor(已通過總關卡數 / 5) × `STAGE_BONUS_PER_CLEAR` | 全局，所有行動共用 |
 | 裝備加成 | 對應裝備等級 × `GEAR_BONUS_PER_LEVEL` | 類別對應（採集裝備只加採集） |
 | 設施加成 | 對應設施等級 × `FACILITY_BONUS_PER_LEVEL` | 類別對應（採集場只加採集） |
+
+`STAGE_BONUS_PER_CLEAR` means bonus per cleared upgrade stage. Because every
+fifth stage is an upgrade stage, the stage bonus increases only after total
+clear counts 5, 10, 15, 20, and so on.
 
 ## 行動類別與對應關係
 

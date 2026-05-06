@@ -176,13 +176,14 @@ def build_main_embed(
     gear_bonus_per = get_env_float("GEAR_BONUS_PER_LEVEL")
     facility_bonus_per = get_env_float("FACILITY_BONUS_PER_LEVEL")
     stages_cleared = stage_data.get("stages_cleared", 0)
+    upgrade_clears = stages_cleared // 5
     efficiency_parts = []
     for action_type in ("gathering", "building", "combat", "research"):
         gear_level = player_row.get(f"gear_{action_type}", 0)
         facility = ACTION_FACILITY_BUILDING[action_type]
         facility_level = buildings.get(facility, {}).get("level", 0)
         bonus = (
-            stages_cleared * stage_bonus_per
+            upgrade_clears * stage_bonus_per
             + gear_level * gear_bonus_per
             + facility_level * facility_bonus_per
         )

@@ -80,7 +80,8 @@ source_paths:
 ```
 
 效率欄位：`{n}` 為該行動類別的有效產出，`{p}` 為總加成百分比（floor）。
-計算方式參見 engine/formula.md 效率公式。
+計算方式參見 engine/formula.md 效率公式；關卡加成使用已完成升級關卡數
+`floor(stages_cleared / 5)`，不使用已通過總關卡數。
 emoji 順序與 裝備 / 素材 欄位一致：🌾 🔨 ⚔️ 🔬。
 
 行動 emoji 對應：🌾採集、🔨建設、⚔️戰鬥、🔬研究

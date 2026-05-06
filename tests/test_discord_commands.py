@@ -379,18 +379,21 @@ class TestRendererMainEmbed(unittest.TestCase):
         from cogs.ui_renderer import build_main_embed
 
         stage_data = self._make_stage_data()
-        stage_data["stages_cleared"] = 10
+        stage_data["stages_cleared"] = 19
         buildings = {
-            "gathering_field": {"level": 3, "xp_progress": 0},
+            "gathering_field": {"level": 4, "xp_progress": 0},
             "workshop": {"level": 2, "xp_progress": 0},
             "hunting_ground": {"level": 1, "xp_progress": 0},
             "research_lab": {"level": 4, "xp_progress": 0},
         }
         player = self._make_player()
-        player["gear_gathering"] = 2
+        player["gear_gathering"] = 4
+        player["gear_building"] = 4
+        player["gear_combat"] = 4
+        player["gear_research"] = 4
         embed = build_main_embed(stage_data, {}, buildings, [], player)
 
-        efficiency_line = "📊 效率：🌾 24(+23%) | 🔨 23(+17%) | ⚔️ 22(+11%) | 🔬 22(+14%)"
+        efficiency_line = "📊 效率：🌾 25(+27%) | 🔨 25(+25%) | ⚔️ 24(+24%) | 🔬 25(+27%)"
         self.assertIn(efficiency_line, embed.description)
         self.assertLess(embed.description.index("📊 效率"), embed.description.index("🏅 裝備"))
 

@@ -75,5 +75,10 @@ async def compute_output(db, user_id: str, action: str) -> int:
         row = await cur.fetchone()
     facility_level = row[0] if row else 0
 
-    bonus = stages_cleared * stage_bonus_per + gear_level * gear_bonus_per + facility_level * facility_bonus_per
+    upgrade_clears = stages_cleared // 5
+    bonus = (
+        upgrade_clears * stage_bonus_per
+        + gear_level * gear_bonus_per
+        + facility_level * facility_bonus_per
+    )
     return math.floor(base * (1 + bonus))
