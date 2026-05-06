@@ -131,19 +131,25 @@ def _format_event(event: dict) -> str | None:
     if kind == "gear_success":
         user_name = event.get("user_display_name", "")
         gear_type = event.get("gear_type", "")
-        new_level = event.get("new_level", 0)
+        current_level = event.get("current_level", 0)
+        target_level = event.get("target_level", current_level + 1)
+        failure_count = event.get("failure_count", 0)
         gear_name = GEAR_LABELS.get(gear_type, gear_type)
-        return f"{user_name} 的 {gear_name} 升級成功！(Lv{new_level})"
+        return (
+            f"{user_name} 的 {gear_name} 升級成功 :tada: "
+            f"Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）"
+        )
 
     if kind == "gear_fail":
         user_name = event.get("user_display_name", "")
         gear_type = event.get("gear_type", "")
         current_level = event.get("current_level", 0)
-        pity_count = event.get("pity_count", 0)
+        target_level = event.get("target_level", current_level + 1)
+        failure_count = event.get("failure_count", 0)
         gear_name = GEAR_LABELS.get(gear_type, gear_type)
         return (
-            f"{user_name} 的 {gear_name} 升級失敗！"
-            f"(Lv{current_level}，第{pity_count}次失敗)"
+            f"{user_name} 的 {gear_name} 升級失敗 :boom: "
+            f"Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）"
         )
 
     return None

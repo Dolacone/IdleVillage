@@ -352,12 +352,15 @@ class TestNotificationFormatting(unittest.TestCase):
             "type": "gear_success",
             "user_display_name": "Alice",
             "gear_type": "gathering",
-            "new_level": 2,
+            "current_level": 1,
+            "target_level": 2,
+            "failure_count": 3,
         }
         text = _format_event(ev)
         self.assertIn("Alice", text)
-        self.assertIn("Lv2", text)
-        self.assertIn("成功", text)
+        self.assertIn("升級成功 :tada:", text)
+        self.assertIn("Lv1 -> Lv2", text)
+        self.assertIn("總失敗次數：3", text)
 
     def test_format_gear_fail(self):
         from core.notification import _format_event
@@ -366,12 +369,14 @@ class TestNotificationFormatting(unittest.TestCase):
             "user_display_name": "Bob",
             "gear_type": "combat",
             "current_level": 1,
-            "pity_count": 3,
+            "target_level": 2,
+            "failure_count": 3,
         }
         text = _format_event(ev)
         self.assertIn("Bob", text)
-        self.assertIn("失敗", text)
-        self.assertIn("3", text)
+        self.assertIn("升級失敗 :boom:", text)
+        self.assertIn("Lv1 -> Lv2", text)
+        self.assertIn("總失敗次數：3", text)
 
     def test_format_unknown_event_returns_none(self):
         from core.notification import _format_event
@@ -504,6 +509,54 @@ class TestDashboardUpdate(DatabaseTestCase):
             "SELECT dashboard_channel_id, dashboard_message_id FROM village_state WHERE id=1"
         )
         self.assertEqual(row, (None, None))
+
+
+class TestGearUpgradeEventDispatch(unittest.TestCase):
+    """Gear upgrade events carry the correct payload fields for notification."""
+
+    def test_gear_success_event_format_includes_all_required_fields(self):
+        from core.notification import _format_event
+        ev = {
+            "type": "gear_success",
+            "user_display_name": "Alice",
+            "gear_type": "gathering",
+            "current_level": 2,
+            "target_level": 3,
+            "failure_count": 5,
+        }
+        text = _format_event(ev)
+        self.assertIn("升級成功 :tada:", text)
+        self.assertIn("Lv2 -> Lv3", text)
+        self.assertIn("總失敗次數：5", text)
+
+    def test_gear_fail_event_format_includes_all_required_fields(self):
+        from core.notification import _format_event
+        ev = {
+            "type": "gear_fail",
+            "user_display_name": "Bob",
+            "gear_type": "combat",
+            "current_level": 2,
+            "target_level": 3,
+            "failure_count": 6,
+        }
+        text = _format_event(ev)
+        self.assertIn("升級失敗 :boom:", text)
+        self.assertIn("Lv2 -> Lv3", text)
+        self.assertIn("總失敗次數：6", text)
+
+    def test_gear_success_zero_failure_count(self):
+        from core.notification import _format_event
+        ev = {
+            "type": "gear_success",
+            "user_display_name": "Carol",
+            "gear_type": "building",
+            "current_level": 0,
+            "target_level": 1,
+            "failure_count": 0,
+        }
+        text = _format_event(ev)
+        self.assertIn("總失敗次數：0", text)
+        self.assertIn("Lv0 -> Lv1", text)
 
 
 if __name__ == "__main__":

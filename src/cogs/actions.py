@@ -224,7 +224,9 @@ class ActionsCog(commands.Cog):
                         "type": "gear_success",
                         "user_display_name": inter.user.display_name,
                         "gear_type": gear_type,
-                        "new_level": result.get("new_level", 0),
+                        "current_level": result.get("current_level", 0),
+                        "target_level": result.get("target_level", result.get("current_level", 0) + 1),
+                        "failure_count": result.get("pity_before", 0),
                     }
                 else:
                     gear_event = {
@@ -232,7 +234,8 @@ class ActionsCog(commands.Cog):
                         "user_display_name": inter.user.display_name,
                         "gear_type": gear_type,
                         "current_level": result.get("current_level", 0),
-                        "pity_count": result.get("pity_after", 0),
+                        "target_level": result.get("target_level", result.get("current_level", 0) + 1),
+                        "failure_count": result.get("pity_after", 0),
                     }
                 await notification.dispatch_events(self.bot, [gear_event])
             await self._render_gear(inter, gear_type, result=result)

@@ -143,6 +143,8 @@ async def attempt_upgrade(db, user_id: str, gear_type: str, now: datetime) -> di
         "success": success,
         "new_level": new_level,
         "current_level": gear_level,
+        "target_level": target_level,
         "rate": rate,
+        "pity_before": pity,
         "pity_after": pity_after,
     }

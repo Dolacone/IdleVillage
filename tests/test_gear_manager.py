@@ -306,6 +306,42 @@ class TestAttemptUpgrade(DatabaseTestCase):
         expected_rate = gear_manager._compute_rate(0, 0)
         self.assertAlmostEqual(result["rate"], expected_rate)
 
+    async def test_success_result_includes_pity_before(self):
+        async with schema.get_connection() as db:
+            await db.execute(
+                "UPDATE players SET pity_gathering=3 WHERE user_id=?", (USER,)
+            )
+            await db.commit()
+        with patch("managers.gear_manager.random.random", return_value=0.0):
+            async with schema.get_connection() as db:
+                result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW)
+                await db.commit()
+        self.assertTrue(result["success"])
+        self.assertEqual(result["pity_before"], 3)
+        self.assertEqual(result["pity_after"], 0)
+
+    async def test_failure_result_includes_pity_before(self):
+        async with schema.get_connection() as db:
+            await db.execute(
+                "UPDATE players SET gear_gathering=5, materials_gathering=10, pity_gathering=2 WHERE user_id=?",
+                (USER,),
+            )
+            await db.commit()
+        with patch("managers.gear_manager.random.random", return_value=0.9999):
+            async with schema.get_connection() as db:
+                result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW)
+                await db.commit()
+        self.assertFalse(result["success"])
+        self.assertEqual(result["pity_before"], 2)
+        self.assertEqual(result["pity_after"], 3)
+
+    async def test_result_includes_target_level(self):
+        with patch("managers.gear_manager.random.random", return_value=0.0):
+            async with schema.get_connection() as db:
+                result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW)
+                await db.commit()
+        self.assertEqual(result["target_level"], result["current_level"] + 1)
+
     async def test_all_gear_types_accepted(self):
         for gear_type in ("gathering", "building", "combat", "research"):
             async with schema.get_connection() as db:
