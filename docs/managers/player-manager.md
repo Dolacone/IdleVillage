@@ -1,14 +1,14 @@
 ---
 title: "Module: player-manager"
 doc_type: module
-last_reviewed: 2026-05-01
+last_reviewed: 2026-05-06
 source_paths:
   - src/managers/player_manager.py
 ---
 
 # Module: player-manager
 
-管理每位玩家的個人狀態，包含行動設定、AP、素材庫存與裝備等級。
+管理每位玩家的個人狀態，包含行動設定、AP、素材庫存與工具等級。
 
 ## 玩家識別
 
@@ -24,18 +24,18 @@ source_paths:
 | `completion_time` | timestamp | null | 當前週期結束時間（設定行動時寫入） |
 | `last_update_time` | timestamp | null | 上次結算時間（換行動比例產出計算用） |
 | `ap_full_time` | timestamp | created_at + AP_CAP × AP_RECOVERY_MINUTES | AP 回滿時間，用於倒推當前 AP |
-| `materials_gathering` | int | 0 | 採集素材（採集裝備用） |
+| `materials_gathering` | int | 0 | 採集素材（採集工具用） |
 | `materials_building` | int | 0 | 建設素材（建設用） |
-| `materials_combat` | int | 0 | 戰鬥素材（戰鬥裝備用） |
+| `materials_combat` | int | 0 | 戰鬥素材（狩獵工具用） |
 | `materials_research` | int | 0 | 研究素材（研究用） |
-| `gear_gathering` | int | 0 | 採集道具等級 |
-| `gear_building` | int | 0 | 建築工具等級 |
-| `gear_combat` | int | 0 | 武器防具等級 |
-| `gear_research` | int | 0 | 研究裝備等級 |
-| `pity_gathering` | int | 0 | 採集裝備保底計數 |
-| `pity_building` | int | 0 | 建設裝備保底計數 |
-| `pity_combat` | int | 0 | 戰鬥裝備保底計數 |
-| `pity_research` | int | 0 | 研究裝備保底計數 |
+| `gear_gathering` | int | 0 | 採集工具等級 |
+| `gear_building` | int | 0 | 建設工具等級 |
+| `gear_combat` | int | 0 | 狩獵工具等級 |
+| `gear_research` | int | 0 | 研究工具等級 |
+| `pity_gathering` | int | 0 | 採集工具保底計數 |
+| `pity_building` | int | 0 | 建設工具保底計數 |
+| `pity_combat` | int | 0 | 狩獵工具保底計數 |
+| `pity_research` | int | 0 | 研究工具保底計數 |
 
 ## AP 系統
 
@@ -52,7 +52,7 @@ source_paths:
   ap_full_time = max(now, ap_full_time) + amount × AP_RECOVERY_MINUTES
   ```
 - **用途**：
-  - 裝備強化：消耗 1 AP（呼叫 gear-manager）
+  - 工具強化：消耗 1 AP（呼叫 gear-manager）
   - 爆發執行：消耗 1 AP，即時結算 3 個週期（呼叫 cycle-engine）
 
 ## 素材系統
@@ -62,7 +62,7 @@ source_paths:
 - Burst 視為 3 次完整 cycle settlement，每次各自判定素材掉落。
 - Partial cycle 不掉落素材。
 - 素材個人持有，不進入村莊資源池。
-- 唯一用途：裝備強化（呼叫 gear-manager）。
+- 唯一用途：工具強化（呼叫 gear-manager）。
 
 ## 操作介面（供其他模組呼叫）
 
@@ -76,3 +76,8 @@ source_paths:
 - `setGearLevel(playerId, type, level)` — 設定裝備等級
 - `getPity(playerId, type)` — 取得保底計數
 - `setPity(playerId, type, count)` — 設定保底計數
+
+## Changelog
+
+- 2026.05.06.01: Official user-facing gear naming changed to tools:
+  採集工具, 建設工具, 狩獵工具, 研究工具.

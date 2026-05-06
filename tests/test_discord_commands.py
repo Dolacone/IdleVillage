@@ -372,7 +372,7 @@ class TestRendererMainEmbed(unittest.TestCase):
         player = self._make_player()
         player["gear_building"] = 3
         embed = build_main_embed(self._make_stage_data(), {}, {}, [], player)
-        self.assertIn("🏅 裝備：🌾 0 | 🔨 3 | ⚔️ 0 | 🔬 0", embed.description)
+        self.assertIn("🏅 工具：🌾 0 | 🔨 3 | ⚔️ 0 | 🔬 0", embed.description)
         self.assertIn("🎒 素材：🌾 3 | 🔨 2 | ⚔️ 1 | 🔬 0", embed.description)
 
     def test_embed_efficiency_line_uses_documented_formula(self):
@@ -395,7 +395,7 @@ class TestRendererMainEmbed(unittest.TestCase):
 
         efficiency_line = "📊 效率：🌾 25(+27%) | 🔨 25(+25%) | ⚔️ 24(+24%) | 🔬 25(+27%)"
         self.assertIn(efficiency_line, embed.description)
-        self.assertLess(embed.description.index("📊 效率"), embed.description.index("🏅 裝備"))
+        self.assertLess(embed.description.index("📊 效率"), embed.description.index("🏅 工具"))
 
 
 class TestRendererMainComponents(unittest.TestCase):

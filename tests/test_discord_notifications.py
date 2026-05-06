@@ -453,6 +453,72 @@ class TestActionChangeNotificationDispatch(DatabaseTestCase):
         self.assertIn("stage_clear", [event["type"] for event in events])
 
 
+class TestGearUpgradeActionDispatch(DatabaseTestCase):
+    async def test_success_dispatch_uses_pre_reset_failure_count(self):
+        from cogs.actions import ActionsCog
+
+        inter = SimpleNamespace(
+            guild_id=int(ALL_TEST_ENV["DISCORD_GUILD_ID"]),
+            user=SimpleNamespace(id=123, display_name="Alice"),
+            component=SimpleNamespace(custom_id="attempt_upgrade:gathering"),
+            response=SimpleNamespace(defer=AsyncMock()),
+        )
+        result = {
+            "success": True,
+            "new_level": 2,
+            "current_level": 1,
+            "target_level": 2,
+            "rate": 0.8,
+            "pity_before": 4,
+            "pity_after": 0,
+        }
+        cog = ActionsCog(bot=object())
+
+        with patch("cogs.actions.gear_manager.attempt_upgrade", new=AsyncMock(return_value=result)), \
+             patch.object(cog, "_render_gear", new=AsyncMock()), \
+             patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as dispatch:
+            await cog.on_button_click(inter)
+
+        dispatch.assert_called_once()
+        event = dispatch.call_args.args[1][0]
+        self.assertEqual(event["type"], "gear_success")
+        self.assertEqual(event["current_level"], 1)
+        self.assertEqual(event["target_level"], 2)
+        self.assertEqual(event["failure_count"], 4)
+
+    async def test_failure_dispatch_uses_post_failure_count(self):
+        from cogs.actions import ActionsCog
+
+        inter = SimpleNamespace(
+            guild_id=int(ALL_TEST_ENV["DISCORD_GUILD_ID"]),
+            user=SimpleNamespace(id=123, display_name="Bob"),
+            component=SimpleNamespace(custom_id="attempt_upgrade:combat"),
+            response=SimpleNamespace(defer=AsyncMock()),
+        )
+        result = {
+            "success": False,
+            "new_level": 1,
+            "current_level": 1,
+            "target_level": 2,
+            "rate": 0.5,
+            "pity_before": 2,
+            "pity_after": 3,
+        }
+        cog = ActionsCog(bot=object())
+
+        with patch("cogs.actions.gear_manager.attempt_upgrade", new=AsyncMock(return_value=result)), \
+             patch.object(cog, "_render_gear", new=AsyncMock()), \
+             patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as dispatch:
+            await cog.on_button_click(inter)
+
+        dispatch.assert_called_once()
+        event = dispatch.call_args.args[1][0]
+        self.assertEqual(event["type"], "gear_fail")
+        self.assertEqual(event["current_level"], 1)
+        self.assertEqual(event["target_level"], 2)
+        self.assertEqual(event["failure_count"], 3)
+
+
 class TestDashboardUpdate(DatabaseTestCase):
     async def test_update_dashboard_builds_embed_from_database_state(self):
         from core.notification import update_dashboard
@@ -557,6 +623,32 @@ class TestGearUpgradeEventDispatch(unittest.TestCase):
         text = _format_event(ev)
         self.assertIn("總失敗次數：0", text)
         self.assertIn("Lv0 -> Lv1", text)
+
+    def test_gathering_gear_uses_required_notification_label(self):
+        from core.notification import _format_event
+        ev = {
+            "type": "gear_success",
+            "user_display_name": "Alice",
+            "gear_type": "gathering",
+            "current_level": 1,
+            "target_level": 2,
+            "failure_count": 0,
+        }
+        text = _format_event(ev)
+        self.assertIn("Alice 的 採集工具 升級成功 :tada:", text)
+
+    def test_combat_gear_uses_required_notification_label(self):
+        from core.notification import _format_event
+        ev = {
+            "type": "gear_fail",
+            "user_display_name": "Bob",
+            "gear_type": "combat",
+            "current_level": 1,
+            "target_level": 2,
+            "failure_count": 3,
+        }
+        text = _format_event(ev)
+        self.assertIn("Bob 的 狩獵工具 升級失敗 :boom:", text)
 
 
 if __name__ == "__main__":

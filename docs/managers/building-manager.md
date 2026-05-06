@@ -17,7 +17,7 @@ source_paths:
 | 採集場 | 建設行動（玩家指定） | 全服採集效率 +FACILITY_BONUS_PER_LEVEL/級 | — |
 | 加工廠 | 建設行動（玩家指定） | 全服建設效率 +FACILITY_BONUS_PER_LEVEL/級 | — |
 | 狩獵場 | 建設行動（玩家指定） | 全服戰鬥效率 +FACILITY_BONUS_PER_LEVEL/級 | — |
-| 研究所 | 研究行動（固定） | 全服研究效率 +FACILITY_BONUS_PER_LEVEL/級 | **等級 = 全服裝備等級上限** |
+| 研究所 | 研究行動（固定） | 全服研究效率 +FACILITY_BONUS_PER_LEVEL/級 | **等級 = 全服工具等級上限** |
 
 ## XP 規則
 
@@ -64,4 +64,5 @@ xp_required_for_next_level = (current_level + 1) × BUILDING_XP_PER_LEVEL
 
 ## Changelog
 
+- 2026.05.06.01: Research lab special function wording changed from 裝備等級上限 to 工具等級上限.
 - 2026.05.02.03: Corrected XP cap rule: `xp_progress` cap at `(level + 1) × BUILDING_XP_PER_LEVEL` (upgrade threshold), not `level × BUILDING_XP_PER_LEVEL`. Display example updated accordingly.

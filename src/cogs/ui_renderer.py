@@ -36,10 +36,10 @@ BUILDING_LABELS = {
     "research_lab": "研究所",
 }
 GEAR_LABELS = {
-    "gathering": "採集裝備",
+    "gathering": "採集工具",
     "building": "建設工具",
-    "combat": "戰鬥裝備",
-    "research": "研究裝備",
+    "combat": "狩獵工具",
+    "research": "研究工具",
 }
 STAGE_TYPE_LABELS = {
     "gathering": "採集",
@@ -215,7 +215,7 @@ def build_main_embed(
     player_section = (
         f"\n**個人資訊**\n"
         f"📊 效率：{' | '.join(efficiency_parts)}\n"
-        f"🏅 裝備：{' | '.join(gear_parts)}\n"
+        f"🏅 工具：{' | '.join(gear_parts)}\n"
         f"🎒 素材：{' | '.join(mat_parts)}\n"
         f"{action_line}\n"
         f"⚡ AP：{ap} / {ap_cap}"
@@ -256,7 +256,7 @@ def build_main_components(
                 disabled=(ap < 1 or player_row.get("action") is None),
             ),
             disnake.ui.Button(
-                label="🔨 強化裝備",
+                label="🔨 強化工具",
                 style=disnake.ButtonStyle.primary,
                 custom_id="open_gear_upgrade",
                 disabled=(ap < 1 or all_gear_at_cap),
@@ -349,14 +349,14 @@ def build_gear_embed(
     pity_display = _rate_percent(pity_bonus_per)
 
     lines = [
-        "🔨 裝備強化",
+        "🔨 工具強化",
         "─────────────────────────────",
         f"{label}：Lv{gear_level} → Lv{target_level}",
         f"成功率：{base_rate_pct}%（+{pity}×{pity_display}% 保底）= {final_rate_pct}%",
         f"消耗：⚡ 1 AP + {material_cost} 個 {mat_label}",
         f"持有素材：{materials} 個",
         f"⚡ AP：{ap} / {ap_cap}",
-        f"裝備等級上限：Lv{gear_cap}（研究所 Lv{gear_cap}）",
+        f"工具等級上限：Lv{gear_cap}（研究所 Lv{gear_cap}）",
     ]
 
     if result is not None:
@@ -401,7 +401,7 @@ def build_gear_components(
         disnake.ui.ActionRow(
             disnake.ui.StringSelect(
                 custom_id="gear_type_select",
-                placeholder="選擇裝備類型...",
+                placeholder="選擇工具類型...",
                 options=gear_options,
             )
         ),

@@ -1,7 +1,7 @@
 ---
 title: "Module: command-handler"
 doc_type: module
-last_reviewed: 2026-05-02
+last_reviewed: 2026-05-06
 source_paths:
   - src/cogs/actions.py
   - src/cogs/general.py
@@ -30,12 +30,12 @@ source_paths:
 | `building_target_select` | 選擇建設目標 | 啟用確認按鈕 |
 | `confirm_action` | 點擊確認行動 | 呼叫 `player-manager.setAction()`，更新 Embed |
 | `burst_execute` | 點擊瞬間行動 | 確認 AP ≥ 1 → 呼叫 `cycle-engine.burst()`，更新 Embed |
-| `open_gear_upgrade` | 點擊強化裝備 | 渲染裝備強化子選單 |
+| `open_gear_upgrade` | 點擊強化工具 | 渲染工具強化子選單 |
 
-### 裝備強化子選單
+### 工具強化子選單
 | 元件 ID | 觸發條件 | 處理邏輯 |
 | :--- | :--- | :--- |
-| `gear_type_select` | 選擇裝備類型 | 更新強化預覽資訊 |
+| `gear_type_select` | 選擇工具類型 | 更新強化預覽資訊 |
 | `attempt_upgrade` | 點擊強化 | 呼叫 `gear-manager.attemptUpgrade()`，顯示結果 |
 | `back_to_main` | 點擊返回 | 重新渲染主介面 |
 
@@ -56,4 +56,6 @@ source_paths:
 
 ## Changelog
 
+- 2026.05.06.01: Official user-facing gear naming changed to tools; command
+  handler copy now uses 工具強化 and 工具類型.
 - 2026.05.02.00: Removed `/idlevillage-help` command. Removed `refresh` interaction route.

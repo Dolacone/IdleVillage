@@ -1,7 +1,7 @@
 ---
 title: "Module: formula"
 doc_type: module
-last_reviewed: 2026-05-01
+last_reviewed: 2026-05-06
 source_paths:
   - src/core/formula.py
 ---
@@ -22,7 +22,7 @@ $$\text{raw_output} = \text{base_output} \times (1 + \text{stage_bonus} + \text{
 | 加成項 | 計算方式 | 作用範圍 |
 | :--- | :--- | :--- |
 | 關卡加成 | floor(已通過總關卡數 / 5) × `STAGE_BONUS_PER_CLEAR` | 全局，所有行動共用 |
-| 裝備加成 | 對應裝備等級 × `GEAR_BONUS_PER_LEVEL` | 類別對應（採集裝備只加採集） |
+| 工具加成 | 對應工具等級 × `GEAR_BONUS_PER_LEVEL` | 類別對應（採集工具只加採集） |
 | 設施加成 | 對應設施等級 × `FACILITY_BONUS_PER_LEVEL` | 類別對應（採集場只加採集） |
 
 `STAGE_BONUS_PER_CLEAR` means bonus per cleared upgrade stage. Because every
@@ -35,10 +35,10 @@ Discord UI 顯示使用繁體中文。資料庫與程式內部 enum 一律使用
 
 | Stored value | UI 顯示 | 裝備欄位 | 設施欄位 |
 | :--- | :--- | :--- | :--- |
-| `gathering` | 採集 | 採集道具等級 | 採集場等級 |
-| `building` | 建設 | 建築工具等級 | 加工廠等級 |
-| `combat` | 戰鬥 | 武器防具等級 | 狩獵場等級 |
-| `research` | 研究 | 研究裝備等級 | 研究所等級 |
+| `gathering` | 採集 | 採集工具等級 | 採集場等級 |
+| `building` | 建設 | 建設工具等級 | 加工廠等級 |
+| `combat` | 戰鬥 | 狩獵工具等級 | 狩獵場等級 |
+| `research` | 研究 | 研究工具等級 | 研究所等級 |
 
 `players.action` and stage type values use the same stored values: `gathering`, `building`, `combat`, `research`.
 `players.action_target` is required only when `players.action = building`; it stores a building enum value. Research does not store an `action_target`; the resolver maps `research` to `research_lab`.
@@ -85,3 +85,8 @@ Discord UI 顯示使用繁體中文。資料庫與程式內部 enum 一律使用
 - 所有產出、消耗、XP、進度入庫前都 floor 為整數。
 - partial cycle rounding is owned by `engine/cycle-engine.md`.
 - stage overtime progress behavior is owned by `managers/stage-manager.md`.
+
+## Changelog
+
+- 2026.05.06.01: Official user-facing gear naming changed to tools:
+  採集工具, 建設工具, 狩獵工具, 研究工具.

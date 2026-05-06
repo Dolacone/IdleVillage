@@ -8,16 +8,16 @@ source_paths:
 
 # Module: gear-manager
 
-處理玩家裝備強化邏輯，包含成功率計算、保底機制與素材消耗。
+處理玩家工具強化邏輯，包含成功率計算、保底機制與素材消耗。
 
-## 裝備類型對應
+## 工具類型對應
 
-| 裝備 | 行動類型 | 消耗素材 | 強化效果 |
+| 工具 | 行動類型 | 消耗素材 | 強化效果 |
 | :--- | :--- | :--- | :--- |
-| 採集道具 | 採集 | 工具素材 | 採集效率 +GEAR_BONUS_PER_LEVEL/級 |
-| 建築工具 | 建設 | 建設素材 | 建設效率 +GEAR_BONUS_PER_LEVEL/級 |
-| 武器防具 | 戰鬥 | 武器素材 | 戰鬥效率 +GEAR_BONUS_PER_LEVEL/級 |
-| 研究裝備 | 研究 | 研究素材 | 研究效率 +GEAR_BONUS_PER_LEVEL/級 |
+| 採集工具 | 採集 | 工具素材 | 採集效率 +GEAR_BONUS_PER_LEVEL/級 |
+| 建設工具 | 建設 | 建設素材 | 建設效率 +GEAR_BONUS_PER_LEVEL/級 |
+| 狩獵工具 | 戰鬥 | 武器素材 | 戰鬥效率 +GEAR_BONUS_PER_LEVEL/級 |
+| 研究工具 | 研究 | 研究素材 | 研究效率 +GEAR_BONUS_PER_LEVEL/級 |
 
 ## 強化消耗
 
@@ -73,6 +73,8 @@ final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS)
 
 ## Changelog
 
+- 2026.05.06.01: Official user-facing gear naming changed to tools:
+  採集工具, 建設工具, 狩獵工具, 研究工具.
 - 2026.05.06.00: Defined the gear success-rate precision contract. Decimal
   config values such as `0.10` must calculate at their intended percent value,
   so Lv6 with no pity is exactly 40%.

@@ -73,7 +73,7 @@ source_paths:
 ```
 **個人資訊**
 📊 效率：🌾 {n}(+{p}%) | 🔨 {n}(+{p}%) | ⚔️ {n}(+{p}%) | 🔬 {n}(+{p}%)
-🏅 裝備：🌾 {n} | 🔨 {n} | ⚔️ {n} | 🔬 {n}
+🏅 工具：🌾 {n} | 🔨 {n} | ⚔️ {n} | 🔬 {n}
 🎒 素材：🌾 {n} | 🔨 {n} | ⚔️ {n} | 🔬 {n}
 🏃 行動：{emoji}{action_name}（下次結算：<t:{next_cycle}:R>）
 ⚡ AP：{ap} / 24
@@ -82,7 +82,7 @@ source_paths:
 效率欄位：`{n}` 為該行動類別的有效產出，`{p}` 為總加成百分比（floor）。
 計算方式參見 engine/formula.md 效率公式；關卡加成使用已完成升級關卡數
 `floor(stages_cleared / 5)`，不使用已通過總關卡數。
-emoji 順序與 裝備 / 素材 欄位一致：🌾 🔨 ⚔️ 🔬。
+emoji 順序與 工具 / 素材 欄位一致：🌾 🔨 ⚔️ 🔬。
 
 行動 emoji 對應：🌾採集、🔨建設、⚔️戰鬥、🔬研究
 
@@ -90,7 +90,7 @@ emoji 順序與 裝備 / 素材 欄位一致：🌾 🔨 ⚔️ 🔬。
 
 ### 元件排列順序
 
-  Row 1: Button — ⚡ 消耗AP立刻完成三次行動 | 🔨 強化裝備
+  Row 1: Button — ⚡ 消耗AP立刻完成三次行動 | 🔨 強化工具
   Row 2: Dropdown — 選擇行動
   Row 3: Dropdown — 選擇建設目標（僅 building 時出現）
   Row 4: Button — ✅ 確認行動
@@ -102,10 +102,10 @@ Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
 - **Button**：`⚡ 消耗AP立刻完成三次行動`（Blue/Primary）
   - 禁用條件：AP < 1 或無當前行動
 
-### 強化裝備
+### 強化工具
 
-- **Button**：`🔨 強化裝備`（Blue）
-  - 禁用條件：AP < 1 或所有裝備已達上限
+- **Button**：`🔨 強化工具`（Blue）
+  - 禁用條件：AP < 1 或所有工具已達上限
 
 ### 行動選擇組
 - **Dropdown 1**：選擇行動
@@ -124,25 +124,25 @@ Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
 
 無額外按鈕。
 
-## 裝備強化子選單 Embed
+## 工具強化子選單 Embed
 
 ```
-🔨 裝備強化
+🔨 工具強化
 ─────────────────────────────
-選擇裝備：[Dropdown]
+選擇工具：[Dropdown]
 
 {gear_name}：Lv{current} → Lv{target}
 成功率：{base_rate}%（+{pity×5}% 保底）= {final_rate}%
 消耗：⚡ 1 AP + {n} 個 {material_name}
 持有素材：{material_count} 個
-裝備等級上限：Lv{cap}（研究所 Lv{n}）
+工具等級上限：Lv{cap}（研究所 Lv{n}）
 ```
 
 成功率顯示必須和 managers/gear-manager.md 的成功率計算一致。若設定值代表整數百分比，
 UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL=0.10`
 時，Lv6、保底 0 的顯示為 `成功率：40%（+0×5% 保底）= 40%`。
 
-裝備類型 Dropdown 每個選項附帶描述：
+工具類型 Dropdown 每個選項附帶描述：
 - 未達上限：`Lv{n} → Lv{n+1}: {action_label}產出 +{n×pct}% → +{(n+1)×pct}%`（pct = floor(GEAR_BONUS_PER_LEVEL × 100)）
 - 已達上限：`已達等級上限 Lv{cap}`
 
@@ -167,4 +167,7 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 - 2026.05.02.02: Action dropdown options now include descriptions showing secondary cost and output per action type. Gear type dropdown options now include descriptions showing the level transition and cumulative stat gain (`Lv{n} → Lv{n+1}: {type}產出 +{n×pct}% → +{(n+1)×pct}%`), or `已達等級上限 Lv{cap}` when at cap.
 - 2026.05.02.03: Removed incorrect special-case rule "若建築已達 level cap，顯示 100%". 100% is reached naturally when `xp_progress` reaches `next_req`; no display override is needed or correct.
 - 2026.05.04.00: Added 📊 效率 as line 1 of 個人資訊, before 裝備. Displays `{output}(+{pct}%)` per action type using the formula in engine/formula.md.
+- 2026.05.06.01: Official user-facing gear naming changed to tools:
+  dashboard line `🏅 工具`, button `🔨 強化工具`, and full names
+  採集工具, 建設工具, 狩獵工具, 研究工具.
 - 2026.05.06.00: Gear upgrade success-rate display must match gear-manager precision semantics. Lv6 with no pity displays 40%, not 39%.
