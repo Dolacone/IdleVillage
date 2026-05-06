@@ -1,7 +1,7 @@
 ---
 title: "Module: ui-renderer"
 doc_type: module
-last_reviewed: 2026-05-02
+last_reviewed: 2026-05-06
 source_paths:
   - src/cogs/ui_renderer.py
 ---
@@ -138,6 +138,10 @@ Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
 裝備等級上限：Lv{cap}（研究所 Lv{n}）
 ```
 
+成功率顯示必須和 managers/gear-manager.md 的成功率計算一致。若設定值代表整數百分比，
+UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL=0.10`
+時，Lv6、保底 0 的顯示為 `成功率：40%（+0×5% 保底）= 40%`。
+
 裝備類型 Dropdown 每個選項附帶描述：
 - 未達上限：`Lv{n} → Lv{n+1}: {action_label}產出 +{n×pct}% → +{(n+1)×pct}%`（pct = floor(GEAR_BONUS_PER_LEVEL × 100)）
 - 已達上限：`已達等級上限 Lv{cap}`
@@ -163,3 +167,4 @@ Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
 - 2026.05.02.02: Action dropdown options now include descriptions showing secondary cost and output per action type. Gear type dropdown options now include descriptions showing the level transition and cumulative stat gain (`Lv{n} → Lv{n+1}: {type}產出 +{n×pct}% → +{(n+1)×pct}%`), or `已達等級上限 Lv{cap}` when at cap.
 - 2026.05.02.03: Removed incorrect special-case rule "若建築已達 level cap，顯示 100%". 100% is reached naturally when `xp_progress` reaches `next_req`; no display override is needed or correct.
 - 2026.05.04.00: Added 📊 效率 as line 1 of 個人資訊, before 裝備. Displays `{output}(+{pct}%)` per action type using the formula in engine/formula.md.
+- 2026.05.06.00: Gear upgrade success-rate display must match gear-manager precision semantics. Lv6 with no pity displays 40%, not 39%.

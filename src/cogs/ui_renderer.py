@@ -62,6 +62,10 @@ def _progress_bar(progress: int, target: int, width: int = 10) -> str:
     return "█" * filled + "░" * (width - filled)
 
 
+def _rate_percent(rate: float) -> int:
+    return math.floor(round(rate * 100, 10))
+
+
 def _unix_from_iso(iso_str: str) -> int:
     if not iso_str:
         return 0
@@ -340,9 +344,9 @@ def build_gear_embed(
         1.0 - gear_level * get_env_float("GEAR_RATE_LOSS_PER_LEVEL"),
     )
     final_rate = min(1.0, base_rate + pity * pity_bonus_per)
-    base_rate_pct = math.floor(base_rate * 100)
-    final_rate_pct = math.floor(final_rate * 100)
-    pity_display = math.floor(pity_bonus_per * 100)
+    base_rate_pct = _rate_percent(base_rate)
+    final_rate_pct = _rate_percent(final_rate)
+    pity_display = _rate_percent(pity_bonus_per)
 
     lines = [
         "🔨 裝備強化",

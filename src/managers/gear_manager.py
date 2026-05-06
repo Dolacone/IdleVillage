@@ -12,6 +12,11 @@ from core.config import get_env_float, get_env_int
 from managers import building_manager, player_manager
 
 GEAR_TYPES = ("gathering", "building", "combat", "research")
+RATE_PRECISION = 10
+
+
+def _normalize_rate(rate: float) -> float:
+    return round(rate, RATE_PRECISION)
 
 
 def _compute_rate(gear_level: int, pity_count: int) -> float:
@@ -24,8 +29,8 @@ def _compute_rate(gear_level: int, pity_count: int) -> float:
     min_rate = get_env_float("GEAR_MIN_SUCCESS_RATE")
     loss_per = get_env_float("GEAR_RATE_LOSS_PER_LEVEL")
     pity_bonus = get_env_float("GEAR_PITY_BONUS")
-    base_rate = max(min_rate, 1.0 - gear_level * loss_per)
-    return min(1.0, base_rate + pity_count * pity_bonus)
+    base_rate = max(min_rate, _normalize_rate(1.0 - gear_level * loss_per))
+    return min(1.0, _normalize_rate(base_rate + pity_count * pity_bonus))
 
 
 async def get_upgrade_info(db, user_id: str, gear_type: str, now: datetime) -> dict:

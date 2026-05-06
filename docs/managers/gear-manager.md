@@ -1,7 +1,7 @@
 ---
 title: "Module: gear-manager"
 doc_type: module
-last_reviewed: 2026-05-01
+last_reviewed: 2026-05-06
 source_paths:
   - src/managers/gear_manager.py
 ---
@@ -37,6 +37,10 @@ base_rate  = max(GEAR_MIN_SUCCESS_RATE, 100% - current_level × GEAR_RATE_LOSS_P
 final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS)
 ```
 
+成功率必須依設定值的十進位意圖計算，不得因二進位浮點誤差低於文件公式結果。
+例如 `GEAR_RATE_LOSS_PER_LEVEL=0.10` 時，Lv6 且 `pity_count=0` 的
+`base_rate` 與 `final_rate` 都是 40%，不是 39.999999999% 或 39%。
+
 ## 強化流程
 
 ```
@@ -66,3 +70,9 @@ final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS)
 
 - `attemptUpgrade(playerId, gearType)` — 執行強化嘗試，回傳 `{success, newLevel, rate}`
 - `getUpgradeInfo(playerId, gearType)` — 回傳強化預覽資訊（成功率、消耗量、保底狀態）
+
+## Changelog
+
+- 2026.05.06.00: Defined the gear success-rate precision contract. Decimal
+  config values such as `0.10` must calculate at their intended percent value,
+  so Lv6 with no pity is exactly 40%.

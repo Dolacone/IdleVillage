@@ -93,6 +93,10 @@ class TestComputeRate(unittest.TestCase):
         rate = gear_manager._compute_rate(5, 0)
         self.assertAlmostEqual(rate, 0.50)
 
+    def test_level_6_rate_formula_uses_decimal_intent(self):
+        rate = gear_manager._compute_rate(6, 0)
+        self.assertEqual(rate, 0.40)
+
     def test_level_9_rate_formula(self):
         # base = max(0.10, 1.0 - 9 * 0.10) = max(0.10, 0.10) = 0.10
         rate = gear_manager._compute_rate(9, 0)

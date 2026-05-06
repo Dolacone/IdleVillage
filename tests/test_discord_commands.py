@@ -515,6 +515,12 @@ class TestRendererGearEmbed(unittest.TestCase):
         embed = build_gear_embed(info, "gathering")
         self.assertIn("持有素材：7 個", embed.description)
 
+    def test_level_6_rate_display_uses_decimal_intent(self):
+        from cogs.ui_renderer import build_gear_embed
+        info = self._make_info(gear_level=6, pity=0)
+        embed = build_gear_embed(info, "gathering")
+        self.assertIn("成功率：40%（+0×5% 保底）= 40%", embed.description)
+
 
 class TestRendererGearComponents(unittest.TestCase):
     """build_gear_components shows documented gear option descriptions."""
