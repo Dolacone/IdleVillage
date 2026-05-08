@@ -186,10 +186,11 @@ async def _run_one_cycle(
     # Emit buffered building upgrades (from add_xp) after stage events
     events.extend(building_pre_events)
 
-    # Material drop — boosted when stage type matches action or is upgrade
+    # Material drop — boosted when stage type matches action or is upgrade.
+    # Use stage_pre (read before add_progress) so a stage clear in this cycle
+    # doesn't shift the rate to the next stage's type.
     base_rate = get_env_float("MATERIAL_DROP_RATE")
-    stage_info = await stage_manager.get_stage_info(db)
-    stage_type = stage_info.get("current_stage_type", "")
+    stage_type = stage_pre.get("current_stage_type", "") if stage_pre else ""
     drop_rate = _effective_material_drop_rate(base_rate, stage_type, action)
     if random.random() < drop_rate:
         await player_manager.add_material(db, user_id, action, 1, cycle_end_time)

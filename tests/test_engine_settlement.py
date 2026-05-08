@@ -796,11 +796,34 @@ class MaterialDropBoostTest(SettlementTestBase):
         player = await self._get_player()
         self.assertEqual(player["materials_gathering"], 1)
 
+    async def test_matching_stage_clear_cycle_uses_current_stage_for_drop_rate(self):
+        """A cycle that clears its matching stage still uses that stage for drop boost."""
+        os.environ["MATERIAL_DROP_RATE"] = "0.5"
+        base_output = int(ALL_TEST_ENV["BASE_OUTPUT"])
+        async with schema.get_connection() as db:
+            now_str = datetime.now(timezone.utc).isoformat()
+            await db.execute(
+                """UPDATE stage_state SET
+                   current_stage_type='gathering', current_stage_progress=0,
+                   current_stage_target=?, updated_at=? WHERE id=1""",
+                (base_output, now_str),
+            )
+            await db.commit()
+
+        with patch("core.settlement.random.random", return_value=0.75):
+            await self._run_one_complete_cycle("gathering")
+
+        player = await self._get_player()
+        self.assertEqual(player["materials_gathering"], 1)
+
     async def test_non_matching_stage_uses_base_rate(self):
-        """Normal stage non-matching action uses base rate — 0.0 base gives 0% effective."""
-        os.environ["MATERIAL_DROP_RATE"] = "0.0"
+        """Non-matching action uses base rate, not doubled. A random value above the base
+        rate but below doubled rate confirms the implementation reads base, not boosted."""
+        os.environ["MATERIAL_DROP_RATE"] = "0.4"
         await self._set_stage_type("gathering")
-        await self._run_one_complete_cycle("combat")
+        # random.random() = 0.6: above base (0.4) → no drop; below doubled (0.8) → would drop
+        with patch("core.settlement.random.random", return_value=0.6):
+            await self._run_one_complete_cycle("combat")
         player = await self._get_player()
         self.assertEqual(player["materials_combat"], 0)
 
@@ -866,11 +889,30 @@ class MaterialDropBoostTest(SettlementTestBase):
         self.assertEqual(player["materials_gathering"], 0)
 
     async def test_burst_recalculates_effective_rate_each_cycle(self):
-        """Burst recalculates effective rate for each of its 3 complete settlements."""
-        os.environ["MATERIAL_DROP_RATE"] = "0.5"
-        await self._set_stage_type("gathering")
-        ap_cap = int(ALL_TEST_ENV["AP_CAP"])
-        recovery_mins = int(ALL_TEST_ENV["AP_RECOVERY_MINUTES"])
+        """Burst recalculates effective rate per cycle using the current stage type.
+
+        Setup: gathering stage with target = BASE_OUTPUT so the first burst cycle
+        clears it and advances to the building stage. The remaining two cycles run
+        under building stage with a gathering action (non-matching → base rate).
+
+        With MATERIAL_DROP_RATE=0.4 and random.random patched to 0.6:
+        - Cycle 1 (gathering stage, gathering action): effective = 0.8 → 0.6 < 0.8 → drop
+        - Cycles 2–3 (building stage, gathering action): effective = 0.4 → 0.6 < 0.4 → no drop
+        Expected: exactly 1 material drop.
+        """
+        os.environ["MATERIAL_DROP_RATE"] = "0.4"
+        base_output = int(ALL_TEST_ENV["BASE_OUTPUT"])
+        async with schema.get_connection() as db:
+            now_str = datetime.now(timezone.utc).isoformat()
+            await db.execute(
+                """UPDATE stage_state SET
+                   current_stage_type='gathering', current_stage_index=0,
+                   current_stage_progress=0, current_stage_target=?,
+                   updated_at=? WHERE id=1""",
+                (base_output, now_str),
+            )
+            await db.commit()
+
         now = _now()
         ap_full_time = now - timedelta(minutes=1)
         await self._insert_player(
@@ -879,10 +921,10 @@ class MaterialDropBoostTest(SettlementTestBase):
             last_update_time=now - timedelta(minutes=5),
             ap_full_time=ap_full_time,
         )
-        await settle_burst(self.TEST_USER, now)
+        with patch("core.settlement.random.random", return_value=0.6):
+            await settle_burst(self.TEST_USER, now)
         player = await self._get_player()
-        # 0.5 base * 2 = 1.0 effective, 3 cycles → 3 guaranteed drops
-        self.assertEqual(player["materials_gathering"], 3)
+        self.assertEqual(player["materials_gathering"], 1)
 
 
 # ---------------------------------------------------------------------------
