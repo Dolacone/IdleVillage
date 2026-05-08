@@ -57,7 +57,11 @@ source_paths:
 
 ## 素材系統
 
-- 每次完整 cycle settlement 有 MATERIAL_DROP_RATE 機率獲得 1 個對應類別素材。
+- 每次完整 cycle settlement 依有效素材掉落率判定是否獲得 1 個對應類別素材。
+- 基礎素材掉落率為 `MATERIAL_DROP_RATE`。
+- 普通關期間，若玩家行動類型與當前關卡類型相同，該次 settlement 的有效素材掉落率為 `min(1.0, MATERIAL_DROP_RATE * 2)`。
+- 升級關期間，全部行動類型的有效素材掉落率皆為 `min(1.0, MATERIAL_DROP_RATE * 2)`。
+- 其他情況使用 `MATERIAL_DROP_RATE`。
 - 素材欄位固定為 `materials_gathering`, `materials_building`, `materials_combat`, `materials_research`。
 - Burst 視為 3 次完整 cycle settlement，每次各自判定素材掉落。
 - Partial cycle 不掉落素材。
@@ -79,5 +83,6 @@ source_paths:
 
 ## Changelog
 
+- 2026.05.08.00: Documented stage-matching material drop boost.
 - 2026.05.06.01: Official user-facing gear naming changed to tools:
   採集工具, 建設工具, 狩獵工具, 研究工具.

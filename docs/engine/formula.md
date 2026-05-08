@@ -80,6 +80,12 @@ Discord UI 顯示使用繁體中文。資料庫與程式內部 enum 一律使用
 | `GEAR_MIN_SUCCESS_RATE` | `managers/gear-manager.md` |
 | `GEAR_RATE_LOSS_PER_LEVEL` | `managers/gear-manager.md` |
 
+## Material Drop Rate
+
+- Base material drop rate is `MATERIAL_DROP_RATE`.
+- Stage-matching effective material drop rate is owned by `managers/player-manager.md`.
+- The boosted effective rate must be capped at `1.0`.
+
 ## Rounding
 
 - 所有產出、消耗、XP、進度入庫前都 floor 為整數。
@@ -88,5 +94,6 @@ Discord UI 顯示使用繁體中文。資料庫與程式內部 enum 一律使用
 
 ## Changelog
 
+- 2026.05.08.00: Added material drop rate ownership note for stage-matching boost.
 - 2026.05.06.01: Official user-facing gear naming changed to tools:
   採集工具, 建設工具, 狩獵工具, 研究工具.

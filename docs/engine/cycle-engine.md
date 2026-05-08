@@ -71,7 +71,7 @@ completion_time 不變（爆發不影響自動週期計時）
 last_update_time 不變
 ```
 
-> 爆發的 3 次 settlement 視為 3 次完整週期，每次各自以 MATERIAL_DROP_RATE 判定素材掉落。第 1 次若觸發通關，第 2、3 次在新關卡繼續累積。
+> 爆發的 3 次 settlement 視為 3 次完整週期，每次各自依 player-manager 的有效素材掉落率判定素材掉落。第 1 次若觸發通關，第 2、3 次在新關卡繼續累積並使用當下關卡類型計算掉落率。
 
 ## 更換行動（比例產出結算）
 
@@ -111,3 +111,7 @@ ratio   = elapsed / ACTION_CYCLE_SECONDS（0 ~ 1）
 - **Watcher heartbeat**：`WATCHER_HEARTBEAT_SECONDS`
 - **單次補算週期上限**：`MAX_CYCLES_PER_SETTLEMENT`
 - **AP 回復**：由 `ap_full_time` 倒推，見 `managers/player-manager.md`
+
+## Changelog
+
+- 2026.05.08.00: Burst material rolls now use the effective drop rate for the current stage at each settlement.

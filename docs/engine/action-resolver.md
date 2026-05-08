@@ -48,7 +48,8 @@ source_paths:
    關卡進度使用資源不足懲罰前的 output。
    若關卡已逾時，stage-manager 只對關卡進度套用逾時倍率。
 
-8. 完整週期 settlement 有 MATERIAL_DROP_RATE 機率獲得 +1 對應素材（呼叫 player-manager）。
+8. 完整週期 settlement 依 player-manager 的有效素材掉落率獲得 +1 對應素材。
+   普通關同類 action 與升級關全部 action 使用加倍掉落率。
    素材掉落獨立判定，不受資源不足或關卡逾時影響。
 ```
 
@@ -69,3 +70,7 @@ This module applies the cost and output values passed by cycle-engine using the 
 ## 懲罰說明
 
 任一所需資源不足時，settlement output ×0.5。多種資源同時不足仍只套用一次 ×0.5。
+
+## Changelog
+
+- 2026.05.08.00: Material drop step now references stage-matching effective drop rate.
