@@ -29,6 +29,12 @@ from managers import building_manager, player_manager, resource_manager, stage_m
 # Internal orchestration helpers (not public API)
 # ---------------------------------------------------------------------------
 
+def _effective_material_drop_rate(base_rate: float, stage_type: str, action: str) -> float:
+    if stage_type == "upgrade" or stage_type == action:
+        return min(1.0, base_rate * 2)
+    return base_rate
+
+
 async def _read_player(db, user_id: str) -> dict | None:
     async with db.execute("SELECT * FROM players WHERE user_id=?", (user_id,)) as cur:
         row = await cur.fetchone()
@@ -180,8 +186,11 @@ async def _run_one_cycle(
     # Emit buffered building upgrades (from add_xp) after stage events
     events.extend(building_pre_events)
 
-    # Material drop
-    drop_rate = get_env_float("MATERIAL_DROP_RATE")
+    # Material drop — boosted when stage type matches action or is upgrade
+    base_rate = get_env_float("MATERIAL_DROP_RATE")
+    stage_info = await stage_manager.get_stage_info(db)
+    stage_type = stage_info.get("current_stage_type", "")
+    drop_rate = _effective_material_drop_rate(base_rate, stage_type, action)
     if random.random() < drop_rate:
         await player_manager.add_material(db, user_id, action, 1, cycle_end_time)
 

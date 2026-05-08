@@ -754,6 +754,137 @@ class BurstTest(SettlementTestBase):
         self.assertFalse(result)
 
 
+
+# ---------------------------------------------------------------------------
+# Stage-matching material drop boost tests
+# ---------------------------------------------------------------------------
+
+class MaterialDropBoostTest(SettlementTestBase):
+    """Tests for effective material drop rate based on current stage type."""
+
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        await self._set_resource("food", 10000)
+        await self._set_resource("wood", 10000)
+        await self._set_resource("knowledge", 10000)
+
+    async def _set_stage_type(self, stage_type: str):
+        async with schema.get_connection() as db:
+            now_str = datetime.now(timezone.utc).isoformat()
+            await db.execute(
+                """UPDATE stage_state SET
+                   current_stage_type=?, current_stage_progress=0, current_stage_target=99999,
+                   updated_at=? WHERE id=1""",
+                (stage_type, now_str),
+            )
+            await db.commit()
+
+    async def _run_one_complete_cycle(self, action: str):
+        cycle_end = _now() - timedelta(minutes=1)
+        await self._insert_player(
+            action=action,
+            completion_time=cycle_end,
+            last_update_time=cycle_end - timedelta(minutes=10),
+        )
+        await settle_complete_cycles(self.TEST_USER, _now())
+
+    async def test_matching_stage_doubles_drop_rate(self):
+        """Normal stage matching action uses doubled rate — 0.5 base gives 100% effective."""
+        os.environ["MATERIAL_DROP_RATE"] = "0.5"
+        await self._set_stage_type("gathering")
+        await self._run_one_complete_cycle("gathering")
+        player = await self._get_player()
+        self.assertEqual(player["materials_gathering"], 1)
+
+    async def test_non_matching_stage_uses_base_rate(self):
+        """Normal stage non-matching action uses base rate — 0.0 base gives 0% effective."""
+        os.environ["MATERIAL_DROP_RATE"] = "0.0"
+        await self._set_stage_type("gathering")
+        await self._run_one_complete_cycle("combat")
+        player = await self._get_player()
+        self.assertEqual(player["materials_combat"], 0)
+
+    async def test_upgrade_stage_doubles_rate_for_gathering(self):
+        """Upgrade stage doubles drop rate for gathering action."""
+        os.environ["MATERIAL_DROP_RATE"] = "0.5"
+        await self._set_stage_type("upgrade")
+        await self._run_one_complete_cycle("gathering")
+        player = await self._get_player()
+        self.assertEqual(player["materials_gathering"], 1)
+
+    async def test_upgrade_stage_doubles_rate_for_building(self):
+        """Upgrade stage doubles drop rate for building action."""
+        os.environ["MATERIAL_DROP_RATE"] = "0.5"
+        await self._set_stage_type("upgrade")
+        cycle_end = _now() - timedelta(minutes=1)
+        await self._insert_player(
+            action="building",
+            action_target="workshop",
+            completion_time=cycle_end,
+            last_update_time=cycle_end - timedelta(minutes=10),
+        )
+        await settle_complete_cycles(self.TEST_USER, _now())
+        player = await self._get_player()
+        self.assertEqual(player["materials_building"], 1)
+
+    async def test_upgrade_stage_doubles_rate_for_combat(self):
+        """Upgrade stage doubles drop rate for combat action."""
+        os.environ["MATERIAL_DROP_RATE"] = "0.5"
+        await self._set_stage_type("upgrade")
+        await self._run_one_complete_cycle("combat")
+        player = await self._get_player()
+        self.assertEqual(player["materials_combat"], 1)
+
+    async def test_upgrade_stage_doubles_rate_for_research(self):
+        """Upgrade stage doubles drop rate for research action."""
+        os.environ["MATERIAL_DROP_RATE"] = "0.5"
+        await self._set_stage_type("upgrade")
+        await self._run_one_complete_cycle("research")
+        player = await self._get_player()
+        self.assertEqual(player["materials_research"], 1)
+
+    async def test_boosted_rate_capped_at_one(self):
+        """Effective rate never exceeds 1.0 even when base rate * 2 > 1.0."""
+        from core.settlement import _effective_material_drop_rate
+        result = _effective_material_drop_rate(0.8, "gathering", "gathering")
+        self.assertEqual(result, 1.0)
+
+    async def test_partial_cycle_still_never_drops_material_with_boost(self):
+        """Partial cycle grants no material even when boost would apply."""
+        os.environ["MATERIAL_DROP_RATE"] = "1.0"
+        await self._set_stage_type("gathering")
+        cycle_mins = int(ALL_TEST_ENV["ACTION_CYCLE_MINUTES"])
+        last_update = _now() - timedelta(minutes=cycle_mins / 2)
+        completion = _now() + timedelta(minutes=cycle_mins / 2)
+        await self._insert_player(
+            action="gathering",
+            completion_time=completion,
+            last_update_time=last_update,
+        )
+        await change_action(self.TEST_USER, "combat", None, _now())
+        player = await self._get_player()
+        self.assertEqual(player["materials_gathering"], 0)
+
+    async def test_burst_recalculates_effective_rate_each_cycle(self):
+        """Burst recalculates effective rate for each of its 3 complete settlements."""
+        os.environ["MATERIAL_DROP_RATE"] = "0.5"
+        await self._set_stage_type("gathering")
+        ap_cap = int(ALL_TEST_ENV["AP_CAP"])
+        recovery_mins = int(ALL_TEST_ENV["AP_RECOVERY_MINUTES"])
+        now = _now()
+        ap_full_time = now - timedelta(minutes=1)
+        await self._insert_player(
+            action="gathering",
+            completion_time=now + timedelta(minutes=10),
+            last_update_time=now - timedelta(minutes=5),
+            ap_full_time=ap_full_time,
+        )
+        await settle_burst(self.TEST_USER, now)
+        player = await self._get_player()
+        # 0.5 base * 2 = 1.0 effective, 3 cycles → 3 guaranteed drops
+        self.assertEqual(player["materials_gathering"], 3)
+
+
 # ---------------------------------------------------------------------------
 # AP helpers
 # ---------------------------------------------------------------------------
