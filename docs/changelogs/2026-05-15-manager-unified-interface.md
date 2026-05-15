@@ -1,6 +1,6 @@
 ---
 title: "idlevillage-manager 統一管理介面"
-status: Ready-to-review
+status: Issues-confirmed
 created: 2026-05-15
 doc_type: change
 last_reviewed: 2026-05-15
@@ -56,6 +56,16 @@ scope: "將 /idlevillage-manager 的五個 sub-command 整合為單一介面，�
 - [x] Task 2: 重構 PlayerManagerCog — 移除五個 sub-command，新增無參數的 `/idlevillage-manager` 指令（回傳含 user select menu 的 ephemeral 訊息）及 `player_select` 互動 handler（顯示玩家面板）
 - [x] Task 3: 在 PlayerManagerCog 實作各 `[編輯]` 按鈕的 Modal 彈出與 `on_modal_submit` handler，提交後更新面板
 - [x] Task 4: 更新 docs/discord/command-handler.md 與 docs/discord/ui-renderer.md，反映新的指令結構與 UI 元件
+
+---
+
+## Review Issues
+
+- [ ] Issue 1 (Important — Security): `src/cogs/player_manager_cog.py` line 177 — `on_modal_submit` uses `await inter.response.defer()` without `ephemeral=True`. In disnake, modal interactions default to `with_message=True, ephemeral=False`, so `edit_original_response()` will post a **public** message, exposing player data and admin operations to all channel members. Fix: change to `await inter.response.defer(ephemeral=True)`. Add a test asserting `defer(ephemeral=True)` is called in the modal submit handler.
+
+- [ ] Issue 2 (Nit — Documentation): `docs/discord/command-handler.md` line 63 — route description says `player_manager.set_pity_count()` but the actual API is `player_manager.set_pity()`. This will mislead future maintainers. Fix: update to `set_pity()`.
+
+- [ ] Issue 3 (Nit — Architecture): `src/cogs/player_manager_cog.py` lines 58–92 and 225–262 duplicate the same player SELECT + row unpack + `player_data` dict construction logic. Not a behavior error, but consider extracting a private `_fetch_player_data(db, user_id)` helper to reduce risk of divergence when fields change.
 
 ---
 
