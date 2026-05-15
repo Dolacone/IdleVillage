@@ -605,5 +605,448 @@ class TestPlayerManagerCogOnDropdown(unittest.IsolatedAsyncioTestCase):
             await tc.asyncTearDown()
 
 
+class TestPlayerManagerCogOnButtonClick(unittest.IsolatedAsyncioTestCase):
+    """on_button_click handler sends the correct Modal for each mgr_edit_* button."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def _make_cog(self):
+        import unittest.mock as mock
+        from cogs.player_manager_cog import PlayerManagerCog
+        bot = mock.MagicMock()
+        return PlayerManagerCog(bot)
+
+    def _make_inter(self, *, guild_id=None, user_id=None, custom_id="mgr_edit_gear:123"):
+        import unittest.mock as mock
+        guild_id = guild_id or ALL_TEST_ENV["DISCORD_GUILD_ID"]
+        user_id = user_id or ALL_TEST_ENV["ADMIN_IDS"]
+        inter = mock.AsyncMock()
+        inter.guild_id = int(guild_id)
+        inter.user.id = int(user_id)
+        inter.data = mock.MagicMock()
+        inter.data.custom_id = custom_id
+        inter.response.send_message = mock.AsyncMock()
+        inter.response.send_modal = mock.AsyncMock()
+        return inter
+
+    async def test_ignores_non_mgr_edit_custom_id(self):
+        cog = self._make_cog()
+        inter = self._make_inter(custom_id="some_other_button")
+        await cog.on_button_click(inter)
+        inter.response.send_modal.assert_not_awaited()
+        inter.response.send_message.assert_not_awaited()
+
+    async def test_wrong_guild_sends_error(self):
+        cog = self._make_cog()
+        inter = self._make_inter(guild_id="999999999999999999", custom_id="mgr_edit_gear:123")
+        await cog.on_button_click(inter)
+        inter.response.send_message.assert_awaited_once()
+        args, kwargs = inter.response.send_message.call_args
+        self.assertIn("伺服器", args[0])
+
+    async def test_non_admin_sends_error(self):
+        cog = self._make_cog()
+        inter = self._make_inter(user_id="999999999999999999", custom_id="mgr_edit_gear:123")
+        await cog.on_button_click(inter)
+        inter.response.send_message.assert_awaited_once()
+        args, kwargs = inter.response.send_message.call_args
+        self.assertIn("管理員", args[0])
+
+    @staticmethod
+    def _extract_field_ids(modal_components):
+        """Extract TextInput custom_ids from modal components.
+
+        In real disnake, TextInputs inside a Modal are wrapped in ActionRows.
+        Handle both: components being ActionRows (with .children) or raw TextInputs.
+        """
+        ids = []
+        for component in modal_components:
+            if hasattr(component, "children"):
+                # ActionRow wrapping TextInput(s)
+                for child in component.children:
+                    if hasattr(child, "custom_id"):
+                        ids.append(child.custom_id)
+            elif hasattr(component, "custom_id"):
+                ids.append(component.custom_id)
+        return ids
+
+    async def test_gear_button_sends_modal_with_correct_custom_id(self):
+        import disnake
+        cog = self._make_cog()
+        uid = "123456789"
+        inter = self._make_inter(custom_id=f"mgr_edit_gear:{uid}")
+        await cog.on_button_click(inter)
+        inter.response.send_modal.assert_awaited_once()
+        modal = inter.response.send_modal.call_args[0][0]
+        self.assertEqual(modal.custom_id, f"mgr_modal_gear:{uid}")
+        self.assertEqual(modal.title, "編輯工具等級")
+        field_ids = self._extract_field_ids(modal.components)
+        self.assertIn("gear_gathering", field_ids)
+        self.assertIn("gear_building", field_ids)
+        self.assertIn("gear_combat", field_ids)
+        self.assertIn("gear_research", field_ids)
+
+    async def test_material_button_sends_modal_with_four_fields(self):
+        cog = self._make_cog()
+        uid = "123456789"
+        inter = self._make_inter(custom_id=f"mgr_edit_material:{uid}")
+        await cog.on_button_click(inter)
+        inter.response.send_modal.assert_awaited_once()
+        modal = inter.response.send_modal.call_args[0][0]
+        self.assertEqual(modal.custom_id, f"mgr_modal_material:{uid}")
+        self.assertEqual(modal.title, "編輯素材數量")
+        field_ids = self._extract_field_ids(modal.components)
+        self.assertIn("mat_gathering", field_ids)
+        self.assertIn("mat_building", field_ids)
+        self.assertIn("mat_combat", field_ids)
+        self.assertIn("mat_research", field_ids)
+
+    async def test_pity_button_sends_modal_with_four_fields(self):
+        cog = self._make_cog()
+        uid = "123456789"
+        inter = self._make_inter(custom_id=f"mgr_edit_pity:{uid}")
+        await cog.on_button_click(inter)
+        inter.response.send_modal.assert_awaited_once()
+        modal = inter.response.send_modal.call_args[0][0]
+        self.assertEqual(modal.custom_id, f"mgr_modal_pity:{uid}")
+        self.assertEqual(modal.title, "編輯保底計數")
+        field_ids = self._extract_field_ids(modal.components)
+        self.assertIn("pity_gathering", field_ids)
+        self.assertIn("pity_building", field_ids)
+        self.assertIn("pity_combat", field_ids)
+        self.assertIn("pity_research", field_ids)
+
+    async def test_risky_button_sends_modal_with_single_field(self):
+        cog = self._make_cog()
+        uid = "123456789"
+        inter = self._make_inter(custom_id=f"mgr_edit_risky:{uid}")
+        await cog.on_button_click(inter)
+        inter.response.send_modal.assert_awaited_once()
+        modal = inter.response.send_modal.call_args[0][0]
+        self.assertEqual(modal.custom_id, f"mgr_modal_risky:{uid}")
+        self.assertEqual(modal.title, "編輯鐵齒失敗累積")
+        field_ids = self._extract_field_ids(modal.components)
+        self.assertEqual(len(field_ids), 1)
+        self.assertIn("risky_failed_levels", field_ids)
+
+
+class TestPlayerManagerCogOnModalSubmit(unittest.IsolatedAsyncioTestCase):
+    """on_modal_submit handler validates inputs, writes DB, and refreshes panel."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def _make_cog(self):
+        import unittest.mock as mock
+        from cogs.player_manager_cog import PlayerManagerCog
+        bot = mock.MagicMock()
+        return PlayerManagerCog(bot)
+
+    def _make_inter(self, *, guild_id=None, user_id=None, custom_id, text_values):
+        import unittest.mock as mock
+        guild_id = guild_id or ALL_TEST_ENV["DISCORD_GUILD_ID"]
+        user_id = user_id or ALL_TEST_ENV["ADMIN_IDS"]
+        inter = mock.AsyncMock()
+        inter.guild_id = int(guild_id)
+        inter.user.id = int(user_id)
+        inter.custom_id = custom_id
+        inter.text_values = text_values
+        inter.guild = mock.MagicMock()
+        inter.guild.get_member.return_value = None
+        inter.response.defer = mock.AsyncMock()
+        inter.response.send_message = mock.AsyncMock()
+        inter.edit_original_response = mock.AsyncMock()
+        return inter
+
+    async def test_ignores_non_mgr_modal_custom_id(self):
+        cog = self._make_cog()
+        inter = self._make_inter(custom_id="other_modal", text_values={})
+        await cog.on_modal_submit(inter)
+        inter.response.defer.assert_not_awaited()
+        inter.edit_original_response.assert_not_awaited()
+
+    async def test_wrong_guild_sends_error(self):
+        cog = self._make_cog()
+        inter = self._make_inter(
+            guild_id="999999999999999999",
+            custom_id="mgr_modal_gear:123",
+            text_values={},
+        )
+        await cog.on_modal_submit(inter)
+        inter.response.send_message.assert_awaited_once()
+        args, kwargs = inter.response.send_message.call_args
+        self.assertIn("伺服器", args[0])
+
+    async def test_non_admin_sends_error(self):
+        cog = self._make_cog()
+        inter = self._make_inter(
+            user_id="999999999999999999",
+            custom_id="mgr_modal_gear:123",
+            text_values={},
+        )
+        await cog.on_modal_submit(inter)
+        inter.response.send_message.assert_awaited_once()
+        args, kwargs = inter.response.send_message.call_args
+        self.assertIn("管理員", args[0])
+
+    async def test_invalid_non_integer_input_returns_error(self):
+        cog = self._make_cog()
+        inter = self._make_inter(
+            custom_id="mgr_modal_gear:123",
+            text_values={
+                "gear_gathering": "abc",
+                "gear_building": "2",
+                "gear_combat": "3",
+                "gear_research": "4",
+            },
+        )
+        await cog.on_modal_submit(inter)
+        inter.edit_original_response.assert_awaited_once()
+        args, kwargs = inter.edit_original_response.call_args
+        content = kwargs.get("content", "")
+        self.assertIn("錯誤", content)
+
+    async def test_negative_integer_input_returns_error(self):
+        cog = self._make_cog()
+        inter = self._make_inter(
+            custom_id="mgr_modal_gear:123",
+            text_values={
+                "gear_gathering": "-1",
+                "gear_building": "2",
+                "gear_combat": "3",
+                "gear_research": "4",
+            },
+        )
+        await cog.on_modal_submit(inter)
+        inter.edit_original_response.assert_awaited_once()
+        _, kwargs = inter.edit_original_response.call_args
+        content = kwargs.get("content", "")
+        self.assertIn("錯誤", content)
+
+    async def test_gear_modal_writes_db_and_refreshes_panel(self):
+        import disnake
+        from tests.support import DatabaseTestCase
+        from database.schema import get_connection
+
+        tc = DatabaseTestCase()
+        await tc.asyncSetUp()
+        try:
+            target_uid = "888777666"
+            ts = "2026-01-01T00:00:00+00:00"
+            async with get_connection() as db:
+                await db.execute(
+                    "INSERT INTO players (user_id, created_at, updated_at, ap_full_time) "
+                    "VALUES (?, ?, ?, ?)",
+                    (target_uid, ts, ts, ts),
+                )
+                await db.commit()
+
+            cog = self._make_cog()
+            inter = self._make_inter(
+                custom_id=f"mgr_modal_gear:{target_uid}",
+                text_values={
+                    "gear_gathering": "5",
+                    "gear_building": "6",
+                    "gear_combat": "7",
+                    "gear_research": "8",
+                },
+            )
+            await cog.on_modal_submit(inter)
+
+            # Verify DB was updated
+            async with get_connection() as db:
+                async with db.execute(
+                    "SELECT gear_gathering, gear_building, gear_combat, gear_research FROM players WHERE user_id=?",
+                    (target_uid,),
+                ) as cur:
+                    row = await cur.fetchone()
+            self.assertEqual(row, (5, 6, 7, 8))
+
+            # Verify panel was refreshed
+            inter.edit_original_response.assert_awaited()
+            _, kwargs = inter.edit_original_response.call_args
+            self.assertIsNotNone(kwargs.get("embed"))
+            self.assertIsInstance(kwargs.get("embed"), disnake.Embed)
+            self.assertIsNotNone(kwargs.get("components"))
+        finally:
+            await tc.asyncTearDown()
+
+    async def test_material_modal_writes_db_and_refreshes_panel(self):
+        import disnake
+        from tests.support import DatabaseTestCase
+        from database.schema import get_connection
+
+        tc = DatabaseTestCase()
+        await tc.asyncSetUp()
+        try:
+            target_uid = "111222333"
+            ts = "2026-01-01T00:00:00+00:00"
+            async with get_connection() as db:
+                await db.execute(
+                    "INSERT INTO players (user_id, created_at, updated_at, ap_full_time) "
+                    "VALUES (?, ?, ?, ?)",
+                    (target_uid, ts, ts, ts),
+                )
+                await db.commit()
+
+            cog = self._make_cog()
+            inter = self._make_inter(
+                custom_id=f"mgr_modal_material:{target_uid}",
+                text_values={
+                    "mat_gathering": "100",
+                    "mat_building": "200",
+                    "mat_combat": "300",
+                    "mat_research": "400",
+                },
+            )
+            await cog.on_modal_submit(inter)
+
+            async with get_connection() as db:
+                async with db.execute(
+                    "SELECT materials_gathering, materials_building, materials_combat, materials_research "
+                    "FROM players WHERE user_id=?",
+                    (target_uid,),
+                ) as cur:
+                    row = await cur.fetchone()
+            self.assertEqual(row, (100, 200, 300, 400))
+
+            _, kwargs = inter.edit_original_response.call_args
+            self.assertIsInstance(kwargs.get("embed"), disnake.Embed)
+        finally:
+            await tc.asyncTearDown()
+
+    async def test_pity_modal_writes_db_and_refreshes_panel(self):
+        import disnake
+        from tests.support import DatabaseTestCase
+        from database.schema import get_connection
+
+        tc = DatabaseTestCase()
+        await tc.asyncSetUp()
+        try:
+            target_uid = "444555666"
+            ts = "2026-01-01T00:00:00+00:00"
+            async with get_connection() as db:
+                await db.execute(
+                    "INSERT INTO players (user_id, created_at, updated_at, ap_full_time) "
+                    "VALUES (?, ?, ?, ?)",
+                    (target_uid, ts, ts, ts),
+                )
+                await db.commit()
+
+            cog = self._make_cog()
+            inter = self._make_inter(
+                custom_id=f"mgr_modal_pity:{target_uid}",
+                text_values={
+                    "pity_gathering": "3",
+                    "pity_building": "4",
+                    "pity_combat": "5",
+                    "pity_research": "6",
+                },
+            )
+            await cog.on_modal_submit(inter)
+
+            async with get_connection() as db:
+                async with db.execute(
+                    "SELECT pity_gathering, pity_building, pity_combat, pity_research "
+                    "FROM players WHERE user_id=?",
+                    (target_uid,),
+                ) as cur:
+                    row = await cur.fetchone()
+            self.assertEqual(row, (3, 4, 5, 6))
+
+            _, kwargs = inter.edit_original_response.call_args
+            self.assertIsInstance(kwargs.get("embed"), disnake.Embed)
+        finally:
+            await tc.asyncTearDown()
+
+    async def test_risky_modal_writes_db_and_refreshes_panel(self):
+        import disnake
+        from tests.support import DatabaseTestCase
+        from database.schema import get_connection
+
+        tc = DatabaseTestCase()
+        await tc.asyncSetUp()
+        try:
+            target_uid = "777666555"
+            ts = "2026-01-01T00:00:00+00:00"
+            async with get_connection() as db:
+                await db.execute(
+                    "INSERT INTO players (user_id, created_at, updated_at, ap_full_time) "
+                    "VALUES (?, ?, ?, ?)",
+                    (target_uid, ts, ts, ts),
+                )
+                await db.commit()
+
+            cog = self._make_cog()
+            inter = self._make_inter(
+                custom_id=f"mgr_modal_risky:{target_uid}",
+                text_values={"risky_failed_levels": "12"},
+            )
+            await cog.on_modal_submit(inter)
+
+            async with get_connection() as db:
+                async with db.execute(
+                    "SELECT risky_failed_levels FROM players WHERE user_id=?",
+                    (target_uid,),
+                ) as cur:
+                    row = await cur.fetchone()
+            self.assertEqual(row[0], 12)
+
+            _, kwargs = inter.edit_original_response.call_args
+            self.assertIsInstance(kwargs.get("embed"), disnake.Embed)
+        finally:
+            await tc.asyncTearDown()
+
+    async def test_modal_submit_embed_shows_updated_values(self):
+        from tests.support import DatabaseTestCase
+        from database.schema import get_connection
+
+        tc = DatabaseTestCase()
+        await tc.asyncSetUp()
+        try:
+            target_uid = "123123123"
+            ts = "2026-01-01T00:00:00+00:00"
+            async with get_connection() as db:
+                await db.execute(
+                    "INSERT INTO players (user_id, created_at, updated_at, ap_full_time) "
+                    "VALUES (?, ?, ?, ?)",
+                    (target_uid, ts, ts, ts),
+                )
+                await db.commit()
+
+            cog = self._make_cog()
+            inter = self._make_inter(
+                custom_id=f"mgr_modal_gear:{target_uid}",
+                text_values={
+                    "gear_gathering": "9",
+                    "gear_building": "10",
+                    "gear_combat": "11",
+                    "gear_research": "12",
+                },
+            )
+            await cog.on_modal_submit(inter)
+
+            _, kwargs = inter.edit_original_response.call_args
+            embed = kwargs.get("embed")
+
+            def get_field_value(fields, name_fragment):
+                for f in fields:
+                    fname = f["name"] if isinstance(f, dict) else f.name
+                    if name_fragment in fname:
+                        return f["value"] if isinstance(f, dict) else f.value
+                return None
+
+            gear_val = get_field_value(embed.fields, "工具等級")
+            self.assertIn("採集 9", gear_val)
+            self.assertIn("建設 10", gear_val)
+            self.assertIn("戰鬥 11", gear_val)
+            self.assertIn("研究 12", gear_val)
+        finally:
+            await tc.asyncTearDown()
+
+
 if __name__ == "__main__":
     unittest.main()
