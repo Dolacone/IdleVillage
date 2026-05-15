@@ -60,7 +60,7 @@ source_paths:
 | `mgr_edit_risky:{uid}` | 點擊「編輯鐵齒失敗累積」按鈕 | 彈出「編輯鐵齒失敗累積」Modal（1 欄位） |
 | `mgr_modal_gear:{uid}` | 提交工具等級 Modal | 驗證非負整數 → 呼叫 `player_manager.set_gear_level()` × 4 → 刷新面板 |
 | `mgr_modal_material:{uid}` | 提交素材 Modal | 驗證非負整數 → 呼叫 `player_manager.set_material()` × 4 → 刷新面板 |
-| `mgr_modal_pity:{uid}` | 提交保底 Modal | 驗證非負整數 → 呼叫 `player_manager.set_pity_count()` × 4 → 刷新面板 |
+| `mgr_modal_pity:{uid}` | 提交保底 Modal | 驗證非負整數 → 呼叫 `player_manager.set_pity()` × 4 → 刷新面板 |
 | `mgr_modal_risky:{uid}` | 提交鐵齒 Modal | 驗證非負整數 → 呼叫 `player_manager.set_risky_failed_levels()` → 刷新面板 |
 
 所有 `mgr_*` 互動均需 guild/admin 雙重驗證。`{uid}` 為目標玩家的 Discord user ID。

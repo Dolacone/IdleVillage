@@ -768,6 +768,39 @@ class TestPlayerManagerCogOnModalSubmit(unittest.IsolatedAsyncioTestCase):
         inter.response.defer.assert_not_awaited()
         inter.edit_original_response.assert_not_awaited()
 
+    async def test_modal_submit_defers_ephemeral(self):
+        """on_modal_submit must call defer(ephemeral=True) to keep the response ephemeral."""
+        from tests.support import DatabaseTestCase
+        from database.schema import get_connection
+
+        tc = DatabaseTestCase()
+        await tc.asyncSetUp()
+        try:
+            target_uid = "999111222"
+            ts = "2026-01-01T00:00:00+00:00"
+            async with get_connection() as db:
+                await db.execute(
+                    "INSERT INTO players (user_id, created_at, updated_at, ap_full_time) "
+                    "VALUES (?, ?, ?, ?)",
+                    (target_uid, ts, ts, ts),
+                )
+                await db.commit()
+
+            cog = self._make_cog()
+            inter = self._make_inter(
+                custom_id=f"mgr_modal_gear:{target_uid}",
+                text_values={
+                    "gear_gathering": "1",
+                    "gear_building": "1",
+                    "gear_combat": "1",
+                    "gear_research": "1",
+                },
+            )
+            await cog.on_modal_submit(inter)
+            inter.response.defer.assert_awaited_once_with(ephemeral=True)
+        finally:
+            await tc.asyncTearDown()
+
     async def test_wrong_guild_sends_error(self):
         cog = self._make_cog()
         inter = self._make_inter(

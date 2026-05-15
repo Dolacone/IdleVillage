@@ -19,6 +19,40 @@ class PlayerManagerCog(commands.Cog):
     def _check_admin(self, inter) -> bool:
         return is_admin(inter.user.id)
 
+    async def _fetch_player_data(self, db, user_id: str) -> dict | None:
+        """Query all managed player fields from DB. Returns a dict or None if not found."""
+        async with db.execute(
+            "SELECT gear_gathering, gear_building, gear_combat, gear_research, "
+            "materials_gathering, materials_building, materials_combat, materials_research, "
+            "pity_gathering, pity_building, pity_combat, pity_research, "
+            "risky_failed_levels FROM players WHERE user_id=?",
+            (user_id,),
+        ) as cur:
+            row = await cur.fetchone()
+        if row is None:
+            return None
+        (
+            gear_gathering, gear_building, gear_combat, gear_research,
+            materials_gathering, materials_building, materials_combat, materials_research,
+            pity_gathering, pity_building, pity_combat, pity_research,
+            risky_failed_levels,
+        ) = row
+        return {
+            "gear_gathering": gear_gathering,
+            "gear_building": gear_building,
+            "gear_combat": gear_combat,
+            "gear_research": gear_research,
+            "materials_gathering": materials_gathering,
+            "materials_building": materials_building,
+            "materials_combat": materials_combat,
+            "materials_research": materials_research,
+            "pity_gathering": pity_gathering,
+            "pity_building": pity_building,
+            "pity_combat": pity_combat,
+            "pity_research": pity_research,
+            "risky_failed_levels": risky_failed_levels,
+        }
+
     @commands.slash_command(
         name="idlevillage-manager",
         description="（管理員）管理玩家數據",
@@ -56,40 +90,10 @@ class PlayerManagerCog(commands.Cog):
         target_user_id = inter.values[0]
 
         async with get_connection() as db:
-            async with db.execute(
-                "SELECT gear_gathering, gear_building, gear_combat, gear_research, "
-                "materials_gathering, materials_building, materials_combat, materials_research, "
-                "pity_gathering, pity_building, pity_combat, pity_research, "
-                "risky_failed_levels FROM players WHERE user_id=?",
-                (target_user_id,),
-            ) as cur:
-                row = await cur.fetchone()
+            player_data = await self._fetch_player_data(db, target_user_id)
 
-        if row is None:
+        if player_data is None:
             return await inter.edit_original_response(content="尚未加入遊戲", components=[])
-
-        (
-            gear_gathering, gear_building, gear_combat, gear_research,
-            materials_gathering, materials_building, materials_combat, materials_research,
-            pity_gathering, pity_building, pity_combat, pity_research,
-            risky_failed_levels,
-        ) = row
-
-        player_data = {
-            "gear_gathering": gear_gathering,
-            "gear_building": gear_building,
-            "gear_combat": gear_combat,
-            "gear_research": gear_research,
-            "materials_gathering": materials_gathering,
-            "materials_building": materials_building,
-            "materials_combat": materials_combat,
-            "materials_research": materials_research,
-            "pity_gathering": pity_gathering,
-            "pity_building": pity_building,
-            "pity_combat": pity_combat,
-            "pity_research": pity_research,
-            "risky_failed_levels": risky_failed_levels,
-        }
 
         # Resolve display name from guild member if possible, fall back to user_id
         target_member = inter.guild.get_member(int(target_user_id)) if inter.guild else None
@@ -174,7 +178,7 @@ class PlayerManagerCog(commands.Cog):
         if not self._check_admin(inter):
             return await inter.response.send_message("此指令僅限管理員使用。", ephemeral=True)
 
-        await inter.response.defer()
+        await inter.response.defer(ephemeral=True)
 
         # Parse: mgr_modal_{type}:{target_user_id}
         rest = custom_id[len("mgr_modal_"):]  # e.g. "gear:123456789"
@@ -223,40 +227,10 @@ class PlayerManagerCog(commands.Cog):
 
         # Re-query player data and refresh panel
         async with get_connection() as db:
-            async with db.execute(
-                "SELECT gear_gathering, gear_building, gear_combat, gear_research, "
-                "materials_gathering, materials_building, materials_combat, materials_research, "
-                "pity_gathering, pity_building, pity_combat, pity_research, "
-                "risky_failed_levels FROM players WHERE user_id=?",
-                (target_user_id,),
-            ) as cur:
-                row = await cur.fetchone()
+            player_data = await self._fetch_player_data(db, target_user_id)
 
-        if row is None:
+        if player_data is None:
             return await inter.edit_original_response(content="尚未加入遊戲", components=[])
-
-        (
-            gear_gathering, gear_building, gear_combat, gear_research,
-            materials_gathering, materials_building, materials_combat, materials_research,
-            pity_gathering, pity_building, pity_combat, pity_research,
-            risky_failed_levels,
-        ) = row
-
-        player_data = {
-            "gear_gathering": gear_gathering,
-            "gear_building": gear_building,
-            "gear_combat": gear_combat,
-            "gear_research": gear_research,
-            "materials_gathering": materials_gathering,
-            "materials_building": materials_building,
-            "materials_combat": materials_combat,
-            "materials_research": materials_research,
-            "pity_gathering": pity_gathering,
-            "pity_building": pity_building,
-            "pity_combat": pity_combat,
-            "pity_research": pity_research,
-            "risky_failed_levels": risky_failed_levels,
-        }
 
         target_member = inter.guild.get_member(int(target_user_id)) if inter.guild else None
         display_name = target_member.display_name if target_member else target_user_id
