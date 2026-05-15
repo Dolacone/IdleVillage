@@ -34,13 +34,9 @@ When implemented behavior is described, update `source_paths` with repository-re
 
 ### `idea-refine`
 
-**Entry check — classify the request before proceeding:**
-- If the request describes unexpected behavior, a regression, or requires verifying code logic → stop and tell the user to use `bug-investigate` instead.
-- Otherwise, continue with `idea-refine` (normal fixes and new features).
-
 Creates one change document. Must not touch any existing file.
 
-To understand the current system, read only files under `docs/`. Do not read source code files. Docs are the SSOT; if a doc seems incomplete, note it as an assumption rather than reading source to verify.
+To understand the current system, read only files under `docs/`. Do not read source code files.
 
 After creating the change document, if it contains any unresolved Key Assumptions (`[ ]`), stop and present each assumption to the user as an explicit question. Do not proceed until all assumptions are confirmed. This overrides the auto-advance rule.
 
