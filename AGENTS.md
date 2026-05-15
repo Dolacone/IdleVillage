@@ -129,7 +129,7 @@ Reviewers flag issues; they do not fix them. Fixing belongs to `incremental-impl
 
 - Every skill ends with a commit: code, change document, or both.
 - Commit task checkboxes and status changes with the code they describe.
-- Commit message format: `[YYYY.MM.DD.NN] type: description` (e.g., `[2026.04.07.00] feat: implement login flow`). Use the current date and increment `NN` from `00` for each commit that day.
+- Commit message format: `type: description` (e.g., `feat: implement login flow`).
 - Commit type labels: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`.
 - Auto-advance to the next stage; no user approval required between stages.
 - `code-review-and-quality` reviews all tasks on every cycle; all pass means `Done`.
