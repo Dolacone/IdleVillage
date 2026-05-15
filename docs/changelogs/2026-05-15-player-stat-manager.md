@@ -65,7 +65,7 @@ scope: "Tracks this change from design through review."
   - `src/main.py`：`initial_extensions` 加入 `"cogs.player_manager_cog"`
   - `docs/discord/command-handler.md`：補充五個新子指令
   - **AC**：管理員可在 Discord 執行五個子指令；非管理員或非指定 Guild 均被拒絕；值 < 0 回報錯誤；玩家不存在回報錯誤；操作成功顯示舊值→新值
-- [ ] Task 2: 新增測試 `tests/test_player_manager_cog.py`（依賴 Task 1）
+- [x] Task 2: 新增測試 `tests/test_player_manager_cog.py`（依賴 Task 1）
   - 覆蓋：guild 檢查、admin 檢查、玩家不存在、各 setter 正確寫入 DB、負值被拒、`player-view` 資料正確
   - 使用 `DatabaseTestCase` + `AsyncMock` 模式（沿用既有測試慣例）
   - **AC**：`uv run python -m pytest tests/test_player_manager_cog.py` 全過
