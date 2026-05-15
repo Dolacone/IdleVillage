@@ -59,8 +59,7 @@ Each sub agent must:
 2. Implement or update relevant test cases when behavior, configuration, commands, or public interfaces are affected.
 3. Update SSOT documents that own any behavior changed by this task or fix.
 4. Mark the task or issue `[x]` in the change document.
-5. Spawn a review sub agent (following Review Agent Rules) scoped to this task only. Fix any issues found before proceeding.
-6. Commit code, updated SSOT documents, and change document together in one commit.
+5. Commit code, updated SSOT documents, and change document together in one commit.
 
 After all sub agents complete, merge their worktree branches in dependency order. Resolve any conflicts before proceeding. When all tasks are merged, update status to `Ready-to-review`, then commit.
 
@@ -88,7 +87,7 @@ Refactors only. Zero behavior changes. No marks in the change document. Commit w
 - Commit type labels: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`.
 - Auto-advance to the next stage; no user approval required between stages.
 - Only `incremental-implementation` may change source code, configuration files, or any file that affects runtime behavior.
-- When spawning a review agent, use a **different** agent than the one currently running. Since the primary agent is `claude`, use `codex` first, then fall back to `copilot`. Both are Bash CLI tools — invoke via `codex exec review` or `copilot -p "..." --allow-all-tools`. Do not use the `Agent` tool with `subagent_type: "claude"` for review.
+- When spawning a review agent (in `code-review-and-quality`), use a **different** agent than the one currently running. Since the primary agent is `claude`, use `codex` first, then fall back to `copilot`. Both are Bash CLI tools — invoke via `codex exec review` or `copilot -p "..." --allow-all-tools`. Do not use the `Agent` tool with `subagent_type: "claude"` for review.
 
 ## Documentation Rules
 
