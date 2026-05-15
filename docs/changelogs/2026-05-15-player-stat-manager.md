@@ -1,6 +1,6 @@
 ---
 title: "idlevillage-manager：玩家數據調整指令"
-status: Ready-to-review
+status: Issues-confirmed
 created: 2026-05-15
 doc_type: change
 last_reviewed: 2026-05-15
@@ -69,3 +69,7 @@ scope: "Tracks this change from design through review."
   - 覆蓋：guild 檢查、admin 檢查、玩家不存在、各 setter 正確寫入 DB、負值被拒、`player-view` 資料正確
   - 使用 `DatabaseTestCase` + `AsyncMock` 模式（沿用既有測試慣例）
   - **AC**：`uv run python -m pytest tests/test_player_manager_cog.py` 全過
+
+## Review Issues
+
+- [ ] Issue 1: `src/cogs/player_manager_cog.py` L7 — `ACTION_GEAR_COL` 被 import 但從未使用（gear level 讀寫全由 `player_manager` 內部處理），應移除。
