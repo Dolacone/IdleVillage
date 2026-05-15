@@ -14,70 +14,83 @@ When implemented behavior is described, update `source_paths` with repository-re
 
 ## Lifecycle
 
-| Skill | Input status | Output status | Required change document updates |
-|---|---|---|---|
-| `idea-refine` | none | `Draft` | Create Problem Statement, Recommended Direction, Key Assumptions, MVP Scope / Not Doing |
-| `planning-and-task-breakdown` | `Draft` | `Ready-to-implement` | Append `## Tasks`; update metadata; update related docs when applicable |
-| `incremental-implementation` | `Ready-to-implement` or `Issues-confirmed` | `Ready-to-review` | Check off completed tasks or review issues |
-| `code-review-and-quality` | `Ready-to-review` | `Done` or `Issues-confirmed` | Append `## Review Issues` only when issues are found |
-| `code-simplification` | any | unchanged | No status change |
+| Stage | Skill | Input status | Output status | Required change document updates |
+|---|---|---|---|---|
+| `refine` | `idea-refine` | none | `Draft` | Create Problem Statement, Recommended Direction, Clarifications, MVP Scope / Not Doing |
+| `plan` | `planning-and-task-breakdown` | `Draft` | `Ready-to-implement` | Append `## Architecture Decisions` and `## Tasks`; update metadata; update related docs when applicable |
+| `code` | `incremental-implementation` | `Ready-to-implement` or `Issues-confirmed` | `Ready-to-review` | Check off completed tasks or review issues |
+| `review` | `code-review-and-quality` | `Ready-to-review` | `Done` or `Issues-confirmed` | Append `## Review Issues` only when issues are found |
+| `refactor` | `code-simplification` | any | unchanged | No status change |
 
 ## Stage Execution
 
-- Before any stage work, use the skill with the same name as the stage.
+- Before any stage work, use the skill mapped to that stage.
 - If the matching skill is unavailable or cannot be read, stop and report that blocker.
 - At stage completion, report the completed stage, resulting status, commit hash if committed, and next allowed stage.
-- The main agent runs `idea-refine` directly because it may require user interaction. For every other stage, the main agent reads **only the `status` field** from the change document frontmatter, then spawns that stage as a sub agent passing only the change document path. The main agent must not read or reason about any other part of the change document before spawning.
-- Each stage sub agent is responsible for reading the change document itself and determining what to do.
+- The main agent runs all stages directly except `review`.
+- For `review`, the main agent spawns a review agent (per Universal Rules), passing the change document path. The review agent is responsible for reading the change document and running the review.
 
 ## Stage Rules
 
-### `idea-refine`
+### `refine`
 
-Creates one change document. Must not touch any existing file.
+Skill: `idea-refine`
+
+Creates one change document in `docs/changelogs/`. Must not touch any existing file.
 
 To understand the current system, read only files under `docs/`. Do not read source code files.
 
-After creating the change document, if it contains any unresolved Key Assumptions (`[ ]`), stop and present each assumption to the user as an explicit question. Do not proceed until all assumptions are confirmed. This overrides the auto-advance rule.
+This is the only stage where user interaction is permitted. Before finalizing the change document, identify all ambiguous or unclear aspects and ask the user to resolve them. Record every question and answer in `## Clarifications` using Q&A format. Do not advance until all clarifications are resolved.
 
-### `planning-and-task-breakdown`
+### `plan`
 
-Updates the change document only (append tasks, update metadata and status).
+Skill: `planning-and-task-breakdown`
+
+Updates the change document only (append `## Architecture Decisions` and `## Tasks`, update metadata and status).
 
 Must also update SSOT documents that own the behavior being changed. If none exist and the plan affects setup, usage, commands, configuration, public behavior, or developer workflow, create the smallest appropriate doc, usually `README.md`.
 
-### `incremental-implementation`
+After completing the plan, spawn a review agent (per Universal Rules) to review the Architecture Decisions and task breakdown. If issues are found, revise and re-review. Maximum 2 review rounds; if still unresolved, stop and report. Auto-advance after the review agent approves — no human confirmation required.
 
-On entry, read **only** the task list from the change document: task indices, one-line titles, and any explicit dependency markers. Do not read task descriptions or any other section before spawning.
+### `code`
 
-Determine parallelism from dependency markers: spawn independent tasks simultaneously in a single message; spawn dependent tasks only after their prerequisites complete.
+Skill: `incremental-implementation`
 
-Spawn one sub agent per task (or confirmed review fix) using `isolation: "worktree"`. Pass only the change document path and the task index — the sub agent must read the change document itself to understand what to implement.
+Read the change document and implement tasks sequentially in dependency order.
 
-Each sub agent must:
+For each task:
 1. Implement the task or fix.
 2. Implement or update relevant test cases when behavior, configuration, commands, or public interfaces are affected.
 3. Update SSOT documents that own any behavior changed by this task or fix.
 4. Mark the task or issue `[x]` in the change document.
 5. Commit code, updated SSOT documents, and change document together in one commit.
 
-After all sub agents complete, merge their worktree branches in dependency order. Resolve any conflicts before proceeding. When all tasks are merged, update status to `Ready-to-review`, then commit.
+After all tasks are complete, update status to `Ready-to-review`, then commit.
 
 For new Python projects, create Python git ignores before running Python commands that may generate cache files.
 
-### `code-review-and-quality`
+### `review`
 
-Reviews all tasks and all previous review issues on every cycle. Re-check fixed issues against the current implementation before accepting them as resolved.
+Skill: `code-review-and-quality`
 
-Verify implementation, related docs, metadata, `source_paths`, links, setup commands, environment variables, and behavior claims against inspected code.
+The review agent (per Universal Rules) runs the skill and reports results to the main agent:
+- Reviews all tasks and all previous review issues on every cycle. Re-checks fixed issues against the current implementation before accepting them as resolved.
+- Verifies implementation, related docs, metadata, `source_paths`, links, setup commands, environment variables, and behavior claims against inspected code.
+- If issues are found: append `## Review Issues`, set status to `Issues-confirmed`, commit, highlight issues in console output. Review agents flag issues; they do not fix them.
 
-If all tasks pass: run `doc-audit`, add work to `CHANGELOG.md` (create if missing), set status to `Done`, commit all together.
+After the review agent approves, the main agent:
+1. Runs `doc-audit`.
+2. Adds work to `CHANGELOG.md` (create if missing).
+3. Sets status to `Done`.
+4. Commits all together.
 
-If issues are found: append `## Review Issues`, set status to `Issues-confirmed`, commit, highlight issues in console output. Reviewers flag issues; they do not fix them.
+### `refactor`
 
-### `code-simplification`
+Skill: `code-simplification`
 
-Refactors only. Zero behavior changes. No marks in the change document. Commit when done.
+Refactors only. Zero behavior changes. No marks in the change document.
+
+After each simplification, run tests. If tests fail, revert the simplification. Follow skill rules for commit strategy.
 
 ## Universal Rules
 
@@ -86,8 +99,9 @@ Refactors only. Zero behavior changes. No marks in the change document. Commit w
 - Commit message format: `type: description` (e.g., `feat: implement login flow`).
 - Commit type labels: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`.
 - Auto-advance to the next stage; no user approval required between stages.
-- Only `incremental-implementation` may change source code, configuration files, or any file that affects runtime behavior.
-- When spawning a review agent (in `code-review-and-quality`), use a **different** agent than the one currently running. Since the primary agent is `claude`, use `codex` first, then fall back to `copilot`. Both are Bash CLI tools — invoke via `codex exec review` or `copilot -p "..." --allow-all-tools`. Do not use the `Agent` tool with `subagent_type: "claude"` for review.
+- Only the `code` stage may change source code, configuration files, or any file that affects runtime behavior.
+- `refine` is the only stage where user interaction is permitted. All subsequent stages run autonomously without waiting for user input.
+- Whenever doing reviews, use a **different** agent than the one currently running. Since the primary agent is `claude`, use `codex` first, then fall back to `copilot`. Both are Bash CLI tools — invoke via `codex exec review` or `copilot -p "..." --allow-all-tools`. Do not use the `Agent` tool with `subagent_type: "claude"` for review.
 
 ## Documentation Rules
 
@@ -119,8 +133,9 @@ scope: "Tracks this change from design through review."
 
 ## Problem Statement
 ## Recommended Direction
-## Key Assumptions
+## Clarifications
 ## MVP Scope / Not Doing
+## Architecture Decisions
 ## Tasks
 - [ ] Task 1: ...
 
