@@ -421,6 +421,89 @@ def build_gear_components(
     ]
 
 
+def build_manager_embed(target_user_display_name: str, player_data: dict) -> disnake.Embed:
+    """Build the manager panel embed for a target player.
+
+    Args:
+        target_user_display_name: Display name of the target player.
+        player_data: Dict with gear_*, materials_*, pity_*, and risky_failed_levels fields.
+
+    Returns:
+        disnake.Embed with the player's current stats.
+    """
+    embed = disnake.Embed(
+        title=f"玩家管理：{target_user_display_name}",
+        color=disnake.Color.orange(),
+    )
+
+    gear_value = (
+        f"採集 {player_data.get('gear_gathering', 0)} ｜"
+        f" 建設 {player_data.get('gear_building', 0)} ｜"
+        f" 戰鬥 {player_data.get('gear_combat', 0)} ｜"
+        f" 研究 {player_data.get('gear_research', 0)}"
+    )
+    embed.add_field(name="工具等級", value=gear_value, inline=False)
+
+    materials_value = (
+        f"採集 {player_data.get('materials_gathering', 0)} ｜"
+        f" 建設 {player_data.get('materials_building', 0)} ｜"
+        f" 戰鬥 {player_data.get('materials_combat', 0)} ｜"
+        f" 研究 {player_data.get('materials_research', 0)}"
+    )
+    embed.add_field(name="素材數量", value=materials_value, inline=False)
+
+    pity_value = (
+        f"採集 {player_data.get('pity_gathering', 0)} ｜"
+        f" 建設 {player_data.get('pity_building', 0)} ｜"
+        f" 戰鬥 {player_data.get('pity_combat', 0)} ｜"
+        f" 研究 {player_data.get('pity_research', 0)}"
+    )
+    embed.add_field(name="保底計數", value=pity_value, inline=False)
+
+    embed.add_field(
+        name="鐵齒失敗累積",
+        value=str(player_data.get("risky_failed_levels", 0)),
+        inline=False,
+    )
+
+    return embed
+
+
+def build_manager_components(target_user_id: str) -> list:
+    """Build the manager panel action buttons for a target player.
+
+    Args:
+        target_user_id: Discord user ID of the target player (used in custom_ids).
+
+    Returns:
+        list containing one ActionRow with four edit buttons.
+    """
+    return [
+        disnake.ui.ActionRow(
+            disnake.ui.Button(
+                label="編輯工具等級",
+                style=disnake.ButtonStyle.secondary,
+                custom_id=f"mgr_edit_gear:{target_user_id}",
+            ),
+            disnake.ui.Button(
+                label="編輯素材",
+                style=disnake.ButtonStyle.secondary,
+                custom_id=f"mgr_edit_material:{target_user_id}",
+            ),
+            disnake.ui.Button(
+                label="編輯保底",
+                style=disnake.ButtonStyle.secondary,
+                custom_id=f"mgr_edit_pity:{target_user_id}",
+            ),
+            disnake.ui.Button(
+                label="編輯鐵齒",
+                style=disnake.ButtonStyle.secondary,
+                custom_id=f"mgr_edit_risky:{target_user_id}",
+            ),
+        )
+    ]
+
+
 def build_admin_embed(resource_type: str, amount: int) -> disnake.Embed:
     label = RESOURCE_LABELS.get(resource_type, resource_type)
     emoji = RESOURCE_EMOJIS.get(resource_type, "")

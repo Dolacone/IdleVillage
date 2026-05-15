@@ -61,6 +61,9 @@ except ImportError:
         @staticmethod
         def gray(): return 0x95A5A6
 
+        @staticmethod
+        def orange(): return 0xFFA500
+
     class _Embed:
         def __init__(self, *, title="", description="", color=0):
             self.title = title
