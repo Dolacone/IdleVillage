@@ -56,6 +56,8 @@ Must not change:
 - Existing source code, docs, or config files.
 - Any existing file, even if incomplete or relevant.
 
+After creating the change document, if it contains any unresolved Key Assumptions (`[ ]`), stop and present each assumption to the user as an explicit question. Do not proceed to `planning-and-task-breakdown` until all assumptions are confirmed. This overrides the auto-advance rule.
+
 ### `planning-and-task-breakdown`
 
 May change:
@@ -77,9 +79,10 @@ Spawn one sub agent per task (or confirmed review fix) using `isolation: "worktr
 Each sub agent must:
 1. Implement the task or fix.
 2. Implement or update relevant test cases in the same change when behavior, configuration, commands, or public interfaces are affected.
-3. Mark the task or issue `[x]` in the change document.
-4. Spawn a review sub agent (following Review Agent Rules) to review this task's changes, applying the same criteria as `code-review-and-quality` scoped to this task only. Fix any issues found before proceeding.
-5. Commit code and change document together, one commit per task or fix, following the commit message format in Universal Rules.
+3. Update SSOT documents that own any behavior changed by this task or fix, in the same commit.
+4. Mark the task or issue `[x]` in the change document.
+5. Spawn a review sub agent (following Review Agent Rules) to review this task's changes, applying the same criteria as `code-review-and-quality` scoped to this task only. Fix any issues found before proceeding.
+6. Commit code, updated SSOT documents, and change document together, one commit per task or fix, following the commit message format in Universal Rules.
 
 After all sub agents complete, merge their worktree branches into the current branch in dependency order (or any order when tasks are independent). Resolve any conflicts before proceeding.
 
