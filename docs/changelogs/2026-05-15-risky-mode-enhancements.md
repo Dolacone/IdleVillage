@@ -58,4 +58,4 @@ scope: "Tracks this change from design through review."
 ## Review Issues
 
 - [x] Important: 鐵齒失敗不應重設工具等級。`docs/managers/gear-manager.md` 的鐵齒失敗流程只要求 `risky_failed_levels += current_level` 與 `pity = 0`，但 `src/managers/gear_manager.py` 目前在失敗時呼叫 `set_gear_level(..., 0, ...)` 並回傳 `new_level = 0`。`tests/test_gear_manager.py` 也用 `test_risky_failure_resets_gear_level_to_zero` 鎖住這個與規格不符的行為。
-- [ ] Important: 鐵齒失敗規格仍未一致。`src/managers/gear_manager.py` 目前在鐵齒失敗時保留 `gear_level` 並回傳原等級，`tests/test_gear_manager.py::test_risky_failure_preserves_gear_level` 也鎖住此行為；但 `docs/managers/gear-manager.md` 仍寫失敗效果為 `gear 歸零` / `gear_level = 0`，且 `src/cogs/ui_renderer.py` 的鐵齒失敗訊息仍顯示「等級與保底計數歸零」。需先確認鐵齒失敗是否應重設工具等級，再同步實作、測試、UI 文案與文件。
+- [x] Important: 鐵齒失敗規格仍未一致。`src/managers/gear_manager.py` 目前在鐵齒失敗時保留 `gear_level` 並回傳原等級，`tests/test_gear_manager.py::test_risky_failure_preserves_gear_level` 也鎖住此行為；但 `docs/managers/gear-manager.md` 仍寫失敗效果為 `gear 歸零` / `gear_level = 0`，且 `src/cogs/ui_renderer.py` 的鐵齒失敗訊息仍顯示「等級與保底計數歸零」。需先確認鐵齒失敗是否應重設工具等級，再同步實作、測試、UI 文案與文件。
