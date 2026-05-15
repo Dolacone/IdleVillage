@@ -8,23 +8,7 @@ Filename:
 - With Jira ID: `{jira-id}-{topic}.md`
 - Without Jira ID: `YYYY-MM-DD-{topic}.md`
 
-Use a Jira ID when the work is tied to Jira. Otherwise use the current date in `YYYY-MM-DD`.
-
-Every change document is the SSOT for one change, grows in-place, and must not be duplicated. Resume work by reading its `status`.
-
-Frontmatter follows the repository documentation metadata convention. When none exists, use `doc-audit` style metadata:
-
-```yaml
----
-title: "..."
-status: Draft
-created: YYYY-MM-DD
-doc_type: change
-last_reviewed: YYYY-MM-DD
-source_paths: []
-scope: "Tracks this change from design through review."
----
-```
+Every change document is the SSOT for one change, grows in-place, and must not be duplicated. Resume work by reading its `status`. See template at the bottom of this file.
 
 When implemented behavior is described, update `source_paths` with repository-relative paths actually created or inspected.
 
@@ -43,90 +27,56 @@ When implemented behavior is described, update `source_paths` with repository-re
 - Before any stage work, use the skill with the same name as the stage.
 - If the matching skill is unavailable or cannot be read, stop and report that blocker.
 - At stage completion, report the completed stage, resulting status, commit hash if committed, and next allowed stage.
-- Proceed to the next stage automatically without waiting for user approval.
+- The main agent runs `idea-refine` directly because it may require user interaction. For every other stage, the main agent reads **only the `status` field** from the change document frontmatter, then spawns that stage as a sub agent passing only the change document path. The main agent must not read or reason about any other part of the change document before spawning.
+- Each stage sub agent is responsible for reading the change document itself and determining what to do.
 
 ## Stage Rules
 
 ### `idea-refine`
 
-May change:
-- Create one change document.
+Creates one change document. Must not touch any existing file.
 
-Must not change:
-- Existing source code, docs, or config files.
-- Any existing file, even if incomplete or relevant.
-
-After creating the change document, if it contains any unresolved Key Assumptions (`[ ]`), stop and present each assumption to the user as an explicit question. Do not proceed to `planning-and-task-breakdown` until all assumptions are confirmed. This overrides the auto-advance rule.
+After creating the change document, if it contains any unresolved Key Assumptions (`[ ]`), stop and present each assumption to the user as an explicit question. Do not proceed until all assumptions are confirmed. This overrides the auto-advance rule.
 
 ### `planning-and-task-breakdown`
 
-May change:
-- The change document in `docs/changelogs/`: append tasks, update metadata, update status.
+Updates the change document only (append tasks, update metadata and status).
 
-Must change when applicable:
-- SSOT documents that own the behavior being changed.
-- If no related doc exists and the plan affects setup, usage, commands, configuration, public behavior, or developer workflow, create the smallest appropriate doc, usually `README.md`.
-
-Must not change:
-- Source code.
-- Configuration files.
-- Any file that affects runtime behavior.
+Must also update SSOT documents that own the behavior being changed. If none exist and the plan affects setup, usage, commands, configuration, public behavior, or developer workflow, create the smallest appropriate doc, usually `README.md`.
 
 ### `incremental-implementation`
 
-Spawn one sub agent per task (or confirmed review fix) using `isolation: "worktree"` so every agent works in its own git worktree. Launch all sub agents in a single message so they run in parallel.
+On entry, read **only** the task list from the change document: task indices, one-line titles, and any explicit dependency markers. Do not read task descriptions or any other section before spawning.
+
+Determine parallelism from dependency markers: spawn independent tasks simultaneously in a single message; spawn dependent tasks only after their prerequisites complete.
+
+Spawn one sub agent per task (or confirmed review fix) using `isolation: "worktree"`. Pass only the change document path and the task index — the sub agent must read the change document itself to understand what to implement.
 
 Each sub agent must:
 1. Implement the task or fix.
-2. Implement or update relevant test cases in the same change when behavior, configuration, commands, or public interfaces are affected.
-3. Update SSOT documents that own any behavior changed by this task or fix, in the same commit.
+2. Implement or update relevant test cases when behavior, configuration, commands, or public interfaces are affected.
+3. Update SSOT documents that own any behavior changed by this task or fix.
 4. Mark the task or issue `[x]` in the change document.
-5. Spawn a review sub agent (following Review Agent Rules) to review this task's changes, applying the same criteria as `code-review-and-quality` scoped to this task only. Fix any issues found before proceeding.
-6. Commit code, updated SSOT documents, and change document together, one commit per task or fix, following the commit message format in Universal Rules.
+5. Spawn a review sub agent (following Review Agent Rules) scoped to this task only. Fix any issues found before proceeding.
+6. Commit code, updated SSOT documents, and change document together in one commit.
 
-After all sub agents complete, merge their worktree branches into the current branch in dependency order (or any order when tasks are independent). Resolve any conflicts before proceeding.
-
-When all tasks are merged, update status to `Ready-to-review`, then commit.
+After all sub agents complete, merge their worktree branches in dependency order. Resolve any conflicts before proceeding. When all tasks are merged, update status to `Ready-to-review`, then commit.
 
 For new Python projects, create Python git ignores before running Python commands that may generate cache files.
 
 ### `code-review-and-quality`
 
-May change:
-- The change document: append `## Review Issues`, update metadata, update status.
-- `CHANGELOG.md` only when setting the change document status to `Done`.
-- Documentation files only through `doc-audit` after all implementation review issues are resolved and before setting status to `Done`.
+Reviews all tasks and all previous review issues on every cycle. Re-check fixed issues against the current implementation before accepting them as resolved.
 
-Must not change:
-- Source code.
-- Configuration files.
-- Any file that affects runtime behavior.
+Verify implementation, related docs, metadata, `source_paths`, links, setup commands, environment variables, and behavior claims against inspected code.
 
-Review all tasks and all previous review issues on every cycle regardless of prior review history. Re-check fixed issues against the current implementation before accepting them as resolved.
+If all tasks pass: run `doc-audit`, add work to `CHANGELOG.md` (create if missing), set status to `Done`, commit all together.
 
-Review must verify implementation, related docs, metadata, `source_paths`, links, setup commands, environment variables, and behavior claims against inspected code.
-
-If all tasks pass:
-- Run `doc-audit` after all tasks and previous review issues are resolved, before setting status to `Done`.
-- Add the current work to `CHANGELOG.md`; create it if missing.
-- Set status to `Done`.
-- Commit `CHANGELOG.md`, the change document, and any `doc-audit` documentation updates together.
-
-If issues are found:
-- Append `## Review Issues` with one checkbox per issue.
-- Set status to `Issues-confirmed`.
-- Commit the change document.
-- Highlight issues clearly in console output.
-- Advise the user to proceed to `incremental-implementation`.
-
-Reviewers flag issues; they do not fix them. Fixing belongs to `incremental-implementation`.
+If issues are found: append `## Review Issues`, set status to `Issues-confirmed`, commit, highlight issues in console output. Reviewers flag issues; they do not fix them.
 
 ### `code-simplification`
 
-- Refactors only.
-- Zero behavior changes.
-- No marks left in the change document.
-- Commit simplified code when done.
+Refactors only. Zero behavior changes. No marks in the change document. Commit when done.
 
 ## Universal Rules
 
@@ -135,8 +85,7 @@ Reviewers flag issues; they do not fix them. Fixing belongs to `incremental-impl
 - Commit message format: `type: description` (e.g., `feat: implement login flow`).
 - Commit type labels: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`.
 - Auto-advance to the next stage; no user approval required between stages.
-- `code-review-and-quality` reviews all tasks on every cycle; all pass means `Done`.
-- `code-simplification` is optional and does not affect change completeness.
+- Only `incremental-implementation` may change source code, configuration files, or any file that affects runtime behavior.
 - When spawning a review agent, use a **different** agent than the one currently running. Since the primary agent is `claude`, use `codex` first, then fall back to `copilot`. Both are Bash CLI tools — invoke via `codex exec review` or `copilot -p "..." --allow-all-tools`. Do not use the `Agent` tool with `subagent_type: "claude"` for review.
 
 ## Documentation Rules
@@ -173,9 +122,7 @@ scope: "Tracks this change from design through review."
 ## MVP Scope / Not Doing
 ## Tasks
 - [ ] Task 1: ...
-- [ ] Task 2: ...
 
 ## Review Issues
 - [ ] Issue 1: ...
-- [ ] Issue 2: ...
 ```
