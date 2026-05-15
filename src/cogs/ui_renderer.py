@@ -352,12 +352,17 @@ def build_gear_embed(
     mode_labels = {"normal": "標準", "buffer": "墊檔", "risky": "鐵齒"}
     mode_label = mode_labels.get(mode, mode)
 
+    if mode == "buffer":
+        rate_line = "成功率：0%（墊檔不進行強化）"
+    else:
+        rate_line = f"成功率：{base_rate_pct}%（+{pity}×{pity_display}% 保底）= {final_rate_pct}%"
+
     lines = [
         "🔨 工具強化",
         "─────────────────────────────",
         f"{label}：Lv{gear_level} → Lv{target_level}",
         f"模式：{mode_label}",
-        f"成功率：{base_rate_pct}%（+{pity}×{pity_display}% 保底）= {final_rate_pct}%",
+        rate_line,
         f"消耗：⚡ 1 AP + {material_cost} 個 {mat_label}",
         f"持有素材：{materials} 個",
         f"⚡ AP：{ap} / {ap_cap}",
