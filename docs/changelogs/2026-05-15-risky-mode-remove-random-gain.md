@@ -54,7 +54,7 @@ scope: "Tracks this change from design through review."
   - 改為直接 `level_gain = 1`，無論 pity 狀態
   - 驗收：`attempt_upgrade()` 鐵齒成功路徑回傳的 `level_gain` 永遠為 1
 
-- [ ] Task 2: 更新 `docs/managers/gear-manager.md` 移除隨機升級描述
+- [x] Task 2: 更新 `docs/managers/gear-manager.md` 移除隨機升級描述
   - 強化模式表格中 `risky` 的「成功效果」欄位改為 `gear +1，pity 歸零`
   - 強化流程中鐵齒成功分支移除 `若 pity = 0：level_gain = 隨機選取（+1: 60%, +2: 30%, +3: 10%）` 及「否則」分支，改為 `level_gain = 1`
   - 移除「注意：研究所等級上限僅在前置檢查時驗證，不截斷多段升級結果。」（該注意事項僅適用於多段升級場景）
