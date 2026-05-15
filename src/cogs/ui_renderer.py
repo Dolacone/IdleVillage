@@ -394,23 +394,11 @@ def build_gear_embed(
     return disnake.Embed(description="\n".join(lines), color=color)
 
 
-_UPGRADE_MODE_OPTIONS = [
-    disnake.SelectOption(
-        label="標準",
-        value="normal",
-        description="正常強化：消耗全額素材，成功升級，失敗保底+1",
-    ),
-    disnake.SelectOption(
-        label="墊檔",
-        value="buffer",
-        description="消耗一半素材，直接獲得一個保底計數，不進行強化",
-    ),
-    disnake.SelectOption(
-        label="鐵齒",
-        value="risky",
-        description="僅消耗 1 個素材，失敗則 pity 歸零；成功無保底時 +1~+3",
-    ),
-]
+_UPGRADE_MODE_DEFS = (
+    ("標準", "normal", "正常強化：消耗全額素材，成功升級，失敗保底+1"),
+    ("墊檔", "buffer", "消耗一半素材，直接獲得一個保底計數，不進行強化"),
+    ("鐵齒", "risky", "僅消耗 1 個素材，失敗則 pity 歸零；成功無保底時 +1~+3"),
+)
 
 
 def build_gear_components(
@@ -444,13 +432,8 @@ def build_gear_components(
     ]
 
     mode_options = [
-        disnake.SelectOption(
-            label=opt.label,
-            value=opt.value,
-            description=opt.description,
-            default=(opt.value == mode),
-        )
-        for opt in _UPGRADE_MODE_OPTIONS
+        disnake.SelectOption(label=label, value=value, description=desc, default=(value == mode))
+        for label, value, desc in _UPGRADE_MODE_DEFS
     ]
 
     return [

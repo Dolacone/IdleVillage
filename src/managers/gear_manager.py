@@ -10,6 +10,8 @@ import random
 from datetime import datetime
 
 from core.config import get_env_float, get_env_int
+from core.formula import ACTION_MATERIAL_COL
+from core.utils import dt_str
 from managers import building_manager, player_manager
 
 GEAR_TYPES = ("gathering", "building", "combat", "research")
@@ -63,6 +65,16 @@ def _material_cost(target_level: int, mode: str) -> int:
     return target_level
 
 
+async def _get_materials(db, user_id: str, gear_type: str) -> int:
+    """Return the player's current material count for the given gear type."""
+    mat_col = ACTION_MATERIAL_COL[gear_type]
+    async with db.execute(
+        f"SELECT {mat_col} FROM players WHERE user_id=?", (user_id,)
+    ) as cur:
+        row = await cur.fetchone()
+    return row[0] if row else 0
+
+
 async def _get_risky_failed_levels(db, user_id: str) -> int:
     """Return the player's current risky_failed_levels value."""
     async with db.execute(
@@ -74,7 +86,6 @@ async def _get_risky_failed_levels(db, user_id: str) -> int:
 
 async def _add_risky_failed_levels(db, user_id: str, amount: int, now: datetime) -> None:
     """Increment the player's risky_failed_levels by amount."""
-    from core.utils import dt_str
     await db.execute(
         "UPDATE players SET risky_failed_levels = risky_failed_levels + ?, updated_at=? WHERE user_id=?",
         (amount, dt_str(now), user_id),
@@ -111,13 +122,7 @@ async def get_upgrade_info(db, user_id: str, gear_type: str, now: datetime, mode
     material_cost = _material_cost(target_level, mode)
     rate = _compute_rate(gear_level, pity, risky_failed_levels=risky_failed_levels, mode=mode)
 
-    from core.formula import ACTION_MATERIAL_COL
-    mat_col = ACTION_MATERIAL_COL[gear_type]
-    async with db.execute(
-        f"SELECT {mat_col} FROM players WHERE user_id=?", (user_id,)
-    ) as cur:
-        row = await cur.fetchone()
-    materials = row[0] if row else 0
+    materials = await _get_materials(db, user_id, gear_type)
 
     can_attempt = (
         gear_level < gear_cap
@@ -177,13 +182,7 @@ async def attempt_upgrade(db, user_id: str, gear_type: str, now: datetime, mode:
     target_level = gear_level + 1
     material_cost = _material_cost(target_level, mode)
 
-    from core.formula import ACTION_MATERIAL_COL
-    mat_col = ACTION_MATERIAL_COL[gear_type]
-    async with db.execute(
-        f"SELECT {mat_col} FROM players WHERE user_id=?", (user_id,)
-    ) as cur:
-        row = await cur.fetchone()
-    materials = row[0] if row else 0
+    materials = await _get_materials(db, user_id, gear_type)
     if materials < material_cost:
         raise ValueError(f"Insufficient materials: need {material_cost}, have {materials}")
 
