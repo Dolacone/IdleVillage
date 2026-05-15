@@ -1,6 +1,6 @@
 ---
 title: "鐵齒模式強化：永久保底與多段升級"
-status: Ready-to-implement
+status: Ready-to-review
 created: 2026-05-15
 doc_type: change
 last_reviewed: 2026-05-15
