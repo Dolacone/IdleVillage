@@ -18,10 +18,6 @@ GEAR_TYPES = ("gathering", "building", "combat", "research")
 UPGRADE_MODES = ("normal", "buffer", "risky")
 RATE_PRECISION = 10
 
-# Multi-level success weights for risky mode when pity == 0
-_RISKY_LEVEL_GAINS = [1, 2, 3]
-_RISKY_LEVEL_WEIGHTS = [0.60, 0.30, 0.10]
-
 
 def _normalize_rate(rate: float) -> float:
     return round(rate, RATE_PRECISION)
@@ -47,13 +43,6 @@ def _compute_rate(gear_level: int, pity_count: int, risky_failed_levels: int = 0
     if mode == "risky":
         rate = _normalize_rate(rate + risky_failed_levels * 0.0001)
     return min(1.0, rate)
-
-
-def _pick_risky_level_gain(pity_count: int) -> int:
-    """Return level gain for a risky success: +1/+2/+3 (60/30/10%) when pity=0, else +1."""
-    if pity_count > 0:
-        return 1
-    return random.choices(_RISKY_LEVEL_GAINS, weights=_RISKY_LEVEL_WEIGHTS, k=1)[0]
 
 
 def _material_cost(target_level: int, mode: str) -> int:
@@ -161,7 +150,7 @@ async def attempt_upgrade(db, user_id: str, gear_type: str, now: datetime, mode:
       normal — spend target_level materials, roll; success: gear+1 pity=0, failure: pity+1
       buffer — spend ceil(target_level/2) materials, no roll; pity+1 immediately
       risky  — spend 1 material, roll;
-                success: gear += level_gain (pity=0: random +1/+2/+3; pity>0: +1), pity=0
+                success: gear +1, pity=0
                 failure: gear=0, pity=0, risky_failed_levels += current_level
 
     Returns a result dict with success, new_level, level_gain, pity_before, pity_after, rate, mode.
@@ -210,10 +199,7 @@ async def attempt_upgrade(db, user_id: str, gear_type: str, now: datetime, mode:
     success = random.random() < rate
 
     if success:
-        if mode == "risky":
-            level_gain = _pick_risky_level_gain(pity)
-        else:
-            level_gain = 1
+        level_gain = 1
         new_level = gear_level + level_gain
         await player_manager.set_gear_level(db, user_id, gear_type, new_level, now)
         await player_manager.set_pity(db, user_id, gear_type, 0, now)

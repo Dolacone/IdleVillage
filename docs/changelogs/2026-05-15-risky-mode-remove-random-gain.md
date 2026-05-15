@@ -49,7 +49,7 @@ scope: "Tracks this change from design through review."
 
 <!-- Tasks 1, 2, 3 are independent and can be implemented in parallel. -->
 
-- [ ] Task 1: 移除 `gear_manager.py` 鐵齒成功的隨機多段升級邏輯，固定 `level_gain = 1`
+- [x] Task 1: 移除 `gear_manager.py` 鐵齒成功的隨機多段升級邏輯，固定 `level_gain = 1`
   - 在 `attempt_upgrade()` 的鐵齒成功分支，移除 `if pity == 0` 判斷與隨機抽取（60/30/10%）
   - 改為直接 `level_gain = 1`，無論 pity 狀態
   - 驗收：`attempt_upgrade()` 鐵齒成功路徑回傳的 `level_gain` 永遠為 1
