@@ -1,0 +1,55 @@
+---
+title: "鐵齒模式強化：永久保底與多段升級"
+status: Ready-to-implement
+created: 2026-05-15
+doc_type: change
+last_reviewed: 2026-05-15
+source_paths:
+  - src/managers/gear_manager.py
+  - src/cogs/ui_renderer.py
+  - src/database/schema.py
+  - tests/test_gear_manager.py
+scope: "Tracks this change from design through review."
+---
+
+## Problem Statement
+
+鐵齒模式目前只有「省材料但失去保底」的特性，缺乏長期累積的誘因。
+新增永久成功率加成與多段升級機制，強化高風險高回報的定位。
+
+## Recommended Direction
+
+**永久保底（鐵齒等級）**
+- 每次鐵齒失敗，將強化前的當前等級加入玩家全域 `risky_failed_levels`（四種工具共用整數）
+- 成功率公式加入第三項：`base_rate + pity × GEAR_PITY_BONUS + risky_failed_levels × 0.01%`
+- UI 在鐵齒模式下額外顯示一行：`鐵齒等級: {n} (+{n×0.01}%)`
+
+**多段升級**
+- 鐵齒成功且 pity = 0 時，隨機 +1/+2/+3（60% / 30% / 10%）
+- pity > 0 時僅 +1（與現行相同）
+- 研究所等級上限僅作前置檢查（gear_level < research_institute_level），不截斷多段升級結果
+
+## Key Assumptions
+
+- `risky_failed_levels` 為 per-player 全域整數，四種工具共用
+- 失敗時累加的是強化前的當前等級（11→12 失敗 → +11）
+- 多段升級亂數權重：+1(60%), +2(30%), +3(10%)
+- 研究所上限不截斷鐵齒多段升級結果（例：Lv4 成功 +3 → Lv7，即使研究所 Lv5）
+
+## MVP Scope
+
+- DB schema：`players` 表新增 `risky_failed_levels INTEGER NOT NULL DEFAULT 0`
+- `gear_manager`：鐵齒失敗累積 `risky_failed_levels`；成功率公式加入第三項；pity=0 時多段升級
+- `get_upgrade_info()`：回傳 `risky_failed_levels` 與加成百分比供 UI 使用
+- UI：鐵齒模式新增 `鐵齒等級` 行；更新模式 Dropdown 描述
+
+## Not Doing
+
+- 其他模式（標準、墊檔）受 `risky_failed_levels` 影響
+- 截斷多段升級結果至研究所上限
+- 不同工具各自獨立的 `risky_failed_levels`
+
+## Tasks
+
+- [ ] Task 1: DB schema 新增 `risky_failed_levels` 欄位；`gear_manager` 實作永久保底累積、成功率第三項、多段升級；`get_upgrade_info()` 回傳 `risky_failed_levels` 與加成；新增 / 更新 tests
+- [ ] Task 2: UI embed 新增 `鐵齒等級` 行；更新模式 Dropdown 描述；新增 / 更新 UI tests

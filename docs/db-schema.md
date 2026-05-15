@@ -151,7 +151,9 @@ CREATE TABLE players (
   pity_gathering INTEGER NOT NULL DEFAULT 0,
   pity_building INTEGER NOT NULL DEFAULT 0,
   pity_combat INTEGER NOT NULL DEFAULT 0,
-  pity_research INTEGER NOT NULL DEFAULT 0
+  pity_research INTEGER NOT NULL DEFAULT 0,
+
+  risky_failed_levels INTEGER NOT NULL DEFAULT 0
 );
 ```
 
@@ -169,6 +171,7 @@ ap_full_time = created_at + AP_CAP * AP_RECOVERY_MINUTES
 materials_* = 0
 gear_* = 0
 pity_* = 0
+risky_failed_levels = 0
 ```
 
 ### guild_installations

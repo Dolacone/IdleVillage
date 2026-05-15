@@ -137,9 +137,11 @@ Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
 消耗：⚡ 1 AP + {n} 個 {material_name}
 持有素材：{material_count} 個
 工具等級上限：Lv{cap}（研究所 Lv{n}）
+鐵齒等級: {risky_failed_levels} (+{risky_bonus_pct}%)   ← 僅鐵齒模式顯示
 ```
 
 墊檔模式下成功率欄位顯示 `0%`（不擲骰），消耗量依墊檔公式計算。
+`risky_bonus_pct` = `risky_failed_levels × 0.01`，顯示至小數點後兩位。
 
 成功率顯示必須和 managers/gear-manager.md 的成功率計算一致。若設定值代表整數百分比，
 UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL=0.10`
@@ -152,7 +154,7 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 強化模式 Dropdown（custom_id: `upgrade_mode_select:{gear_type}`）每個選項附帶描述：
 - 標準：`正常消耗，失敗 pity+1`
 - 墊檔：`半價素材，必定 pity+1，無需擲骰`
-- 鐵齒：`僅消耗 1 個素材，失敗則 pity 歸零`
+- 鐵齒：`僅消耗 1 個素材，失敗則 pity 歸零；成功無保底時 +1~+3`
 
 - **Button**：`🎲 強化`（Green，禁用條件：素材不足 / AP 不足 / 已達上限）
 - **Button**：`← 返回`（Gray）
@@ -178,5 +180,6 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 - 2026.05.06.01: Official user-facing gear naming changed to tools:
   dashboard line `🏅 工具`, button `🔨 強化工具`, and full names
   採集工具, 建設工具, 狩獵工具, 研究工具.
+- 2026.05.15: Risky mode now shows `鐵齒等級: {n} (+{pct}%)` line. Risky dropdown description updated to reflect multi-level success.
 - 2026.05.15: Added mode selection dropdown (`upgrade_mode_select:{gear_type}`) to the gear upgrade sub-menu. Mode descriptions shown inline. Buffer mode displays 0% success rate.
 - 2026.05.06.00: Gear upgrade success-rate display must match gear-manager precision semantics. Lv6 with no pity displays 40%, not 39%.
