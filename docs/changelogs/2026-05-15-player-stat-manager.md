@@ -1,6 +1,6 @@
 ---
 title: "idlevillage-manager：玩家數據調整指令"
-status: Issues-confirmed
+status: Done
 created: 2026-05-15
 doc_type: change
 last_reviewed: 2026-05-15

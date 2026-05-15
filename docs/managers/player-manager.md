@@ -1,7 +1,7 @@
 ---
 title: "Module: player-manager"
 doc_type: module
-last_reviewed: 2026-05-06
+last_reviewed: 2026-05-15
 source_paths:
   - src/managers/player_manager.py
 ---
@@ -36,6 +36,7 @@ source_paths:
 | `pity_building` | int | 0 | 建設工具保底計數 |
 | `pity_combat` | int | 0 | 狩獵工具保底計數 |
 | `pity_research` | int | 0 | 研究工具保底計數 |
+| `risky_failed_levels` | int | 0 | 鐵齒模式失敗累積值（每次失敗時加上當時等級；詳見 gear-manager） |
 
 ## AP 系統
 
@@ -80,9 +81,12 @@ source_paths:
 - `setGearLevel(playerId, type, level)` — 設定裝備等級
 - `getPity(playerId, type)` — 取得保底計數
 - `setPity(playerId, type, count)` — 設定保底計數
+- `setMaterial(playerId, type, amount)` — 直接設定素材數量（絕對值，供管理員使用）
+- `setRiskyFailedLevels(playerId, value)` — 直接設定鐵齒失敗累積值（絕對值，供管理員使用）
 
 ## Changelog
 
+- 2026.05.15: Added `risky_failed_levels` field, `setMaterial()`, and `setRiskyFailedLevels()` for admin management support.
 - 2026.05.08.00: Documented stage-matching material drop boost.
 - 2026.05.06.01: Official user-facing gear naming changed to tools:
   採集工具, 建設工具, 狩獵工具, 研究工具.
