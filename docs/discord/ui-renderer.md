@@ -171,6 +171,35 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 - **Button**：`+{ADMIN_RESOURCE_DELTA_SMALL}`、`+{ADMIN_RESOURCE_DELTA_LARGE}`、`-{ADMIN_RESOURCE_DELTA_SMALL}`、`-{ADMIN_RESOURCE_DELTA_LARGE}`
 - **Button**：`Set Custom`（觸發 Modal）
 
+## 玩家管理員介面 Embed（/idlevillage-manager，Ephemeral）
+
+由 `build_manager_embed()` 與 `build_manager_components()` 渲染，僅管理員可見。
+
+### Embed 格式
+
+- **Title**：`玩家管理：{target_user_display_name}`
+- **Color**：`disnake.Color.orange()`
+- **Fields**（各自 `inline=False`）：
+  | Field name | 格式 |
+  | :--- | :--- |
+  | 工具等級 | `採集 {gear_gathering} ｜ 建設 {gear_building} ｜ 戰鬥 {gear_combat} ｜ 研究 {gear_research}` |
+  | 素材數量 | `採集 {materials_gathering} ｜ 建設 {materials_building} ｜ 戰鬥 {materials_combat} ｜ 研究 {materials_research}` |
+  | 保底計數 | `採集 {pity_gathering} ｜ 建設 {pity_building} ｜ 戰鬥 {pity_combat} ｜ 研究 {pity_research}` |
+  | 鐵齒失敗累積 | `{risky_failed_levels}` |
+
+### 互動元件
+
+Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
+
+| 按鈕標籤 | custom_id |
+| :--- | :--- |
+| 編輯工具等級 | `mgr_edit_gear:{target_user_id}` |
+| 編輯素材數量 | `mgr_edit_material:{target_user_id}` |
+| 編輯保底計數 | `mgr_edit_pity:{target_user_id}` |
+| 編輯鐵齒失敗累積 | `mgr_edit_risky:{target_user_id}` |
+
+`{target_user_id}` 為目標玩家的 Discord user ID（字串）。
+
 ## Changelog
 
 - 2026.05.02.00: Stage line format changed to `📋 關卡 {n}: {type_zh}`; deadline prefixed with `期限:`; section headers localised to `公用資源` / `公用設施` / `村民行動` / `個人資訊`; building list moved out of code block with per-row emoji; gear line label changed to `裝備`, category text labels and `Lv` prefix removed; materials line category text labels removed; burst button renamed `⚡ 消耗AP立刻完成三次行動` and moved to Row 1 alongside `🔨 強化裝備`; Refresh button removed.
@@ -182,4 +211,5 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
   採集工具, 建設工具, 狩獵工具, 研究工具.
 - 2026.05.15: Risky mode now shows `鐵齒等級: {n} (+{pct}%)` line. Risky dropdown description updated to reflect multi-level success.
 - 2026.05.15: Added mode selection dropdown (`upgrade_mode_select:{gear_type}`) to the gear upgrade sub-menu. Mode descriptions shown inline. Buffer mode displays 0% success rate.
+- 2026-05-15: Added `build_manager_embed()` and `build_manager_components()` for the unified manager interface.
 - 2026.05.06.00: Gear upgrade success-rate display must match gear-manager precision semantics. Lv6 with no pity displays 40%, not 39%.

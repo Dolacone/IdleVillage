@@ -19,11 +19,7 @@ source_paths:
 | `/idlevillage` | 所有玩家 | 先補算到期完整週期，再渲染個人主介面（Ephemeral），呼叫 ui-renderer |
 | `/idlevillage-announcement` | 管理員 | 將當前頻道寫入 `announcement_channel_id`，並發布或刷新村莊公告（Public） |
 | `/idlevillage-manage` | 管理員 | 檢查 Dashboard 訊息是否存在（不存在則在當前頻道發送新的），再開啟資源管理介面（Ephemeral） |
-| `/idlevillage-manager player-view` | 管理員 | 查看指定玩家的所有數據（Ephemeral） |
-| `/idlevillage-manager player-gear` | 管理員 | 設定玩家指定類型的工具等級（絕對值，下限 0）（Ephemeral） |
-| `/idlevillage-manager player-material` | 管理員 | 設定玩家指定類型的素材數量（絕對值，下限 0）（Ephemeral） |
-| `/idlevillage-manager player-pity` | 管理員 | 設定玩家指定類型的保底計數（絕對值，下限 0）（Ephemeral） |
-| `/idlevillage-manager player-risky` | 管理員 | 設定玩家鐵齒失敗累積值（絕對值，下限 0）（Ephemeral） |
+| `/idlevillage-manager` | 管理員 | 顯示玩家選擇器（User Select Dropdown，Ephemeral）；選定玩家後顯示完整數據面板，含各欄位編輯按鈕（Ephemeral） |
 
 所有指令必須先檢查 interaction guild 是否等於環境變數 `DISCORD_GUILD_ID`。不符合時拒絕執行。
 
@@ -46,13 +42,28 @@ source_paths:
 | `attempt_upgrade:{gear_type}:{mode}` | 點擊強化 | 呼叫 `gear-manager.attempt_upgrade(db, user_id, gear_type, now, mode)`，顯示結果 |
 | `back_to_main` | 點擊返回 | 重新渲染主介面 |
 
-### 管理員介面
+### 管理員介面（資源管理）
 | 元件 ID | 觸發條件 | 處理邏輯 |
 | :--- | :--- | :--- |
 | `resource_select` | 選擇資源類型 | 顯示當前數量 |
 | `resource_add_small` / `_large` | 點擊小額/大額增加 | 使用 `ADMIN_RESOURCE_DELTA_SMALL` / `ADMIN_RESOURCE_DELTA_LARGE` 呼叫 `resource-manager.deposit()` |
 | `resource_sub_small` / `_large` | 點擊小額/大額減少 | 使用 `ADMIN_RESOURCE_DELTA_SMALL` / `ADMIN_RESOURCE_DELTA_LARGE` 呼叫 `resource-manager.withdraw()` |
 | `resource_set_custom` | 點擊 Set Custom | 開啟 Modal，僅接受 >= 0 的整數，收到輸入後呼叫 `resource-manager` |
+
+### 玩家管理員介面（/idlevillage-manager）
+| 元件 ID | 觸發條件 | 處理邏輯 |
+| :--- | :--- | :--- |
+| `mgr_player_select` | User Select — 選擇目標玩家 | 查詢玩家 DB；玩家不存在回傳錯誤；存在則呼叫 `build_manager_embed()` + `build_manager_components()` 顯示面板 |
+| `mgr_edit_gear:{uid}` | 點擊「編輯工具等級」按鈕 | 彈出「編輯工具等級」Modal（4 欄位：採集/建設/戰鬥/研究等級） |
+| `mgr_edit_material:{uid}` | 點擊「編輯素材數量」按鈕 | 彈出「編輯素材數量」Modal（4 欄位） |
+| `mgr_edit_pity:{uid}` | 點擊「編輯保底計數」按鈕 | 彈出「編輯保底計數」Modal（4 欄位） |
+| `mgr_edit_risky:{uid}` | 點擊「編輯鐵齒失敗累積」按鈕 | 彈出「編輯鐵齒失敗累積」Modal（1 欄位） |
+| `mgr_modal_gear:{uid}` | 提交工具等級 Modal | 驗證非負整數 → 呼叫 `player_manager.set_gear_level()` × 4 → 刷新面板 |
+| `mgr_modal_material:{uid}` | 提交素材 Modal | 驗證非負整數 → 呼叫 `player_manager.set_material()` × 4 → 刷新面板 |
+| `mgr_modal_pity:{uid}` | 提交保底 Modal | 驗證非負整數 → 呼叫 `player_manager.set_pity_count()` × 4 → 刷新面板 |
+| `mgr_modal_risky:{uid}` | 提交鐵齒 Modal | 驗證非負整數 → 呼叫 `player_manager.set_risky_failed_levels()` → 刷新面板 |
+
+所有 `mgr_*` 互動均需 guild/admin 雙重驗證。`{uid}` 為目標玩家的 Discord user ID。
 
 ## 權限控管
 
@@ -63,7 +74,7 @@ source_paths:
 
 ## Changelog
 
-- 2026.05.15: Added `/idlevillage-manager` with five sub-commands for admin player data management (`player-view`, `player-gear`, `player-material`, `player-pity`, `player-risky`).
+- 2026-05-15: Replaced five `/idlevillage-manager` sub-commands with a single unified interface driven by user select + modal edits.
 - 2026.05.15: Added `upgrade_mode_select:{gear_type}` interaction route for mode selection. `attempt_upgrade` custom_id now encodes gear_type and mode as `attempt_upgrade:{gear_type}:{mode}`.
 - 2026.05.06.01: Official user-facing gear naming changed to tools; command
   handler copy now uses 工具強化 and 工具類型.

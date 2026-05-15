@@ -55,7 +55,7 @@ scope: "將 /idlevillage-manager 的五個 sub-command 整合為單一介面，�
 - [x] Task 1: 在 ui_renderer.py 新增 `build_manager_embed()` 與 `build_manager_components()` 純渲染函式
 - [x] Task 2: 重構 PlayerManagerCog — 移除五個 sub-command，新增無參數的 `/idlevillage-manager` 指令（回傳含 user select menu 的 ephemeral 訊息）及 `player_select` 互動 handler（顯示玩家面板）
 - [x] Task 3: 在 PlayerManagerCog 實作各 `[編輯]` 按鈕的 Modal 彈出與 `on_modal_submit` handler，提交後更新面板
-- [ ] Task 4: 更新 docs/discord/command-handler.md 與 docs/discord/ui-renderer.md，反映新的指令結構與 UI 元件
+- [x] Task 4: 更新 docs/discord/command-handler.md 與 docs/discord/ui-renderer.md，反映新的指令結構與 UI 元件
 
 ---
 
