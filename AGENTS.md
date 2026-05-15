@@ -62,7 +62,7 @@ May change:
 - The change document in `docs/changelogs/`: append tasks, update metadata, update status.
 
 Must change when applicable:
-- Related documentation to reflect what is about to change.
+- SSOT documents that own the behavior being changed.
 - If no related doc exists and the plan affects setup, usage, commands, configuration, public behavior, or developer workflow, create the smallest appropriate doc, usually `README.md`.
 
 Must not change:
