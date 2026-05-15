@@ -1,6 +1,6 @@
 ---
 title: "idlevillage-manager 統一管理介面"
-status: Issues-confirmed
+status: Done
 created: 2026-05-15
 doc_type: change
 last_reviewed: 2026-05-15

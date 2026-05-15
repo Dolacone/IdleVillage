@@ -194,9 +194,9 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
 | 按鈕標籤 | custom_id |
 | :--- | :--- |
 | 編輯工具等級 | `mgr_edit_gear:{target_user_id}` |
-| 編輯素材數量 | `mgr_edit_material:{target_user_id}` |
-| 編輯保底計數 | `mgr_edit_pity:{target_user_id}` |
-| 編輯鐵齒失敗累積 | `mgr_edit_risky:{target_user_id}` |
+| 編輯素材 | `mgr_edit_material:{target_user_id}` |
+| 編輯保底 | `mgr_edit_pity:{target_user_id}` |
+| 編輯鐵齒 | `mgr_edit_risky:{target_user_id}` |
 
 `{target_user_id}` 為目標玩家的 Discord user ID（字串）。
 
