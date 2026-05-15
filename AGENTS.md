@@ -134,7 +134,7 @@ Reviewers flag issues; they do not fix them. Fixing belongs to `incremental-impl
 - Auto-advance to the next stage; no user approval required between stages.
 - `code-review-and-quality` reviews all tasks on every cycle; all pass means `Done`.
 - `code-simplification` is optional and does not affect change completeness.
-- When spawning a review agent, use the first available agent type in priority order: `claude` → `codex` → `copilot`.
+- When spawning a review agent, use a **different** agent than the one currently running. Since the primary agent is `claude`, use `codex` first, then fall back to `copilot`. Both are Bash CLI tools — invoke via `codex exec review` or `copilot -p "..." --allow-all-tools`. Do not use the `Agent` tool with `subagent_type: "claude"` for review.
 
 ## Documentation Rules
 
