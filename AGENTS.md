@@ -78,7 +78,8 @@ Each sub agent must:
 1. Implement the task or fix.
 2. Implement or update relevant test cases in the same change when behavior, configuration, commands, or public interfaces are affected.
 3. Mark the task or issue `[x]` in the change document.
-4. Commit code and change document together, one commit per task or fix, following the commit message format in Universal Rules.
+4. Spawn a review sub agent (following Review Agent Rules) to review this task's changes, applying the same criteria as `code-review-and-quality` scoped to this task only. Fix any issues found before proceeding.
+5. Commit code and change document together, one commit per task or fix, following the commit message format in Universal Rules.
 
 After all sub agents complete, merge their worktree branches into the current branch in dependency order (or any order when tasks are independent). Resolve any conflicts before proceeding.
 
@@ -133,6 +134,7 @@ Reviewers flag issues; they do not fix them. Fixing belongs to `incremental-impl
 - Auto-advance to the next stage; no user approval required between stages.
 - `code-review-and-quality` reviews all tasks on every cycle; all pass means `Done`.
 - `code-simplification` is optional and does not affect change completeness.
+- When spawning a review agent, use the first available agent type in priority order: `claude` → `codex` → `copilot`.
 
 ## Documentation Rules
 
