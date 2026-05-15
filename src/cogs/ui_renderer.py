@@ -348,10 +348,15 @@ def build_gear_embed(
     final_rate_pct = _rate_percent(final_rate)
     pity_display = _rate_percent(pity_bonus_per)
 
+    mode = upgrade_info.get("mode", "normal")
+    mode_labels = {"normal": "標準", "buffer": "墊檔", "risky": "鐵齒"}
+    mode_label = mode_labels.get(mode, mode)
+
     lines = [
         "🔨 工具強化",
         "─────────────────────────────",
         f"{label}：Lv{gear_level} → Lv{target_level}",
+        f"模式：{mode_label}",
         f"成功率：{base_rate_pct}%（+{pity}×{pity_display}% 保底）= {final_rate_pct}%",
         f"消耗：⚡ 1 AP + {material_cost} 個 {mat_label}",
         f"持有素材：{materials} 個",
@@ -360,17 +365,42 @@ def build_gear_embed(
     ]
 
     if result is not None:
+        result_mode = result.get("mode", "normal")
         if result.get("success"):
             lines.append(f"\n✅ 強化成功！{label} 升至 Lv{result.get('new_level', target_level)}")
+        elif result_mode == "buffer":
+            lines.append(f"\n🛡️ 墊檔完成。保底計數 +1（現為 {result.get('pity_after', pity + 1)}）")
+        elif result_mode == "risky":
+            lines.append(f"\n❌ 鐵齒失敗。保底計數歸零")
         else:
-            lines.append("\n❌ 強化失敗。保底計數 +1")
+            lines.append(f"\n❌ 強化失敗。保底計數 +1")
 
     color = disnake.Color.green() if (result and result.get("success")) else disnake.Color.blue()
     return disnake.Embed(description="\n".join(lines), color=color)
 
 
+_UPGRADE_MODE_OPTIONS = [
+    disnake.SelectOption(
+        label="標準",
+        value="normal",
+        description="正常強化：消耗全額素材，成功升級，失敗保底+1",
+    ),
+    disnake.SelectOption(
+        label="墊檔",
+        value="buffer",
+        description="消耗一半素材，直接獲得一個保底計數，不進行強化",
+    ),
+    disnake.SelectOption(
+        label="鐵齒",
+        value="risky",
+        description="消耗 1 顆素材進行強化，失敗時保底計數歸零",
+    ),
+]
+
+
 def build_gear_components(
     gear_type: str,
+    mode: str,
     can_attempt: bool,
     player_gear: dict,
     gear_cap: int,
@@ -397,6 +427,17 @@ def build_gear_components(
         )
         for g in ("gathering", "building", "combat", "research")
     ]
+
+    mode_options = [
+        disnake.SelectOption(
+            label=opt.label,
+            value=opt.value,
+            description=opt.description,
+            default=(opt.value == mode),
+        )
+        for opt in _UPGRADE_MODE_OPTIONS
+    ]
+
     return [
         disnake.ui.ActionRow(
             disnake.ui.StringSelect(
@@ -406,10 +447,17 @@ def build_gear_components(
             )
         ),
         disnake.ui.ActionRow(
+            disnake.ui.StringSelect(
+                custom_id="upgrade_mode_select",
+                placeholder="選擇強化模式...",
+                options=mode_options,
+            )
+        ),
+        disnake.ui.ActionRow(
             disnake.ui.Button(
                 label="🎲 強化",
                 style=disnake.ButtonStyle.success,
-                custom_id=f"attempt_upgrade:{gear_type}",
+                custom_id=f"attempt_upgrade:{gear_type}:{mode}",
                 disabled=not can_attempt,
             ),
             disnake.ui.Button(

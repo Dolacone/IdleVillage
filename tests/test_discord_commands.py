@@ -533,7 +533,7 @@ class TestRendererGearComponents(unittest.TestCase):
         from cogs.ui_renderer import build_gear_components
 
         player_gear = {"gathering": 1, "building": 0, "combat": 2, "research": 1}
-        rows = build_gear_components("combat", True, player_gear, gear_cap=5)
+        rows = build_gear_components("combat", "normal", True, player_gear, gear_cap=5)
         gear_select = rows[0].children[0]
         descriptions = {option.value: option.description for option in gear_select.options}
 
@@ -545,7 +545,7 @@ class TestRendererGearComponents(unittest.TestCase):
         from cogs.ui_renderer import build_gear_components
 
         player_gear = {"gathering": 3, "building": 1, "combat": 0, "research": 2}
-        rows = build_gear_components("gathering", False, player_gear, gear_cap=3)
+        rows = build_gear_components("gathering", "normal", False, player_gear, gear_cap=3)
         gear_select = rows[0].children[0]
         descriptions = {option.value: option.description for option in gear_select.options}
 

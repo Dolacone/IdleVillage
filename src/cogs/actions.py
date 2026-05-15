@@ -19,9 +19,10 @@ from managers import gear_manager, player_manager
 
 _OWN_BUTTONS = frozenset({"burst_execute", "open_gear_upgrade", "back_to_main"})
 _OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:")
-_OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "gear_type_select"})
+_OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "gear_type_select", "upgrade_mode_select"})
 _VALID_GEAR_TYPES = frozenset({"gathering", "building", "combat", "research"})
 _VALID_ACTIONS = frozenset({"gathering", "building", "combat", "research"})
+_VALID_UPGRADE_MODES = frozenset(gear_manager.UPGRADE_MODES)
 
 
 def _is_own_button(cid: str) -> bool:
@@ -115,12 +116,12 @@ class ActionsCog(commands.Cog):
         await inter.edit_original_response(embed=embed, components=components)
 
     async def _render_gear(
-        self, inter, gear_type: str, *, result: dict | None = None
+        self, inter, gear_type: str, *, mode: str = "normal", result: dict | None = None
     ) -> None:
         user_id = str(inter.user.id)
         now = datetime.now(timezone.utc)
         async with get_connection() as db:
-            upgrade_info = await gear_manager.get_upgrade_info(db, user_id, gear_type, now)
+            upgrade_info = await gear_manager.get_upgrade_info(db, user_id, gear_type, now, mode=mode)
             async with db.execute(
                 """SELECT gear_gathering, gear_building, gear_combat, gear_research
                    FROM players WHERE user_id=?""",
@@ -145,7 +146,7 @@ class ActionsCog(commands.Cog):
 
         embed = build_gear_embed(upgrade_info, gear_type, result)
         components = build_gear_components(
-            gear_type, upgrade_info["can_attempt"], player_gear, upgrade_info["gear_cap"]
+            gear_type, mode, upgrade_info["can_attempt"], player_gear, upgrade_info["gear_cap"]
         )
         await inter.edit_original_response(embed=embed, components=components)
 
@@ -206,15 +207,17 @@ class ActionsCog(commands.Cog):
             await self._render_main(inter)
 
         elif cid.startswith("attempt_upgrade:"):
-            gear_type = cid.split(":", 1)[1]
-            if gear_type not in _VALID_GEAR_TYPES:
+            parts = cid.split(":")
+            gear_type = parts[1] if len(parts) > 1 else ""
+            mode = parts[2] if len(parts) > 2 else "normal"
+            if gear_type not in _VALID_GEAR_TYPES or mode not in _VALID_UPGRADE_MODES:
                 return
             await inter.response.defer()
             now = datetime.now(timezone.utc)
             result: dict | None = None
             try:
                 async with get_connection() as db:
-                    result = await gear_manager.attempt_upgrade(db, user_id, gear_type, now)
+                    result = await gear_manager.attempt_upgrade(db, user_id, gear_type, now, mode=mode)
                     await db.commit()
             except ValueError as exc:
                 result = {"success": False, "new_level": 0, "rate": 0.0, "error": str(exc)}
@@ -238,7 +241,7 @@ class ActionsCog(commands.Cog):
                         "failure_count": result.get("pity_after", 0),
                     }
                 await notification.dispatch_events(self.bot, [gear_event])
-            await self._render_gear(inter, gear_type, result=result)
+            await self._render_gear(inter, gear_type, mode=mode, result=result)
 
     @commands.Cog.listener("on_dropdown")
     async def on_dropdown(self, inter: disnake.MessageInteraction) -> None:
@@ -258,6 +261,17 @@ class ActionsCog(commands.Cog):
         elif cid == "gear_type_select":
             if value in _VALID_GEAR_TYPES:
                 await self._render_gear(inter, value)
+        elif cid == "upgrade_mode_select":
+            gear_type = inter.message.components[0].children[0].values[0] if inter.message.components else "gathering"
+            # Re-read gear_type from the gear_type_select dropdown in the current message
+            for action_row in inter.message.components:
+                for component in action_row.children:
+                    if getattr(component, "custom_id", None) == "gear_type_select":
+                        selected = [o for o in component.options if o.default]
+                        if selected:
+                            gear_type = selected[0].value
+            if value in _VALID_UPGRADE_MODES and gear_type in _VALID_GEAR_TYPES:
+                await self._render_gear(inter, gear_type, mode=value)
 
 
 def setup(bot: commands.Bot) -> None:
