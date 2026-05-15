@@ -1,6 +1,6 @@
 ---
 title: "Gear Upgrade Modes: 墊檔 and 鐵齒"
-status: Draft
+status: Ready-to-implement
 created: 2026-05-15
 doc_type: change
 last_reviewed: 2026-05-15
@@ -42,6 +42,12 @@ Both modes share the same preconditions as 標準 (gear < cap, AP >= 1, sufficie
 - `get_upgrade_info()`: expose material cost per mode in the preview
 - UI / command layer: let player choose mode when initiating an upgrade
 - Tests for all three modes
+
+## Tasks
+
+- [x] Task 1: Add `mode` parameter to `gear_manager.attempt_upgrade()` and `get_upgrade_info()`
+- [ ] Task 2: Add gear_manager tests for buffer and risky modes
+- [ ] Task 3: Update UI components and command handler to support mode selection
 
 ## Not Doing
 

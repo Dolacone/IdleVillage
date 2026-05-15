@@ -5,6 +5,7 @@ attempt_upgrade() and get_upgrade_info() accept an open aiosqlite connection.
 The caller is responsible for committing the transaction.
 """
 
+import math
 import random
 from datetime import datetime
 
@@ -12,6 +13,7 @@ from core.config import get_env_float, get_env_int
 from managers import building_manager, player_manager
 
 GEAR_TYPES = ("gathering", "building", "combat", "research")
+UPGRADE_MODES = ("normal", "buffer", "risky")
 RATE_PRECISION = 10
 
 
@@ -33,26 +35,39 @@ def _compute_rate(gear_level: int, pity_count: int) -> float:
     return min(1.0, _normalize_rate(base_rate + pity_count * pity_bonus))
 
 
-async def get_upgrade_info(db, user_id: str, gear_type: str, now: datetime) -> dict:
+def _material_cost(target_level: int, mode: str) -> int:
+    """Return material cost for the given upgrade mode and target level."""
+    if mode == "buffer":
+        return max(1, math.ceil(target_level / 2))
+    if mode == "risky":
+        return 1
+    return target_level
+
+
+async def get_upgrade_info(db, user_id: str, gear_type: str, now: datetime, mode: str = "normal") -> dict:
     """
-    Return upgrade preview information for the given gear type.
+    Return upgrade preview information for the given gear type and mode.
 
     Returns a dict with:
       gear_level     — current level
       target_level   — level after a successful upgrade
-      material_cost  — number of materials required (= target_level)
+      material_cost  — number of materials required (mode-dependent)
       rate           — computed success rate (float 0.0–1.0)
       pity           — current pity counter
       ap             — current AP
       can_attempt    — True if all preconditions are met
       gear_cap       — current gear cap (research_lab level)
+      mode           — upgrade mode ("normal" / "buffer" / "risky")
     """
+    if mode not in UPGRADE_MODES:
+        raise ValueError(f"Invalid upgrade mode: {mode!r}")
+
     gear_level = await player_manager.get_gear_level(db, user_id, gear_type)
     gear_cap = await building_manager.get_level(db, "research_lab")
     ap = await player_manager.get_ap(db, user_id, now)
     pity = await player_manager.get_pity(db, user_id, gear_type)
     target_level = gear_level + 1
-    material_cost = target_level
+    material_cost = _material_cost(target_level, mode)
     rate = _compute_rate(gear_level, pity)
 
     from core.formula import ACTION_MATERIAL_COL
@@ -78,25 +93,30 @@ async def get_upgrade_info(db, user_id: str, gear_type: str, now: datetime) -> d
         "can_attempt": can_attempt,
         "gear_cap": gear_cap,
         "materials": materials,
+        "mode": mode,
     }
 
 
-async def attempt_upgrade(db, user_id: str, gear_type: str, now: datetime) -> dict:
+async def attempt_upgrade(db, user_id: str, gear_type: str, now: datetime, mode: str = "normal") -> dict:
     """
     Attempt a gear upgrade for the player.
 
     Preconditions (raises ValueError if unmet):
+      - valid mode ("normal" / "buffer" / "risky")
       - gear_level < research_lab level (gear cap)
       - player has >= 1 AP
-      - player has >= target_level materials of gear_type
+      - player has >= material_cost materials for the chosen mode
 
-    Deducts 1 AP and target_level materials unconditionally (no refund on failure).
-    Rolls against final_rate:
-      - Success: gear_level += 1, pity reset to 0
-      - Failure: pity += 1
+    Modes:
+      normal — spend target_level materials, roll; success: gear+1 pity=0, failure: pity+1
+      buffer — spend ceil(target_level/2) materials, no roll; pity+1 immediately
+      risky  — spend 1 material, roll; success: gear+1 pity=0, failure: pity=0
 
-    Returns {"success": bool, "new_level": int, "rate": float}
+    Returns a result dict with success, new_level, pity_before, pity_after, rate, mode.
     """
+    if mode not in UPGRADE_MODES:
+        raise ValueError(f"Invalid upgrade mode: {mode!r}")
+
     gear_level = await player_manager.get_gear_level(db, user_id, gear_type)
     gear_cap = await building_manager.get_level(db, "research_lab")
 
@@ -108,7 +128,7 @@ async def attempt_upgrade(db, user_id: str, gear_type: str, now: datetime) -> di
         raise ValueError("Insufficient AP")
 
     target_level = gear_level + 1
-    material_cost = target_level
+    material_cost = _material_cost(target_level, mode)
 
     from core.formula import ACTION_MATERIAL_COL
     mat_col = ACTION_MATERIAL_COL[gear_type]
@@ -120,19 +140,35 @@ async def attempt_upgrade(db, user_id: str, gear_type: str, now: datetime) -> di
     if materials < material_cost:
         raise ValueError(f"Insufficient materials: need {material_cost}, have {materials}")
 
-    # Deduct resources (non-refundable)
     await player_manager.spend_ap(db, user_id, 1, now)
     await player_manager.spend_material(db, user_id, gear_type, material_cost, now)
 
-    # Roll
     pity = await player_manager.get_pity(db, user_id, gear_type)
     rate = _compute_rate(gear_level, pity)
+
+    if mode == "buffer":
+        await player_manager.set_pity(db, user_id, gear_type, pity + 1, now)
+        return {
+            "success": False,
+            "new_level": gear_level,
+            "current_level": gear_level,
+            "target_level": target_level,
+            "rate": rate,
+            "pity_before": pity,
+            "pity_after": pity + 1,
+            "mode": mode,
+        }
+
     success = random.random() < rate
 
     if success:
         await player_manager.set_gear_level(db, user_id, gear_type, target_level, now)
         await player_manager.set_pity(db, user_id, gear_type, 0, now)
         new_level = target_level
+        pity_after = 0
+    elif mode == "risky":
+        await player_manager.set_pity(db, user_id, gear_type, 0, now)
+        new_level = gear_level
         pity_after = 0
     else:
         await player_manager.set_pity(db, user_id, gear_type, pity + 1, now)
@@ -147,4 +183,5 @@ async def attempt_upgrade(db, user_id: str, gear_type: str, now: datetime) -> di
         "rate": rate,
         "pity_before": pity,
         "pity_after": pity_after,
+        "mode": mode,
     }
