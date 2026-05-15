@@ -116,6 +116,14 @@ except ImportError:
             self.options = options or []
             self.disabled = disabled
 
+    class _UserSelect:
+        def __init__(self, *, custom_id="", placeholder="", min_values=1, max_values=1, disabled=False):
+            self.custom_id = custom_id
+            self.placeholder = placeholder
+            self.min_values = min_values
+            self.max_values = max_values
+            self.disabled = disabled
+
     class _ActionRow:
         def __init__(self, *children):
             self.children = list(children)
@@ -148,6 +156,7 @@ except ImportError:
     disnake_module.TextInputStyle = _TextInputStyle
     ui_module.Button = _Button
     ui_module.StringSelect = _StringSelect
+    ui_module.UserSelect = _UserSelect
     ui_module.ActionRow = _ActionRow
     ui_module.TextInput = _TextInput
     ui_module.Modal = _Modal

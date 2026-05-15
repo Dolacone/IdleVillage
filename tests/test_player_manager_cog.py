@@ -1,9 +1,12 @@
 """
-tests/test_player_manager_cog.py — unit tests for player manager UI rendering functions.
+tests/test_player_manager_cog.py — unit tests for player manager UI rendering functions
+and PlayerManagerCog slash command / dropdown handler behaviour.
 
 Covers:
   - build_manager_embed(): embed title, fields, and values
   - build_manager_components(): action row structure and custom_id format
+  - PlayerManagerCog.manager(): /idlevillage-manager slash command (no sub-commands)
+  - PlayerManagerCog.on_dropdown(): mgr_player_select handler
 """
 
 import os
@@ -285,6 +288,321 @@ class TestBuildManagerEmbedImport(unittest.TestCase):
     def test_can_import_build_manager_components(self):
         from cogs.ui_renderer import build_manager_components  # noqa: F401
         self.assertTrue(callable(build_manager_components))
+
+
+class TestPlayerManagerCogSubCommandsRemoved(unittest.TestCase):
+    """Verify that the five old sub-commands no longer exist on PlayerManagerCog."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def test_no_player_view_attribute(self):
+        from cogs.player_manager_cog import PlayerManagerCog
+        self.assertFalse(hasattr(PlayerManagerCog, "player_view"))
+
+    def test_no_player_gear_attribute(self):
+        from cogs.player_manager_cog import PlayerManagerCog
+        self.assertFalse(hasattr(PlayerManagerCog, "player_gear"))
+
+    def test_no_player_material_attribute(self):
+        from cogs.player_manager_cog import PlayerManagerCog
+        self.assertFalse(hasattr(PlayerManagerCog, "player_material"))
+
+    def test_no_player_pity_attribute(self):
+        from cogs.player_manager_cog import PlayerManagerCog
+        self.assertFalse(hasattr(PlayerManagerCog, "player_pity"))
+
+    def test_no_player_risky_attribute(self):
+        from cogs.player_manager_cog import PlayerManagerCog
+        self.assertFalse(hasattr(PlayerManagerCog, "player_risky"))
+
+
+class TestPlayerManagerCogSlashCommand(unittest.IsolatedAsyncioTestCase):
+    """/idlevillage-manager slash command sends ephemeral UserSelect."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def _make_cog(self):
+        import unittest.mock as mock
+        from cogs.player_manager_cog import PlayerManagerCog
+        bot = mock.MagicMock()
+        return PlayerManagerCog(bot)
+
+    def _make_inter(self, *, guild_id=None, user_id=None, is_admin=True):
+        import unittest.mock as mock
+        guild_id = guild_id or ALL_TEST_ENV["DISCORD_GUILD_ID"]
+        user_id = user_id or ALL_TEST_ENV["ADMIN_IDS"]
+        inter = mock.AsyncMock()
+        inter.guild_id = int(guild_id)
+        inter.user.id = int(user_id)
+        inter.response.defer = mock.AsyncMock()
+        inter.response.send_message = mock.AsyncMock()
+        inter.edit_original_response = mock.AsyncMock()
+        return inter
+
+    async def _call_manager(self, cog, inter):
+        """Call the manager callback directly, bypassing disnake's command wrapper."""
+        from cogs.player_manager_cog import PlayerManagerCog
+        await PlayerManagerCog.manager.callback(cog, inter)
+
+    async def test_manager_command_exists_and_is_callable(self):
+        cog = self._make_cog()
+        self.assertTrue(callable(cog.manager))
+
+    async def test_manager_wrong_guild_sends_guild_error(self):
+        cog = self._make_cog()
+        inter = self._make_inter(guild_id="999999999999999999")
+        await self._call_manager(cog, inter)
+        inter.response.send_message.assert_awaited_once()
+        args, kwargs = inter.response.send_message.call_args
+        self.assertTrue(kwargs.get("ephemeral", False))
+        self.assertIn("伺服器", args[0])
+
+    async def test_manager_non_admin_sends_admin_error(self):
+        cog = self._make_cog()
+        inter = self._make_inter(user_id="999999999999999999")
+        await self._call_manager(cog, inter)
+        inter.response.send_message.assert_awaited_once()
+        args, kwargs = inter.response.send_message.call_args
+        self.assertTrue(kwargs.get("ephemeral", False))
+        self.assertIn("管理員", args[0])
+
+    async def test_manager_defers_ephemeral_on_success(self):
+        cog = self._make_cog()
+        inter = self._make_inter()
+        await self._call_manager(cog, inter)
+        inter.response.defer.assert_awaited_once_with(ephemeral=True)
+
+    async def test_manager_sends_user_select_component(self):
+        import disnake
+        cog = self._make_cog()
+        inter = self._make_inter()
+        await self._call_manager(cog, inter)
+        inter.edit_original_response.assert_awaited_once()
+        _, kwargs = inter.edit_original_response.call_args
+        components = kwargs.get("components", [])
+        self.assertTrue(len(components) > 0, "Should have at least one component row")
+        row = components[0]
+        self.assertIsInstance(row, disnake.ui.ActionRow)
+        self.assertEqual(len(row.children), 1)
+        user_select = row.children[0]
+        self.assertEqual(user_select.custom_id, "mgr_player_select")
+        self.assertIsInstance(user_select, disnake.ui.UserSelect)
+
+    async def test_manager_content_is_player_select_prompt(self):
+        cog = self._make_cog()
+        inter = self._make_inter()
+        await self._call_manager(cog, inter)
+        _, kwargs = inter.edit_original_response.call_args
+        self.assertIn("選擇", kwargs.get("content", ""))
+
+
+class TestPlayerManagerCogOnDropdown(unittest.IsolatedAsyncioTestCase):
+    """mgr_player_select dropdown handler."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def _make_cog(self):
+        import unittest.mock as mock
+        from cogs.player_manager_cog import PlayerManagerCog
+        bot = mock.MagicMock()
+        return PlayerManagerCog(bot)
+
+    def _make_inter(self, *, guild_id=None, user_id=None, custom_id="mgr_player_select", values=None):
+        import unittest.mock as mock
+        guild_id = guild_id or ALL_TEST_ENV["DISCORD_GUILD_ID"]
+        user_id = user_id or ALL_TEST_ENV["ADMIN_IDS"]
+        inter = mock.AsyncMock()
+        inter.guild_id = int(guild_id)
+        inter.user.id = int(user_id)
+        inter.data = mock.MagicMock()
+        inter.data.custom_id = custom_id
+        inter.values = values or ["123456789"]
+        inter.guild = mock.MagicMock()
+        inter.guild.get_member.return_value = None
+        inter.response.defer = mock.AsyncMock()
+        inter.response.send_message = mock.AsyncMock()
+        inter.edit_original_response = mock.AsyncMock()
+        return inter
+
+    async def test_ignores_non_mgr_player_select_custom_id(self):
+        cog = self._make_cog()
+        inter = self._make_inter(custom_id="other_dropdown")
+        await cog.on_dropdown(inter)
+        inter.response.defer.assert_not_awaited()
+        inter.edit_original_response.assert_not_awaited()
+
+    async def test_wrong_guild_sends_guild_error(self):
+        cog = self._make_cog()
+        inter = self._make_inter(guild_id="999999999999999999")
+        await cog.on_dropdown(inter)
+        inter.response.send_message.assert_awaited_once()
+        args, kwargs = inter.response.send_message.call_args
+        self.assertIn("伺服器", args[0])
+
+    async def test_non_admin_sends_admin_error(self):
+        cog = self._make_cog()
+        inter = self._make_inter(user_id="999999999999999999")
+        await cog.on_dropdown(inter)
+        inter.response.send_message.assert_awaited_once()
+        args, kwargs = inter.response.send_message.call_args
+        self.assertIn("管理員", args[0])
+
+    async def test_player_not_found_returns_not_joined_message(self):
+        import unittest.mock as mock
+        from tests.support import DatabaseTestCase
+
+        # Use a real DB so the SELECT returns None
+        class _DBTest(DatabaseTestCase):
+            pass
+
+        tc = _DBTest()
+        await tc.asyncSetUp()
+        try:
+            cog = self._make_cog()
+            inter = self._make_inter(values=["nonexistent_user_999"])
+            await cog.on_dropdown(inter)
+            inter.edit_original_response.assert_awaited_once()
+            _, kwargs = inter.edit_original_response.call_args
+            content = kwargs.get("content", "")
+            self.assertIn("尚未加入遊戲", content)
+        finally:
+            await tc.asyncTearDown()
+
+    async def test_player_found_calls_edit_with_embed_and_components(self):
+        import disnake
+        import unittest.mock as mock
+        from tests.support import DatabaseTestCase
+        from database.schema import get_connection
+
+        tc = DatabaseTestCase()
+        await tc.asyncSetUp()
+        try:
+            # Insert a player row
+            target_uid = "777888999"
+            ts = "2026-01-01T00:00:00+00:00"
+            async with get_connection() as db:
+                await db.execute(
+                    "INSERT INTO players (user_id, created_at, updated_at, ap_full_time, "
+                    "gear_gathering, gear_building, gear_combat, gear_research, "
+                    "materials_gathering, materials_building, materials_combat, materials_research, "
+                    "pity_gathering, pity_building, pity_combat, pity_research, risky_failed_levels) "
+                    "VALUES (?, ?, ?, ?, 1, 2, 3, 4, 10, 20, 30, 40, 0, 1, 2, 3, 5)",
+                    (target_uid, ts, ts, ts),
+                )
+                await db.commit()
+
+            cog = self._make_cog()
+            inter = self._make_inter(values=[target_uid])
+            await cog.on_dropdown(inter)
+
+            inter.edit_original_response.assert_awaited_once()
+            _, kwargs = inter.edit_original_response.call_args
+            embed = kwargs.get("embed")
+            components = kwargs.get("components")
+            self.assertIsNotNone(embed)
+            self.assertIsNotNone(components)
+            self.assertIsInstance(embed, disnake.Embed)
+            self.assertIsInstance(components, list)
+            self.assertTrue(len(components) > 0)
+
+            # Verify embed fields contain the actual DB values (1/2/3/4 gear, 10/20/30/40 mat, etc.)
+            def get_field_value(fields, name_fragment):
+                for f in fields:
+                    fname = f["name"] if isinstance(f, dict) else f.name
+                    if name_fragment in fname:
+                        return f["value"] if isinstance(f, dict) else f.value
+                return None
+
+            gear_val = get_field_value(embed.fields, "工具等級")
+            self.assertIsNotNone(gear_val)
+            for expected in ["採集 1", "建設 2", "戰鬥 3", "研究 4"]:
+                self.assertIn(expected, gear_val)
+
+            mat_val = get_field_value(embed.fields, "素材")
+            self.assertIsNotNone(mat_val)
+            for expected in ["採集 10", "建設 20", "戰鬥 30", "研究 40"]:
+                self.assertIn(expected, mat_val)
+
+            risky_val = get_field_value(embed.fields, "鐵齒")
+            self.assertIsNotNone(risky_val)
+            self.assertIn("5", risky_val)
+
+            # Verify components use the correct target_user_id
+            all_custom_ids = [btn.custom_id for btn in components[0].children]
+            for cid in all_custom_ids:
+                self.assertIn(target_uid, cid)
+        finally:
+            await tc.asyncTearDown()
+
+    async def test_player_found_embed_has_correct_title(self):
+        import unittest.mock as mock
+        from tests.support import DatabaseTestCase
+        from database.schema import get_connection
+
+        tc = DatabaseTestCase()
+        await tc.asyncSetUp()
+        try:
+            target_uid = "555444333"
+            ts = "2026-01-01T00:00:00+00:00"
+            async with get_connection() as db:
+                await db.execute(
+                    "INSERT INTO players (user_id, created_at, updated_at, ap_full_time) "
+                    "VALUES (?, ?, ?, ?)",
+                    (target_uid, ts, ts, ts),
+                )
+                await db.commit()
+
+            cog = self._make_cog()
+            inter = self._make_inter(values=[target_uid])
+            # Simulate guild member lookup returning a member with a display_name
+            mock_member = mock.MagicMock()
+            mock_member.display_name = "TestPlayer"
+            inter.guild.get_member.return_value = mock_member
+
+            await cog.on_dropdown(inter)
+
+            _, kwargs = inter.edit_original_response.call_args
+            embed = kwargs.get("embed")
+            self.assertIn("TestPlayer", embed.title)
+            self.assertIn("玩家管理", embed.title)
+        finally:
+            await tc.asyncTearDown()
+
+    async def test_player_found_components_contain_user_id(self):
+        import unittest.mock as mock
+        from tests.support import DatabaseTestCase
+        from database.schema import get_connection
+
+        tc = DatabaseTestCase()
+        await tc.asyncSetUp()
+        try:
+            target_uid = "111333555"
+            ts = "2026-01-01T00:00:00+00:00"
+            async with get_connection() as db:
+                await db.execute(
+                    "INSERT INTO players (user_id, created_at, updated_at, ap_full_time) "
+                    "VALUES (?, ?, ?, ?)",
+                    (target_uid, ts, ts, ts),
+                )
+                await db.commit()
+
+            cog = self._make_cog()
+            inter = self._make_inter(values=[target_uid])
+            await cog.on_dropdown(inter)
+
+            _, kwargs = inter.edit_original_response.call_args
+            components = kwargs.get("components", [])
+            all_custom_ids = [btn.custom_id for btn in components[0].children]
+            for cid in all_custom_ids:
+                self.assertIn(target_uid, cid)
+        finally:
+            await tc.asyncTearDown()
 
 
 if __name__ == "__main__":
