@@ -27,7 +27,7 @@ source_paths:
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `normal` | 標準 | 目標等級個（升至 n 級消耗 n 個） | 是 | gear +1，pity 歸零 | pity +1 |
 | `buffer` | 墊檔 | ceil(目標等級 / 2)，最少 1 個 | 否 | — | pity +1（保證觸發） |
-| `risky` | 鐵齒 | 1 個 | 是 | gear +1~+3（pity=0 時隨機），pity 歸零 | pity 歸零（失去所有累積保底）；`risky_failed_levels` += 當前等級 |
+| `risky` | 鐵齒 | 1 個 | 是 | gear +1~+3（pity=0 時隨機），pity 歸零 | gear 歸零、pity 歸零；`risky_failed_levels` += 當前等級 |
 
 三種模式共用相同前置條件：gear_level < research_institute_level、AP >= 1、素材 >= 該模式消耗量。
 失敗時 AP 與素材**全部消耗，不退還**。
@@ -90,6 +90,7 @@ final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS + risky_failed_
          gear_level += level_gain, pity = 0
        失敗：
          risky_failed_levels += current_level（強化前等級）
+         gear_level = 0（工具等級歸零）
          pity = 0（失去所有累積保底）
 
      注意：研究所等級上限僅在前置檢查時驗證，不截斷多段升級結果。

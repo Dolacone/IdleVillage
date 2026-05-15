@@ -1,6 +1,6 @@
 ---
 title: "鐵齒模式強化：永久保底與多段升級"
-status: Issues-confirmed
+status: Ready-to-review
 created: 2026-05-15
 doc_type: change
 last_reviewed: 2026-05-15
@@ -57,4 +57,4 @@ scope: "Tracks this change from design through review."
 
 ## Review Issues
 
-- [ ] Important: 鐵齒失敗不應重設工具等級。`docs/managers/gear-manager.md` 的鐵齒失敗流程只要求 `risky_failed_levels += current_level` 與 `pity = 0`，但 `src/managers/gear_manager.py` 目前在失敗時呼叫 `set_gear_level(..., 0, ...)` 並回傳 `new_level = 0`。`tests/test_gear_manager.py` 也用 `test_risky_failure_resets_gear_level_to_zero` 鎖住這個與規格不符的行為。
+- [x] Important: 鐵齒失敗不應重設工具等級。`docs/managers/gear-manager.md` 的鐵齒失敗流程只要求 `risky_failed_levels += current_level` 與 `pity = 0`，但 `src/managers/gear_manager.py` 目前在失敗時呼叫 `set_gear_level(..., 0, ...)` 並回傳 `new_level = 0`。`tests/test_gear_manager.py` 也用 `test_risky_failure_resets_gear_level_to_zero` 鎖住這個與規格不符的行為。
