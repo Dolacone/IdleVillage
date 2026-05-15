@@ -4,7 +4,7 @@ import disnake
 from disnake.ext import commands
 
 from core.config import get_discord_guild_id, is_admin
-from core.formula import ACTION_GEAR_COL, ACTION_MATERIAL_COL, VALID_ACTIONS
+from core.formula import ACTION_MATERIAL_COL, VALID_ACTIONS
 from database.schema import get_connection
 from managers import player_manager
 

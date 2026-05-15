@@ -72,4 +72,4 @@ scope: "Tracks this change from design through review."
 
 ## Review Issues
 
-- [ ] Issue 1: `src/cogs/player_manager_cog.py` L7 — `ACTION_GEAR_COL` 被 import 但從未使用（gear level 讀寫全由 `player_manager` 內部處理），應移除。
+- [x] Issue 1: `src/cogs/player_manager_cog.py` L7 — `ACTION_GEAR_COL` 被 import 但從未使用（gear level 讀寫全由 `player_manager` 內部處理），應移除。
