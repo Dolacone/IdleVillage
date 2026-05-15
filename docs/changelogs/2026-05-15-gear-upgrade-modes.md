@@ -46,7 +46,7 @@ Both modes share the same preconditions as 標準 (gear < cap, AP >= 1, sufficie
 ## Tasks
 
 - [x] Task 1: Add `mode` parameter to `gear_manager.attempt_upgrade()` and `get_upgrade_info()`
-- [ ] Task 2: Add gear_manager tests for buffer and risky modes
+- [x] Task 2: Add gear_manager tests for buffer and risky modes
 - [ ] Task 3: Update UI components and command handler to support mode selection
 
 ## Not Doing

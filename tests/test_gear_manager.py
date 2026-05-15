@@ -146,6 +146,24 @@ class TestGetUpgradeInfo(DatabaseTestCase):
             info = await gear_manager.get_upgrade_info(db, USER, "gathering", NOW)
         self.assertEqual(info["material_cost"], info["target_level"])
 
+    async def test_buffer_mode_material_cost_is_half(self):
+        async with schema.get_connection() as db:
+            info = await gear_manager.get_upgrade_info(db, USER, "gathering", NOW, mode="buffer")
+        import math
+        self.assertEqual(info["material_cost"], math.ceil(info["target_level"] / 2))
+        self.assertEqual(info["mode"], "buffer")
+
+    async def test_risky_mode_material_cost_is_one(self):
+        async with schema.get_connection() as db:
+            info = await gear_manager.get_upgrade_info(db, USER, "gathering", NOW, mode="risky")
+        self.assertEqual(info["material_cost"], 1)
+        self.assertEqual(info["mode"], "risky")
+
+    async def test_invalid_mode_raises(self):
+        async with schema.get_connection() as db:
+            with self.assertRaises(ValueError):
+                await gear_manager.get_upgrade_info(db, USER, "gathering", NOW, mode="invalid")
+
     async def test_gear_cap_matches_research_lab_level(self):
         async with schema.get_connection() as db:
             info = await gear_manager.get_upgrade_info(db, USER, "gathering", NOW)
@@ -353,6 +371,155 @@ class TestAttemptUpgrade(DatabaseTestCase):
                     result = await gear_manager.attempt_upgrade(db, uid, gear_type, NOW)
                     await db.commit()
             self.assertTrue(result["success"], f"Expected success for gear_type={gear_type}")
+
+    async def test_invalid_mode_raises(self):
+        async with schema.get_connection() as db:
+            with self.assertRaises(ValueError):
+                await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="invalid")
+
+
+class TestBufferMode(DatabaseTestCase):
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        async with schema.get_connection() as db:
+            await _insert_player(db, USER, "gathering", gear_level=2, materials=10, pity=1)
+            await _set_research_lab_level(db, 10)
+
+    async def test_buffer_increments_pity(self):
+        async with schema.get_connection() as db:
+            result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="buffer")
+            await db.commit()
+        self.assertEqual(result["pity_before"], 1)
+        self.assertEqual(result["pity_after"], 2)
+        row = await self.fetchone(
+            "SELECT pity_gathering FROM players WHERE user_id=?", (USER,)
+        )
+        self.assertEqual(row[0], 2)
+
+    async def test_buffer_does_not_change_gear_level(self):
+        async with schema.get_connection() as db:
+            result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="buffer")
+            await db.commit()
+        self.assertEqual(result["new_level"], 2)
+        self.assertFalse(result["success"])
+
+    async def test_buffer_deducts_half_materials(self):
+        # gear_level=2 → target_level=3 → buffer cost = ceil(3/2) = 2
+        async with schema.get_connection() as db:
+            await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="buffer")
+            await db.commit()
+        row = await self.fetchone(
+            "SELECT materials_gathering FROM players WHERE user_id=?", (USER,)
+        )
+        self.assertEqual(row[0], 8)  # 10 - 2
+
+    async def test_buffer_deducts_ap(self):
+        async with schema.get_connection() as db:
+            before_ap = await player_manager.get_ap(db, USER, NOW)
+            await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="buffer")
+            await db.commit()
+            after_ap = await player_manager.get_ap(db, USER, NOW)
+        self.assertEqual(after_ap, before_ap - 1)
+
+    async def test_buffer_result_has_mode_field(self):
+        async with schema.get_connection() as db:
+            result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="buffer")
+            await db.commit()
+        self.assertEqual(result["mode"], "buffer")
+
+    async def test_buffer_minimum_cost_is_one(self):
+        # gear_level=0 → target_level=1 → ceil(1/2) = 1
+        async with schema.get_connection() as db:
+            await _insert_player(db, "user_min", "gathering", gear_level=0, materials=5, pity=0)
+            await db.commit()
+        async with schema.get_connection() as db:
+            result = await gear_manager.attempt_upgrade(db, "user_min", "gathering", NOW, mode="buffer")
+            await db.commit()
+        row = await self.fetchone(
+            "SELECT materials_gathering FROM players WHERE user_id=?", ("user_min",)
+        )
+        self.assertEqual(row[0], 4)  # 5 - 1
+
+
+class TestRiskyMode(DatabaseTestCase):
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        async with schema.get_connection() as db:
+            await _insert_player(db, USER, "gathering", gear_level=5, materials=10, pity=3)
+            await _set_research_lab_level(db, 10)
+
+    async def test_risky_success_increases_gear_level(self):
+        with patch("managers.gear_manager.random.random", return_value=0.0):
+            async with schema.get_connection() as db:
+                result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="risky")
+                await db.commit()
+        self.assertTrue(result["success"])
+        self.assertEqual(result["new_level"], 6)
+
+    async def test_risky_success_resets_pity(self):
+        with patch("managers.gear_manager.random.random", return_value=0.0):
+            async with schema.get_connection() as db:
+                await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="risky")
+                await db.commit()
+        row = await self.fetchone(
+            "SELECT pity_gathering FROM players WHERE user_id=?", (USER,)
+        )
+        self.assertEqual(row[0], 0)
+
+    async def test_risky_failure_resets_pity_to_zero(self):
+        with patch("managers.gear_manager.random.random", return_value=0.9999):
+            async with schema.get_connection() as db:
+                result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="risky")
+                await db.commit()
+        self.assertFalse(result["success"])
+        self.assertEqual(result["pity_after"], 0)
+        row = await self.fetchone(
+            "SELECT pity_gathering FROM players WHERE user_id=?", (USER,)
+        )
+        self.assertEqual(row[0], 0)
+
+    async def test_risky_failure_does_not_change_gear_level(self):
+        with patch("managers.gear_manager.random.random", return_value=0.9999):
+            async with schema.get_connection() as db:
+                result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="risky")
+                await db.commit()
+        self.assertEqual(result["new_level"], 5)
+
+    async def test_risky_deducts_one_material(self):
+        with patch("managers.gear_manager.random.random", return_value=0.9999):
+            async with schema.get_connection() as db:
+                await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="risky")
+                await db.commit()
+        row = await self.fetchone(
+            "SELECT materials_gathering FROM players WHERE user_id=?", (USER,)
+        )
+        self.assertEqual(row[0], 9)  # 10 - 1
+
+    async def test_risky_deducts_ap(self):
+        with patch("managers.gear_manager.random.random", return_value=0.0):
+            async with schema.get_connection() as db:
+                before_ap = await player_manager.get_ap(db, USER, NOW)
+                await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="risky")
+                await db.commit()
+                after_ap = await player_manager.get_ap(db, USER, NOW)
+        self.assertEqual(after_ap, before_ap - 1)
+
+    async def test_risky_result_has_mode_field(self):
+        with patch("managers.gear_manager.random.random", return_value=0.0):
+            async with schema.get_connection() as db:
+                result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="risky")
+                await db.commit()
+        self.assertEqual(result["mode"], "risky")
+
+    async def test_risky_raises_when_no_materials(self):
+        async with schema.get_connection() as db:
+            await db.execute(
+                "UPDATE players SET materials_gathering=0 WHERE user_id=?", (USER,)
+            )
+            await db.commit()
+        async with schema.get_connection() as db:
+            with self.assertRaises(ValueError):
+                await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="risky")
 
 
 if __name__ == "__main__":
