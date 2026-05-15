@@ -1,7 +1,7 @@
 ---
 title: "Module: ui-renderer"
 doc_type: module
-last_reviewed: 2026-05-06
+last_reviewed: 2026-05-15
 source_paths:
   - src/cogs/ui_renderer.py
 ---
@@ -130,6 +130,7 @@ Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
 🔨 工具強化
 ─────────────────────────────
 選擇工具：[Dropdown]
+選擇強化模式：[Dropdown: 標準 / 墊檔 / 鐵齒]
 
 {gear_name}：Lv{current} → Lv{target}
 成功率：{base_rate}%（+{pity×5}% 保底）= {final_rate}%
@@ -138,6 +139,8 @@ Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
 工具等級上限：Lv{cap}（研究所 Lv{n}）
 ```
 
+墊檔模式下成功率欄位顯示 `0%`（不擲骰），消耗量依墊檔公式計算。
+
 成功率顯示必須和 managers/gear-manager.md 的成功率計算一致。若設定值代表整數百分比，
 UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL=0.10`
 時，Lv6、保底 0 的顯示為 `成功率：40%（+0×5% 保底）= 40%`。
@@ -145,6 +148,11 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 工具類型 Dropdown 每個選項附帶描述：
 - 未達上限：`Lv{n} → Lv{n+1}: {action_label}產出 +{n×pct}% → +{(n+1)×pct}%`（pct = floor(GEAR_BONUS_PER_LEVEL × 100)）
 - 已達上限：`已達等級上限 Lv{cap}`
+
+強化模式 Dropdown（custom_id: `upgrade_mode_select:{gear_type}`）每個選項附帶描述：
+- 標準：`正常消耗，失敗 pity+1`
+- 墊檔：`半價素材，必定 pity+1，無需擲骰`
+- 鐵齒：`僅消耗 1 個素材，失敗則 pity 歸零`
 
 - **Button**：`🎲 強化`（Green，禁用條件：素材不足 / AP 不足 / 已達上限）
 - **Button**：`← 返回`（Gray）
@@ -170,4 +178,5 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 - 2026.05.06.01: Official user-facing gear naming changed to tools:
   dashboard line `🏅 工具`, button `🔨 強化工具`, and full names
   採集工具, 建設工具, 狩獵工具, 研究工具.
+- 2026.05.15: Added mode selection dropdown (`upgrade_mode_select:{gear_type}`) to the gear upgrade sub-menu. Mode descriptions shown inline. Buffer mode displays 0% success rate.
 - 2026.05.06.00: Gear upgrade success-rate display must match gear-manager precision semantics. Lv6 with no pity displays 40%, not 39%.

@@ -1,7 +1,7 @@
 ---
 title: "Module: command-handler"
 doc_type: module
-last_reviewed: 2026-05-06
+last_reviewed: 2026-05-15
 source_paths:
   - src/cogs/actions.py
   - src/cogs/general.py
@@ -35,8 +35,9 @@ source_paths:
 ### 工具強化子選單
 | 元件 ID | 觸發條件 | 處理邏輯 |
 | :--- | :--- | :--- |
-| `gear_type_select` | 選擇工具類型 | 更新強化預覽資訊 |
-| `attempt_upgrade` | 點擊強化 | 呼叫 `gear-manager.attemptUpgrade()`，顯示結果 |
+| `gear_type_select` | 選擇工具類型 | 更新強化預覽資訊（保留當前模式） |
+| `upgrade_mode_select:{gear_type}` | 選擇強化模式（標準 / 墊檔 / 鐵齒） | 更新成本預覽與成功率顯示 |
+| `attempt_upgrade:{gear_type}:{mode}` | 點擊強化 | 呼叫 `gear-manager.attempt_upgrade(db, user_id, gear_type, now, mode)`，顯示結果 |
 | `back_to_main` | 點擊返回 | 重新渲染主介面 |
 
 ### 管理員介面
@@ -56,6 +57,7 @@ source_paths:
 
 ## Changelog
 
+- 2026.05.15: Added `upgrade_mode_select:{gear_type}` interaction route for mode selection. `attempt_upgrade` custom_id now encodes gear_type and mode as `attempt_upgrade:{gear_type}:{mode}`.
 - 2026.05.06.01: Official user-facing gear naming changed to tools; command
   handler copy now uses 工具強化 and 工具類型.
 - 2026.05.02.00: Removed `/idlevillage-help` command. Removed `refresh` interaction route.

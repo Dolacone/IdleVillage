@@ -1,7 +1,7 @@
 ---
 title: "Module: gear-manager"
 doc_type: module
-last_reviewed: 2026-05-06
+last_reviewed: 2026-05-15
 source_paths:
   - src/managers/gear_manager.py
 ---
@@ -19,13 +19,24 @@ source_paths:
 | 狩獵工具 | 戰鬥 | 武器素材 | 戰鬥效率 +GEAR_BONUS_PER_LEVEL/級 |
 | 研究工具 | 研究 | 研究素材 | 研究效率 +GEAR_BONUS_PER_LEVEL/級 |
 
-## 強化消耗
+## 強化模式
 
-每次強化嘗試消耗：
-- **1 AP**
-- **目標等級個素材**（升至 n 級消耗 n 個，例如 Lv4→5 消耗 5 個）
+玩家可在每次強化時選擇三種模式，均消耗 1 AP：
 
+| 模式 | 顯示名稱 | 素材消耗 | 擲骰 | 成功效果 | 失敗效果 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `normal` | 標準 | 目標等級個（升至 n 級消耗 n 個） | 是 | gear +1，pity 歸零 | pity +1 |
+| `buffer` | 墊檔 | ceil(目標等級 / 2)，最少 1 個 | 否 | — | pity +1（保證觸發） |
+| `risky` | 鐵齒 | 1 個 | 是 | gear +1，pity 歸零 | pity 歸零（失去所有累積保底） |
+
+三種模式共用相同前置條件：gear_level < research_institute_level、AP >= 1、素材 >= 該模式消耗量。
 失敗時 AP 與素材**全部消耗，不退還**。
+
+## 強化消耗（依模式）
+
+- **標準**：1 AP + 目標等級個素材（升至 n 級消耗 n 個，例如 Lv4→5 消耗 5 個）
+- **墊檔**：1 AP + ceil(目標等級 / 2) 個素材（最少 1 個）
+- **鐵齒**：1 AP + 1 個素材
 
 ## 成功率計算
 
@@ -47,32 +58,40 @@ final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS)
 1. 前置檢查：
    - gear_level < research_institute_level（不得超過研究所等級上限）
    - player.ap >= 1
-   - player.materials[type] >= target_level
+   - player.materials[type] >= material_cost（依所選模式計算）
 
 2. 扣除資源：
    - AP -= 1
-   - materials[type] -= target_level
+   - materials[type] -= material_cost
 
-3. 計算最終成功率（base_rate + pity × GEAR_PITY_BONUS）
+3. 依模式執行：
 
-4. 擲骰（random integer 1~100）：
-   成功（roll <= final_rate）：
-     → gear_level += 1
-     → pity[type] = 0
-     → 回傳成功結果
+   標準 (normal)：
+     計算 final_rate（base_rate + pity × GEAR_PITY_BONUS）
+     擲骰（random integer 1~100）：
+       成功（roll <= final_rate）：gear_level += 1, pity = 0
+       失敗：pity += 1
 
-   失敗：
-     → pity[type] += 1
-     → 回傳失敗結果
+   墊檔 (buffer)：
+     不擲骰，直接 pity += 1，gear_level 不變
+
+   鐵齒 (risky)：
+     計算 final_rate（base_rate + pity × GEAR_PITY_BONUS）
+     擲骰（random integer 1~100）：
+       成功（roll <= final_rate）：gear_level += 1, pity = 0
+       失敗：pity = 0（失去所有累積保底）
+
+4. 回傳結果（success, new_level, pity_before, pity_after, rate, mode）
 ```
 
 ## 操作介面（供其他模組呼叫）
 
-- `attemptUpgrade(playerId, gearType)` — 執行強化嘗試，回傳 `{success, newLevel, rate}`
-- `getUpgradeInfo(playerId, gearType)` — 回傳強化預覽資訊（成功率、消耗量、保底狀態）
+- `attempt_upgrade(db, user_id, gear_type, now, mode="normal")` — 執行強化嘗試，回傳 `{success, new_level, pity_before, pity_after, rate, mode}`
+- `get_upgrade_info(db, user_id, gear_type, now, mode="normal")` — 回傳強化預覽資訊（成功率、依模式計算的消耗量、保底狀態、模式）
 
 ## Changelog
 
+- 2026.05.15: Added three upgrade modes — 標準 (normal), 墊檔 (buffer), 鐵齒 (risky). Each mode has distinct material cost and pity behavior. `attempt_upgrade()` and `get_upgrade_info()` now accept a `mode` parameter.
 - 2026.05.06.01: Official user-facing gear naming changed to tools:
   採集工具, 建設工具, 狩獵工具, 研究工具.
 - 2026.05.06.00: Defined the gear success-rate precision contract. Decimal

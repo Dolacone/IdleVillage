@@ -72,13 +72,17 @@ Must not change:
 
 ### `incremental-implementation`
 
-For each task or confirmed review fix:
+Spawn one sub agent per task (or confirmed review fix) using `isolation: "worktree"` so every agent works in its own git worktree. Launch all sub agents in a single message so they run in parallel.
+
+Each sub agent must:
 1. Implement the task or fix.
 2. Implement or update relevant test cases in the same change when behavior, configuration, commands, or public interfaces are affected.
 3. Mark the task or issue `[x]` in the change document.
-4. Commit code and change document together, one commit per task or fix.
+4. Commit code and change document together, one commit per task or fix, following the commit message format in Universal Rules.
 
-When all tasks are complete, update status to `Ready-to-review`, then commit.
+After all sub agents complete, merge their worktree branches into the current branch in dependency order (or any order when tasks are independent). Resolve any conflicts before proceeding.
+
+When all tasks are merged, update status to `Ready-to-review`, then commit.
 
 For new Python projects, create Python git ignores before running Python commands that may generate cache files.
 
