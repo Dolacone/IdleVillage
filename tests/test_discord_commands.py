@@ -552,6 +552,92 @@ class TestRendererGearComponents(unittest.TestCase):
         self.assertEqual(descriptions["gathering"], "已達等級上限 Lv3")
 
 
+class TestGearEmbedRiskyLine(unittest.TestCase):
+    """鐵齒等級 line visibility in gear upgrade embed."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def _make_info(self, mode="normal", risky_failed_levels=0, risky_bonus_pct=0.0):
+        from core.config import get_env_float
+        min_rate = get_env_float("GEAR_MIN_SUCCESS_RATE")
+        loss_per = get_env_float("GEAR_RATE_LOSS_PER_LEVEL")
+        pity_bonus = get_env_float("GEAR_PITY_BONUS")
+        gear_level = 3
+        pity = 2
+        base = max(min_rate, 1.0 - gear_level * loss_per)
+        rate = min(1.0, base + pity * pity_bonus)
+        info = {
+            "gear_level": gear_level,
+            "target_level": gear_level + 1,
+            "material_cost": gear_level + 1,
+            "rate": rate,
+            "pity": pity,
+            "ap": 3,
+            "can_attempt": True,
+            "gear_cap": 5,
+            "materials": 5,
+            "mode": mode,
+        }
+        if mode == "risky":
+            info["risky_failed_levels"] = risky_failed_levels
+            info["risky_bonus_pct"] = risky_bonus_pct
+        return info
+
+    def test_risky_line_appears_in_risky_mode(self):
+        from cogs.ui_renderer import build_gear_embed
+        info = self._make_info(mode="risky", risky_failed_levels=5, risky_bonus_pct=0.05)
+        embed = build_gear_embed(info, "gathering")
+        self.assertIn("鐵齒等級: 5 (+0.05%)", embed.description)
+
+    def test_risky_line_not_in_normal_mode(self):
+        from cogs.ui_renderer import build_gear_embed
+        info = self._make_info(mode="normal")
+        embed = build_gear_embed(info, "gathering")
+        self.assertNotIn("鐵齒等級", embed.description)
+
+    def test_risky_line_not_in_buffer_mode(self):
+        from cogs.ui_renderer import build_gear_embed
+        info = self._make_info(mode="buffer")
+        embed = build_gear_embed(info, "gathering")
+        self.assertNotIn("鐵齒等級", embed.description)
+
+    def test_risky_line_zero_failed_levels(self):
+        from cogs.ui_renderer import build_gear_embed
+        info = self._make_info(mode="risky", risky_failed_levels=0, risky_bonus_pct=0.0)
+        embed = build_gear_embed(info, "combat")
+        self.assertIn("鐵齒等級: 0 (+0.0%)", embed.description)
+
+
+class TestRiskyDropdownDescription(unittest.TestCase):
+    """Risky dropdown description reflects updated mechanics."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def test_risky_dropdown_description_updated(self):
+        from cogs.ui_renderer import build_gear_components
+        player_gear = {"gathering": 1, "building": 0, "combat": 1, "research": 0}
+        rows = build_gear_components("gathering", "risky", True, player_gear, gear_cap=5)
+        mode_select = rows[1].children[0]
+        descriptions = {option.value: option.description for option in mode_select.options}
+        self.assertEqual(
+            descriptions["risky"],
+            "僅消耗 1 個素材，失敗則 pity 歸零；成功無保底時 +1~+3",
+        )
+
+    def test_normal_and_buffer_descriptions_unchanged(self):
+        from cogs.ui_renderer import build_gear_components
+        player_gear = {"gathering": 1, "building": 0, "combat": 1, "research": 0}
+        rows = build_gear_components("gathering", "normal", True, player_gear, gear_cap=5)
+        mode_select = rows[1].children[0]
+        descriptions = {option.value: option.description for option in mode_select.options}
+        self.assertIn("正常", descriptions["normal"])
+        self.assertIn("一半素材", descriptions["buffer"])
+
+
 class TestAdminCheck(unittest.TestCase):
     """Admin guard uses ADMIN_IDS from config."""
 
