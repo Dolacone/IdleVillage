@@ -61,7 +61,7 @@ scope: "Tracks this change from design through review."
   - Changelog 補一條記錄本次變更
   - 驗收：文件中不再出現 pity=0 隨機升級的說明
 
-- [ ] Task 3: 更新測試，確認鐵齒成功只有 `level_gain=1`
+- [x] Task 3: 更新測試，確認鐵齒成功只有 `level_gain=1`
   - 移除測試中 pity=0 時 level_gain=2 或 level_gain=3 的斷言或測試案例
   - 確認 pity=0 與 pity>0 的鐵齒成功均斷言 level_gain=1
   - 驗收：所有測試通過，且無任何測試期望 level_gain>1

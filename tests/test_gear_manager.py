@@ -452,7 +452,7 @@ class TestRiskyMode(DatabaseTestCase):
             await _set_research_lab_level(db, 10)
 
     async def test_risky_success_increases_gear_level(self):
-        # pity=3 so level_gain == 1 always (pity > 0 path)
+        # level_gain is always 1 on risky success
         with patch("managers.gear_manager.random.random", return_value=0.0):
             async with schema.get_connection() as db:
                 result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="risky")
@@ -532,7 +532,7 @@ class TestRiskyMode(DatabaseTestCase):
 
 
 class TestRiskyModeEnhancements(DatabaseTestCase):
-    """Tests for risky_failed_levels accumulation, success rate bonus, and multi-level success."""
+    """Tests for risky_failed_levels accumulation and success rate bonus."""
 
     async def asyncSetUp(self):
         await super().asyncSetUp()
@@ -630,13 +630,12 @@ class TestRiskyModeEnhancements(DatabaseTestCase):
         self.assertGreater(info_risky["rate"], info_normal["rate"])
 
     # -------------------------------------------------------------------------
-    # Multi-level success (pity=0 → random gain; pity>0 → +1)
+    # Risky success: level_gain is always 1, regardless of pity state
     # -------------------------------------------------------------------------
 
     async def test_risky_success_pity_zero_level_gain_1(self):
-        """pity=0: random.choices returns +1."""
-        with patch("managers.gear_manager.random.random", return_value=0.0), \
-             patch("managers.gear_manager.random.choices", return_value=[1]):
+        """pity=0: level_gain is always +1."""
+        with patch("managers.gear_manager.random.random", return_value=0.0):
             async with schema.get_connection() as db:
                 result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="risky")
                 await db.commit()
@@ -644,64 +643,20 @@ class TestRiskyModeEnhancements(DatabaseTestCase):
         self.assertEqual(result["level_gain"], 1)
         self.assertEqual(result["new_level"], 6)
 
-    async def test_risky_success_pity_zero_level_gain_2(self):
-        """pity=0: random.choices returns +2."""
-        with patch("managers.gear_manager.random.random", return_value=0.0), \
-             patch("managers.gear_manager.random.choices", return_value=[2]):
-            async with schema.get_connection() as db:
-                result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="risky")
-                await db.commit()
-        self.assertTrue(result["success"])
-        self.assertEqual(result["level_gain"], 2)
-        self.assertEqual(result["new_level"], 7)
-
-    async def test_risky_success_pity_zero_level_gain_3(self):
-        """pity=0: random.choices returns +3."""
-        with patch("managers.gear_manager.random.random", return_value=0.0), \
-             patch("managers.gear_manager.random.choices", return_value=[3]):
-            async with schema.get_connection() as db:
-                result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="risky")
-                await db.commit()
-        self.assertTrue(result["success"])
-        self.assertEqual(result["level_gain"], 3)
-        self.assertEqual(result["new_level"], 8)
-
     async def test_risky_success_pity_positive_level_gain_always_1(self):
-        """pity>0: level_gain is always +1 regardless of random."""
+        """pity>0: level_gain is always +1."""
         async with schema.get_connection() as db:
             await db.execute(
                 "UPDATE players SET pity_gathering=2 WHERE user_id=?", (USER,)
             )
             await db.commit()
-        with patch("managers.gear_manager.random.random", return_value=0.0), \
-             patch("managers.gear_manager.random.choices", return_value=[3]):
+        with patch("managers.gear_manager.random.random", return_value=0.0):
             async with schema.get_connection() as db:
                 result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="risky")
                 await db.commit()
         self.assertTrue(result["success"])
         self.assertEqual(result["level_gain"], 1)
         self.assertEqual(result["new_level"], 6)
-
-    # -------------------------------------------------------------------------
-    # Research institute cap does NOT truncate multi-level result
-    # -------------------------------------------------------------------------
-
-    async def test_risky_multilevel_exceeds_cap_not_truncated(self):
-        """If gear_level=4, cap=5, and level_gain=3, new_level should be 7 (not 5)."""
-        async with schema.get_connection() as db:
-            await db.execute(
-                "UPDATE players SET gear_gathering=4 WHERE user_id=?", (USER,)
-            )
-            await _set_research_lab_level(db, 5)
-            await db.commit()
-        with patch("managers.gear_manager.random.random", return_value=0.0), \
-             patch("managers.gear_manager.random.choices", return_value=[3]):
-            async with schema.get_connection() as db:
-                result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="risky")
-                await db.commit()
-        self.assertTrue(result["success"])
-        self.assertEqual(result["level_gain"], 3)
-        self.assertEqual(result["new_level"], 7)
 
     # -------------------------------------------------------------------------
     # get_upgrade_info() returns risky_failed_levels and risky_bonus_pct
@@ -752,14 +707,13 @@ class TestRiskyModeEnhancements(DatabaseTestCase):
     # -------------------------------------------------------------------------
 
     async def test_attempt_upgrade_returns_level_gain_on_success(self):
-        """attempt_upgrade() result dict includes level_gain on success."""
-        with patch("managers.gear_manager.random.random", return_value=0.0), \
-             patch("managers.gear_manager.random.choices", return_value=[2]):
+        """attempt_upgrade() result dict includes level_gain=1 on risky success."""
+        with patch("managers.gear_manager.random.random", return_value=0.0):
             async with schema.get_connection() as db:
                 result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="risky")
                 await db.commit()
         self.assertIn("level_gain", result)
-        self.assertEqual(result["level_gain"], 2)
+        self.assertEqual(result["level_gain"], 1)
 
     async def test_attempt_upgrade_returns_level_gain_zero_on_failure(self):
         """attempt_upgrade() result dict includes level_gain=0 on failure."""
