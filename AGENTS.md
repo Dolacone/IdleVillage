@@ -36,6 +36,8 @@ When implemented behavior is described, update `source_paths` with repository-re
 
 Creates one change document. Must not touch any existing file.
 
+To understand the current system, read only files under `docs/`. Do not read source code files.
+
 After creating the change document, if it contains any unresolved Key Assumptions (`[ ]`), stop and present each assumption to the user as an explicit question. Do not proceed until all assumptions are confirmed. This overrides the auto-advance rule.
 
 ### `planning-and-task-breakdown`
