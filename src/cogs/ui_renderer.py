@@ -398,7 +398,7 @@ _UPGRADE_MODE_OPTIONS = [
     disnake.SelectOption(
         label="鐵齒",
         value="risky",
-        description="消耗 1 顆素材進行強化，失敗時保底計數歸零",
+        description="消耗 1 顆素材進行強化，失敗時等級與保底計數歸零",
     ),
 ]
 
