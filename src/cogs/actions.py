@@ -19,7 +19,8 @@ from managers import gear_manager, player_manager
 
 _OWN_BUTTONS = frozenset({"burst_execute", "open_gear_upgrade", "back_to_main"})
 _OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:")
-_OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "gear_type_select", "upgrade_mode_select"})
+_OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "gear_type_select"})
+_OWN_DROPDOWN_PREFIXES = ("upgrade_mode_select:",)
 _VALID_GEAR_TYPES = frozenset({"gathering", "building", "combat", "research"})
 _VALID_ACTIONS = frozenset({"gathering", "building", "combat", "research"})
 _VALID_UPGRADE_MODES = frozenset(gear_manager.UPGRADE_MODES)
@@ -27,6 +28,10 @@ _VALID_UPGRADE_MODES = frozenset(gear_manager.UPGRADE_MODES)
 
 def _is_own_button(cid: str) -> bool:
     return cid in _OWN_BUTTONS or any(cid.startswith(p) for p in _OWN_BUTTON_PREFIXES)
+
+
+def _is_own_dropdown(cid: str) -> bool:
+    return cid in _OWN_DROPDOWNS or any(cid.startswith(p) for p in _OWN_DROPDOWN_PREFIXES)
 
 
 class ActionsCog(commands.Cog):
@@ -248,7 +253,7 @@ class ActionsCog(commands.Cog):
         if not self._check_guild(inter):
             return
         cid = inter.component.custom_id
-        if cid not in _OWN_DROPDOWNS:
+        if not _is_own_dropdown(cid):
             return
 
         value = inter.values[0]
@@ -261,15 +266,8 @@ class ActionsCog(commands.Cog):
         elif cid == "gear_type_select":
             if value in _VALID_GEAR_TYPES:
                 await self._render_gear(inter, value)
-        elif cid == "upgrade_mode_select":
-            gear_type = inter.message.components[0].children[0].values[0] if inter.message.components else "gathering"
-            # Re-read gear_type from the gear_type_select dropdown in the current message
-            for action_row in inter.message.components:
-                for component in action_row.children:
-                    if getattr(component, "custom_id", None) == "gear_type_select":
-                        selected = [o for o in component.options if o.default]
-                        if selected:
-                            gear_type = selected[0].value
+        elif cid.startswith("upgrade_mode_select:"):
+            gear_type = cid.split(":", 1)[1]
             if value in _VALID_UPGRADE_MODES and gear_type in _VALID_GEAR_TYPES:
                 await self._render_gear(inter, gear_type, mode=value)
 

@@ -448,7 +448,7 @@ def build_gear_components(
         ),
         disnake.ui.ActionRow(
             disnake.ui.StringSelect(
-                custom_id="upgrade_mode_select",
+                custom_id=f"upgrade_mode_select:{gear_type}",
                 placeholder="選擇強化模式...",
                 options=mode_options,
             )
