@@ -27,7 +27,7 @@ source_paths:
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `normal` | 標準 | 目標等級個（升至 n 級消耗 n 個） | 是 | gear +1，pity 歸零 | pity +1 |
 | `buffer` | 墊檔 | ceil(目標等級 / 2)，最少 1 個 | 否 | — | pity +1（保證觸發） |
-| `risky` | 鐵齒 | 1 個 | 是 | gear +1~+3（pity=0 時隨機），pity 歸零 | gear 歸零、pity 歸零；`risky_failed_levels` += 當前等級 |
+| `risky` | 鐵齒 | 1 個 | 是 | gear +1，pity 歸零 | gear 歸零、pity 歸零；`risky_failed_levels` += 當前等級 |
 
 三種模式共用相同前置條件：gear_level < research_institute_level、AP >= 1、素材 >= 該模式消耗量。
 失敗時 AP 與素材**全部消耗，不退還**。
@@ -85,15 +85,12 @@ final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS + risky_failed_
      計算 final_rate（base_rate + pity × GEAR_PITY_BONUS + risky_failed_levels × 0.0001）
      擲骰（random integer 1~100）：
        成功（roll <= final_rate）：
-         若 pity = 0：level_gain = 隨機選取（+1: 60%, +2: 30%, +3: 10%）
-         否則：level_gain = 1
-         gear_level += level_gain, pity = 0
+         level_gain = 1
+         gear_level += 1, pity = 0
        失敗：
          risky_failed_levels += current_level（強化前等級）
          gear_level = 0（工具等級歸零）
          pity = 0（失去所有累積保底）
-
-     注意：研究所等級上限僅在前置檢查時驗證，不截斷多段升級結果。
 
 4. 回傳結果（success, new_level, level_gain, pity_before, pity_after, rate, mode）
 ```
@@ -105,6 +102,7 @@ final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS + risky_failed_
 
 ## Changelog
 
+- 2026.05.15: Risky mode simplification — removed random multi-level gain on success (was +1/+2/+3 at 60/30/10% when pity=0); success now always grants exactly gear +1 regardless of pity state.
 - 2026.05.15: Risky mode enhancements — permanent `risky_failed_levels` bonus (+0.01% per level), multi-level success (+1/+2/+3 at 60/30/10% when pity=0), research institute cap is precondition-only and does not truncate results.
 - 2026.05.15: Added three upgrade modes — 標準 (normal), 墊檔 (buffer), 鐵齒 (risky). Each mode has distinct material cost and pity behavior. `attempt_upgrade()` and `get_upgrade_info()` now accept a `mode` parameter.
 - 2026.05.06.01: Official user-facing gear naming changed to tools:
