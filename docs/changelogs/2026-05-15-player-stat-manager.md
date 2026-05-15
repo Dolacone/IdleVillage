@@ -60,7 +60,7 @@ scope: "Tracks this change from design through review."
 
 ## Tasks
 
-- [ ] Task 1: 實作 cog、register in main.py、更新 command-handler.md SSOT
+- [x] Task 1: 實作 cog、register in main.py、更新 command-handler.md SSOT
   - 新增 `src/cogs/player_manager_cog.py`：`/idlevillage-manager player-view / player-gear / player-material / player-pity / player-risky`
   - `src/main.py`：`initial_extensions` 加入 `"cogs.player_manager_cog"`
   - `docs/discord/command-handler.md`：補充五個新子指令

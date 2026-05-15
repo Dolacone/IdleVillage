@@ -143,3 +143,24 @@ async def set_pity(
         f"UPDATE players SET {col}=?, updated_at=? WHERE user_id=?",
         (count, dt_str(ts), user_id),
     )
+
+
+async def set_material(
+    db, user_id: str, gear_type: str, amount: int, ts: datetime
+) -> None:
+    """Set the player's material balance for the given gear type to an absolute value."""
+    col = ACTION_MATERIAL_COL[gear_type]
+    await db.execute(
+        f"UPDATE players SET {col}=?, updated_at=? WHERE user_id=?",
+        (amount, dt_str(ts), user_id),
+    )
+
+
+async def set_risky_failed_levels(
+    db, user_id: str, value: int, ts: datetime
+) -> None:
+    """Set the player's risky_failed_levels to an absolute value."""
+    await db.execute(
+        "UPDATE players SET risky_failed_levels=?, updated_at=? WHERE user_id=?",
+        (value, dt_str(ts), user_id),
+    )

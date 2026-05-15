@@ -5,6 +5,7 @@ last_reviewed: 2026-05-15
 source_paths:
   - src/cogs/actions.py
   - src/cogs/general.py
+  - src/cogs/player_manager_cog.py
 ---
 
 # Module: command-handler
@@ -18,6 +19,11 @@ source_paths:
 | `/idlevillage` | 所有玩家 | 先補算到期完整週期，再渲染個人主介面（Ephemeral），呼叫 ui-renderer |
 | `/idlevillage-announcement` | 管理員 | 將當前頻道寫入 `announcement_channel_id`，並發布或刷新村莊公告（Public） |
 | `/idlevillage-manage` | 管理員 | 檢查 Dashboard 訊息是否存在（不存在則在當前頻道發送新的），再開啟資源管理介面（Ephemeral） |
+| `/idlevillage-manager player-view` | 管理員 | 查看指定玩家的所有數據（Ephemeral） |
+| `/idlevillage-manager player-gear` | 管理員 | 設定玩家指定類型的工具等級（絕對值，下限 0）（Ephemeral） |
+| `/idlevillage-manager player-material` | 管理員 | 設定玩家指定類型的素材數量（絕對值，下限 0）（Ephemeral） |
+| `/idlevillage-manager player-pity` | 管理員 | 設定玩家指定類型的保底計數（絕對值，下限 0）（Ephemeral） |
+| `/idlevillage-manager player-risky` | 管理員 | 設定玩家鐵齒失敗累積值（絕對值，下限 0）（Ephemeral） |
 
 所有指令必須先檢查 interaction guild 是否等於環境變數 `DISCORD_GUILD_ID`。不符合時拒絕執行。
 
@@ -57,6 +63,7 @@ source_paths:
 
 ## Changelog
 
+- 2026.05.15: Added `/idlevillage-manager` with five sub-commands for admin player data management (`player-view`, `player-gear`, `player-material`, `player-pity`, `player-risky`).
 - 2026.05.15: Added `upgrade_mode_select:{gear_type}` interaction route for mode selection. `attempt_upgrade` custom_id now encodes gear_type and mode as `attempt_upgrade:{gear_type}:{mode}`.
 - 2026.05.06.01: Official user-facing gear naming changed to tools; command
   handler copy now uses 工具強化 and 工具類型.

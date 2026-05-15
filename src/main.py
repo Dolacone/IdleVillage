@@ -60,6 +60,7 @@ def main():
             "cogs.general",
             "cogs.events",
             "cogs.actions",
+            "cogs.player_manager_cog",
         ]
 
         for extension in initial_extensions:
