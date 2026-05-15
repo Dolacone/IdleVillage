@@ -40,7 +40,7 @@ Creates one change document in `docs/changelogs/`. Must not touch any existing f
 
 To understand the current system, read only files under `docs/`. Do not read source code files.
 
-This is the only stage where user interaction is permitted. Before finalizing the change document, identify all ambiguous or unclear aspects and ask the user to resolve them. Record every question and answer in `## Clarifications` using Q&A format. Do not advance until all clarifications are resolved.
+Before finalizing the change document, identify all ambiguous or unclear aspects and ask the user to resolve them. Record every question and answer in `## Clarifications` using Q&A format. Do not advance until all clarifications are resolved.
 
 ### `plan`
 
@@ -134,8 +134,10 @@ scope: "Tracks this change from design through review."
 ## Problem Statement
 ## Recommended Direction
 ## Clarifications
+<!-- Q: [question] / A: [answer] — resolved during refine stage -->
 ## MVP Scope / Not Doing
 ## Architecture Decisions
+<!-- Key technical choices and rationale — added during plan stage -->
 ## Tasks
 - [ ] Task 1: ...
 
