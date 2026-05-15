@@ -1,10 +1,14 @@
 ---
 title: "idlevillage-manager：玩家數據調整指令"
-status: Draft
+status: Ready-to-implement
 created: 2026-05-15
 doc_type: change
 last_reviewed: 2026-05-15
-source_paths: []
+source_paths:
+  - src/cogs/player_manager_cog.py
+  - src/main.py
+  - docs/discord/command-handler.md
+  - tests/test_player_manager_cog.py
 scope: "Tracks this change from design through review."
 ---
 
@@ -47,8 +51,21 @@ scope: "Tracks this change from design through review."
 - 不做操作 audit log — 可在未來版本加入
 - 不驗證 gear_level ≤ gear_cap — 管理員可能有意調超過上限做測試
 
+## Architecture Decisions
+
+- 新 cog 放在 `src/cogs/player_manager_cog.py`，沿用現有 `GeneralCog` 的 guild/admin 雙重檢查模式。
+- 子指令用 disnake `@<parent>.sub_command()`，`gear_type` 參數使用 `commands.option_enum` 限制為四種類型。
+- 設定操作直接呼叫 `player_manager` 的 setter（`set_gear_level`、`set_pity`）及直接 SQL（素材、鐵齒），保持與現有 manager 層一致。
+- `player-view` 回傳 Embed，其餘子指令以文字確認訊息回應（均 ephemeral）。
+
 ## Tasks
 
-- [ ] Task 1: 新增 `src/cogs/player_manager_cog.py`，實作 `/idlevillage-manager` 及五個子指令
-- [ ] Task 2: 在 `src/main.py` 載入新 cog
-- [ ] Task 3: 新增對應測試 `tests/test_player_manager_cog.py`
+- [ ] Task 1: 實作 cog、register in main.py、更新 command-handler.md SSOT
+  - 新增 `src/cogs/player_manager_cog.py`：`/idlevillage-manager player-view / player-gear / player-material / player-pity / player-risky`
+  - `src/main.py`：`initial_extensions` 加入 `"cogs.player_manager_cog"`
+  - `docs/discord/command-handler.md`：補充五個新子指令
+  - **AC**：管理員可在 Discord 執行五個子指令；非管理員或非指定 Guild 均被拒絕；值 < 0 回報錯誤；玩家不存在回報錯誤；操作成功顯示舊值→新值
+- [ ] Task 2: 新增測試 `tests/test_player_manager_cog.py`（依賴 Task 1）
+  - 覆蓋：guild 檢查、admin 檢查、玩家不存在、各 setter 正確寫入 DB、負值被拒、`player-view` 資料正確
+  - 使用 `DatabaseTestCase` + `AsyncMock` 模式（沿用既有測試慣例）
+  - **AC**：`uv run python -m pytest tests/test_player_manager_cog.py` 全過
