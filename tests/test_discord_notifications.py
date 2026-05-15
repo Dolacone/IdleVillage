@@ -358,7 +358,7 @@ class TestNotificationFormatting(unittest.TestCase):
         }
         text = _format_event(ev)
         self.assertIn("Alice", text)
-        self.assertIn("升級成功 :tada:", text)
+        self.assertIn("標準升級成功 :tada:", text)
         self.assertIn("Lv1 -> Lv2", text)
         self.assertIn("總失敗次數：3", text)
 
@@ -374,7 +374,7 @@ class TestNotificationFormatting(unittest.TestCase):
         }
         text = _format_event(ev)
         self.assertIn("Bob", text)
-        self.assertIn("升級失敗 :boom:", text)
+        self.assertIn("標準升級失敗 :boom:", text)
         self.assertIn("Lv1 -> Lv2", text)
         self.assertIn("總失敗次數：3", text)
 
@@ -591,7 +591,7 @@ class TestGearUpgradeEventDispatch(unittest.TestCase):
             "failure_count": 5,
         }
         text = _format_event(ev)
-        self.assertIn("升級成功 :tada:", text)
+        self.assertIn("標準升級成功 :tada:", text)
         self.assertIn("Lv2 -> Lv3", text)
         self.assertIn("總失敗次數：5", text)
 
@@ -606,7 +606,7 @@ class TestGearUpgradeEventDispatch(unittest.TestCase):
             "failure_count": 6,
         }
         text = _format_event(ev)
-        self.assertIn("升級失敗 :boom:", text)
+        self.assertIn("標準升級失敗 :boom:", text)
         self.assertIn("Lv2 -> Lv3", text)
         self.assertIn("總失敗次數：6", text)
 
@@ -635,7 +635,7 @@ class TestGearUpgradeEventDispatch(unittest.TestCase):
             "failure_count": 0,
         }
         text = _format_event(ev)
-        self.assertIn("Alice 的 採集工具 升級成功 :tada:", text)
+        self.assertIn("Alice 的 採集工具 標準升級成功 :tada:", text)
 
     def test_combat_gear_uses_required_notification_label(self):
         from core.notification import _format_event
@@ -648,7 +648,7 @@ class TestGearUpgradeEventDispatch(unittest.TestCase):
             "failure_count": 3,
         }
         text = _format_event(ev)
-        self.assertIn("Bob 的 狩獵工具 升級失敗 :boom:", text)
+        self.assertIn("Bob 的 狩獵工具 標準升級失敗 :boom:", text)
 
 
 if __name__ == "__main__":

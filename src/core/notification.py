@@ -134,9 +134,11 @@ def _format_event(event: dict) -> str | None:
         current_level = event.get("current_level", 0)
         target_level = event.get("target_level", current_level + 1)
         failure_count = event.get("failure_count", 0)
+        mode = event.get("mode", "normal")
         gear_name = GEAR_LABELS.get(gear_type, gear_type)
+        result_label = "鐵齒升級成功" if mode == "risky" else "標準升級成功"
         return (
-            f"{user_name} 的 {gear_name} 升級成功 :tada: "
+            f"{user_name} 的 {gear_name} {result_label} :tada: "
             f"Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）"
         )
 
@@ -146,9 +148,16 @@ def _format_event(event: dict) -> str | None:
         current_level = event.get("current_level", 0)
         target_level = event.get("target_level", current_level + 1)
         failure_count = event.get("failure_count", 0)
+        mode = event.get("mode", "normal")
         gear_name = GEAR_LABELS.get(gear_type, gear_type)
+        if mode == "buffer":
+            result_label, result_emoji = "改造加固", ":shield:"
+        elif mode == "risky":
+            result_label, result_emoji = "鐵齒失敗", ":skull:"
+        else:
+            result_label, result_emoji = "標準升級失敗", ":boom:"
         return (
-            f"{user_name} 的 {gear_name} 升級失敗 :boom: "
+            f"{user_name} 的 {gear_name} {result_label} {result_emoji} "
             f"Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）"
         )
 

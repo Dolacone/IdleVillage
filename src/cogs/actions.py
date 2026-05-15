@@ -235,6 +235,7 @@ class ActionsCog(commands.Cog):
                         "current_level": result.get("current_level", 0),
                         "target_level": result.get("target_level", result.get("current_level", 0) + 1),
                         "failure_count": result.get("pity_before", 0),
+                        "mode": result.get("mode", "normal"),
                     }
                 else:
                     gear_event = {
@@ -244,6 +245,7 @@ class ActionsCog(commands.Cog):
                         "current_level": result.get("current_level", 0),
                         "target_level": result.get("target_level", result.get("current_level", 0) + 1),
                         "failure_count": result.get("pity_after", 0),
+                        "mode": result.get("mode", "normal"),
                     }
                 await notification.dispatch_events(self.bot, [gear_event])
             await self._render_gear(inter, gear_type, mode=mode, result=result)
