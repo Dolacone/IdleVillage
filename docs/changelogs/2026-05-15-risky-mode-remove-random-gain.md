@@ -1,6 +1,6 @@
 ---
 title: "鐵齒強化模式移除隨機多段升級"
-status: Ready-to-review
+status: Done
 created: 2026-05-15
 doc_type: change
 last_reviewed: 2026-05-15

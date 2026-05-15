@@ -1,8 +1,9 @@
 ---
 title: IdleVillage v2 Preview SSOT Map
 doc_type: index
-last_reviewed: 2026-05-01
-source_paths:
+last_reviewed: 2026-05-15
+source_paths: []
+scope: "Documentation entry point. All repository docs are reachable from this index."
 ---
 
 # IdleVillage v2 Preview SSOT Map

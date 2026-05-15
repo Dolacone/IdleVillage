@@ -1,8 +1,9 @@
 ---
 title: Idle Colony
 doc_type: overview
-last_reviewed: 2026-05-01
-source_paths:
+last_reviewed: 2026-05-15
+source_paths: []
+scope: "Service overview: features, architecture, top-level folders, and link to docs/README.md."
 ---
 
 # Idle Colony
