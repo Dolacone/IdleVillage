@@ -51,5 +51,5 @@ scope: "Tracks this change from design through review."
 
 ## Tasks
 
-- [ ] Task 1: DB schema 新增 `risky_failed_levels` 欄位；`gear_manager` 實作永久保底累積、成功率第三項、多段升級；`get_upgrade_info()` 回傳 `risky_failed_levels` 與加成；新增 / 更新 tests
+- [x] Task 1: DB schema 新增 `risky_failed_levels` 欄位；`gear_manager` 實作永久保底累積、成功率第三項、多段升級；`get_upgrade_info()` 回傳 `risky_failed_levels` 與加成；新增 / 更新 tests
 - [ ] Task 2: UI embed 新增 `鐵齒等級` 行；更新模式 Dropdown 描述；新增 / 更新 UI tests
