@@ -153,7 +153,7 @@ def _format_event(event: dict) -> str | None:
         if mode == "buffer":
             result_label, result_emoji = "改造加固", ":shield:"
         elif mode == "risky":
-            result_label, result_emoji = "鐵齒失敗", ":skull:"
+            result_label, result_emoji = "鐵齒失敗（等級歸零）", ":skull:"
         else:
             result_label, result_emoji = "標準升級失敗", ":boom:"
         return (

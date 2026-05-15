@@ -167,8 +167,9 @@ async def attempt_upgrade(db, user_id: str, gear_type: str, now: datetime, mode:
         new_level = target_level
         pity_after = 0
     elif mode == "risky":
+        await player_manager.set_gear_level(db, user_id, gear_type, 0, now)
         await player_manager.set_pity(db, user_id, gear_type, 0, now)
-        new_level = gear_level
+        new_level = 0
         pity_after = 0
     else:
         await player_manager.set_pity(db, user_id, gear_type, pity + 1, now)

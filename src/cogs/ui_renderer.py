@@ -376,7 +376,7 @@ def build_gear_embed(
         elif result_mode == "buffer":
             lines.append(f"\n🛡️ 墊檔完成。保底計數 +1（現為 {result.get('pity_after', pity + 1)}）")
         elif result_mode == "risky":
-            lines.append(f"\n❌ 鐵齒失敗。保底計數歸零")
+            lines.append(f"\n💀 鐵齒失敗！等級與保底計數歸零")
         else:
             lines.append(f"\n❌ 強化失敗。保底計數 +1")
 

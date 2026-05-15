@@ -478,12 +478,16 @@ class TestRiskyMode(DatabaseTestCase):
         )
         self.assertEqual(row[0], 0)
 
-    async def test_risky_failure_does_not_change_gear_level(self):
+    async def test_risky_failure_resets_gear_level_to_zero(self):
         with patch("managers.gear_manager.random.random", return_value=0.9999):
             async with schema.get_connection() as db:
                 result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="risky")
                 await db.commit()
-        self.assertEqual(result["new_level"], 5)
+        self.assertEqual(result["new_level"], 0)
+        row = await self.fetchone(
+            "SELECT gear_gathering FROM players WHERE user_id=?", (USER,)
+        )
+        self.assertEqual(row[0], 0)
 
     async def test_risky_deducts_one_material(self):
         with patch("managers.gear_manager.random.random", return_value=0.9999):
