@@ -86,7 +86,8 @@ async def _create_v2_tables(db):
             pity_gathering INTEGER NOT NULL DEFAULT 0,
             pity_building INTEGER NOT NULL DEFAULT 0,
             pity_combat INTEGER NOT NULL DEFAULT 0,
-            pity_research INTEGER NOT NULL DEFAULT 0
+            pity_research INTEGER NOT NULL DEFAULT 0,
+            risky_failed_levels INTEGER NOT NULL DEFAULT 0
         )
         """
     )
@@ -155,12 +156,28 @@ async def _seed_initial_rows(db):
     )
 
 
+async def _migrate_v2_columns(db):
+    """Apply additive column migrations to existing v2 tables.
+
+    Each migration is idempotent — it checks the current column list first and
+    only runs the ALTER when the column is absent, so repeated calls are safe.
+    """
+    async with db.execute("PRAGMA table_info(players)") as cur:
+        columns = {row[1] async for row in cur}
+
+    if "risky_failed_levels" not in columns:
+        await db.execute(
+            "ALTER TABLE players ADD COLUMN risky_failed_levels INTEGER NOT NULL DEFAULT 0"
+        )
+
+
 async def init_db():
     path = _resolve_db_path()
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
 
     async with aiosqlite.connect(path) as db:
         await _create_v2_tables(db)
+        await _migrate_v2_columns(db)
         await _seed_initial_rows(db)
         await db.commit()
 
