@@ -604,11 +604,12 @@ class TestRiskyModeEnhancements(DatabaseTestCase):
         # 1000 × 0.0001 = 0.10 bonus
         self.assertAlmostEqual(rate_with - rate_without, 0.10, places=9)
 
-    def test_compute_rate_normal_ignores_failed_levels(self):
-        """risky_failed_levels must NOT affect rate in normal mode."""
+    def test_compute_rate_normal_includes_failed_levels_bonus(self):
+        """risky_failed_levels × 0.0001 added to rate in normal mode."""
         rate_without = gear_manager._compute_rate(5, 0, risky_failed_levels=0, mode="normal")
         rate_with = gear_manager._compute_rate(5, 0, risky_failed_levels=1000, mode="normal")
-        self.assertAlmostEqual(rate_without, rate_with)
+        # 1000 × 0.0001 = 0.10 bonus
+        self.assertAlmostEqual(rate_with - rate_without, 0.10, places=9)
 
     def test_compute_rate_buffer_ignores_failed_levels(self):
         """risky_failed_levels must NOT affect rate in buffer mode."""
@@ -616,18 +617,24 @@ class TestRiskyModeEnhancements(DatabaseTestCase):
         rate_with = gear_manager._compute_rate(5, 0, risky_failed_levels=1000, mode="buffer")
         self.assertAlmostEqual(rate_without, rate_with)
 
-    async def test_get_upgrade_info_risky_rate_includes_failed_levels(self):
-        """get_upgrade_info() rate for risky mode reflects risky_failed_levels."""
+    async def test_get_upgrade_info_normal_rate_includes_failed_levels(self):
+        """get_upgrade_info() rate for normal mode also reflects risky_failed_levels."""
         async with schema.get_connection() as db:
             await db.execute(
                 "UPDATE players SET risky_failed_levels=1000 WHERE user_id=?", (USER,)
             )
             await db.commit()
         async with schema.get_connection() as db:
-            info_risky = await gear_manager.get_upgrade_info(db, USER, "gathering", NOW, mode="risky")
-            info_normal = await gear_manager.get_upgrade_info(db, USER, "gathering", NOW, mode="normal")
-        # risky rate should be higher due to the 1000 × 0.0001 = 0.10 bonus
-        self.assertGreater(info_risky["rate"], info_normal["rate"])
+            info_with = await gear_manager.get_upgrade_info(db, USER, "gathering", NOW, mode="normal")
+        async with schema.get_connection() as db:
+            await db.execute(
+                "UPDATE players SET risky_failed_levels=0 WHERE user_id=?", (USER,)
+            )
+            await db.commit()
+        async with schema.get_connection() as db:
+            info_without = await gear_manager.get_upgrade_info(db, USER, "gathering", NOW, mode="normal")
+        # 1000 × 0.0001 = 0.10 bonus
+        self.assertAlmostEqual(info_with["rate"] - info_without["rate"], 0.10, places=9)
 
     # -------------------------------------------------------------------------
     # Risky success: level_gain is always 1, regardless of pity state
@@ -676,12 +683,19 @@ class TestRiskyModeEnhancements(DatabaseTestCase):
         self.assertEqual(info["risky_failed_levels"], 200)
         self.assertAlmostEqual(info["risky_bonus_pct"], 2.0)
 
-    async def test_get_upgrade_info_normal_does_not_return_risky_fields(self):
-        """get_upgrade_info() in normal mode must NOT include risky-specific fields."""
+    async def test_get_upgrade_info_normal_returns_risky_fields(self):
+        """get_upgrade_info() in normal mode returns risky_failed_levels and risky_bonus_pct."""
+        async with schema.get_connection() as db:
+            await db.execute(
+                "UPDATE players SET risky_failed_levels=200 WHERE user_id=?", (USER,)
+            )
+            await db.commit()
         async with schema.get_connection() as db:
             info = await gear_manager.get_upgrade_info(db, USER, "gathering", NOW, mode="normal")
-        self.assertNotIn("risky_failed_levels", info)
-        self.assertNotIn("risky_bonus_pct", info)
+        self.assertIn("risky_failed_levels", info)
+        self.assertIn("risky_bonus_pct", info)
+        self.assertEqual(info["risky_failed_levels"], 200)
+        self.assertAlmostEqual(info["risky_bonus_pct"], 2.0)
 
     async def test_get_upgrade_info_buffer_does_not_return_risky_fields(self):
         """get_upgrade_info() in buffer mode must NOT include risky-specific fields."""
@@ -732,6 +746,21 @@ class TestRiskyModeEnhancements(DatabaseTestCase):
                 await db.commit()
         self.assertIn("level_gain", result)
         self.assertEqual(result["level_gain"], 1)
+
+    async def test_attempt_upgrade_normal_rate_reflects_risky_failed_levels(self):
+        """attempt_upgrade() in normal mode: returned rate includes risky_failed_levels bonus."""
+        async with schema.get_connection() as db:
+            await db.execute(
+                "UPDATE players SET risky_failed_levels=1000 WHERE user_id=?", (USER,)
+            )
+            await db.commit()
+        with patch("managers.gear_manager.random.random", return_value=0.0):
+            async with schema.get_connection() as db:
+                result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW)
+                await db.commit()
+        # gear_level=5 base=0.50; +1000×0.0001=0.10 → 0.60
+        expected_rate = gear_manager._compute_rate(5, 0, risky_failed_levels=1000, mode="normal")
+        self.assertAlmostEqual(result["rate"], expected_rate)
 
 
 if __name__ == "__main__":

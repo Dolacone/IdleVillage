@@ -29,18 +29,18 @@ def _compute_rate(gear_level: int, pity_count: int, risky_failed_levels: int = 0
 
     base_rate  = max(GEAR_MIN_SUCCESS_RATE, 1.0 - gear_level × GEAR_RATE_LOSS_PER_LEVEL)
 
-    # standard / buffer:
-    final_rate = min(1.0, base_rate + pity_count × GEAR_PITY_BONUS)
-
-    # risky:
+    # standard / risky:
     final_rate = min(1.0, base_rate + pity_count × GEAR_PITY_BONUS + risky_failed_levels × 0.0001)
+
+    # buffer:
+    final_rate = min(1.0, base_rate + pity_count × GEAR_PITY_BONUS)
     """
     min_rate = get_env_float("GEAR_MIN_SUCCESS_RATE")
     loss_per = get_env_float("GEAR_RATE_LOSS_PER_LEVEL")
     pity_bonus = get_env_float("GEAR_PITY_BONUS")
     base_rate = max(min_rate, _normalize_rate(1.0 - gear_level * loss_per))
     rate = _normalize_rate(base_rate + pity_count * pity_bonus)
-    if mode == "risky":
+    if mode in ("normal", "risky"):
         rate = _normalize_rate(rate + risky_failed_levels * 0.0001)
     return min(1.0, rate)
 
@@ -95,9 +95,9 @@ async def get_upgrade_info(db, user_id: str, gear_type: str, now: datetime, mode
       can_attempt    — True if all preconditions are met
       gear_cap       — current gear cap (research_lab level)
       mode           — upgrade mode ("normal" / "buffer" / "risky")
-      [risky only]
-      risky_failed_levels — accumulated failed levels (risky mode only)
-      risky_bonus_pct     — bonus percentage from risky_failed_levels (risky mode only)
+      [normal and risky only]
+      risky_failed_levels — accumulated failed levels
+      risky_bonus_pct     — bonus percentage from risky_failed_levels
     """
     if mode not in UPGRADE_MODES:
         raise ValueError(f"Invalid upgrade mode: {mode!r}")
@@ -130,7 +130,7 @@ async def get_upgrade_info(db, user_id: str, gear_type: str, now: datetime, mode
         "materials": materials,
         "mode": mode,
     }
-    if mode == "risky":
+    if mode in ("normal", "risky"):
         result["risky_failed_levels"] = risky_failed_levels
         result["risky_bonus_pct"] = round(risky_failed_levels * 0.01, 2)
     return result

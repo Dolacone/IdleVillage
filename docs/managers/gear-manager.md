@@ -47,11 +47,11 @@ risky_failed_levels  = 玩家全域鐵齒炸裂等級總額（僅鐵齒模式失
 
 base_rate  = max(GEAR_MIN_SUCCESS_RATE, 100% - current_level × GEAR_RATE_LOSS_PER_LEVEL)
 
-# 標準 / 墊檔：
-final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS)
-
-# 鐵齒：
+# 標準 / 鐵齒：
 final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS + risky_failed_levels × 0.0001)
+
+# 墊檔：
+final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS)
 ```
 
 成功率必須依設定值的十進位意圖計算，不得因二進位浮點誤差低於文件公式結果。
@@ -98,9 +98,11 @@ final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS + risky_failed_
 ## 操作介面（供其他模組呼叫）
 
 - `attempt_upgrade(db, user_id, gear_type, now, mode="normal")` — 執行強化嘗試，回傳 `{success, new_level, level_gain, pity_before, pity_after, rate, mode}`
-- `get_upgrade_info(db, user_id, gear_type, now, mode="normal")` — 回傳強化預覽資訊（成功率、依模式計算的消耗量、保底狀態、模式）；鐵齒模式額外回傳 `risky_failed_levels` 與 `risky_bonus_pct`
+- `get_upgrade_info(db, user_id, gear_type, now, mode="normal")` — 回傳強化預覽資訊（成功率、依模式計算的消耗量、保底狀態、模式）；標準與鐵齒模式額外回傳 `risky_failed_levels` 與 `risky_bonus_pct`
 
 ## Changelog
+
+- 2026.05.16: Standard (normal) mode now includes `risky_failed_levels × 0.0001` in success rate, same as risky mode. `get_upgrade_info()` now returns `risky_failed_levels` and `risky_bonus_pct` for normal mode in addition to risky mode. UI embed displays the risky bonus line for normal mode.
 
 - 2026.05.15: Risky mode simplification — removed random multi-level gain on success (was +1/+2/+3 at 60/30/10% when pity=0); success now always grants exactly gear +1 regardless of pity state.
 - 2026.05.15: Risky mode enhancements — permanent `risky_failed_levels` bonus (+0.01% per level), multi-level success (+1/+2/+3 at 60/30/10% when pity=0), research institute cap is precondition-only and does not truncate results.

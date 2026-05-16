@@ -352,8 +352,8 @@ def build_gear_embed(
     mode_labels = {"normal": "標準", "buffer": "墊檔", "risky": "鐵齒"}
     mode_label = mode_labels.get(mode, mode)
 
-    # For risky mode, use the actual rate from upgrade_info which includes the risky bonus
-    if mode == "risky" and rate > final_rate:
+    # For normal/risky mode, use the actual rate from upgrade_info which includes the risky bonus
+    if mode in ("normal", "risky") and rate > final_rate:
         final_rate_pct = _rate_percent(min(1.0, rate))
 
     if mode == "buffer":
@@ -376,7 +376,7 @@ def build_gear_embed(
         f"工具等級上限：Lv{gear_cap}（研究所 Lv{gear_cap}）",
     ]
 
-    if mode == "risky":
+    if mode in ("normal", "risky"):
         lines.append(f"鐵齒等級: {risky_failed_levels} (+{risky_bonus_pct}%)")
 
     if result is not None:

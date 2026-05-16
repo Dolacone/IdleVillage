@@ -1,10 +1,15 @@
 ---
 title: "標準升級成功率納入鐵齒炸裂等級加成"
-status: Ready-to-implement
+status: Ready-to-review
 created: 2026-05-16
 doc_type: change
 last_reviewed: 2026-05-16
-source_paths: []
+source_paths:
+  - src/managers/gear_manager.py
+  - src/cogs/ui_renderer.py
+  - tests/test_gear_manager.py
+  - tests/test_discord_commands.py
+  - docs/managers/gear-manager.md
 scope: "Tracks this change from design through review."
 ---
 
@@ -52,8 +57,8 @@ A: 不設上限，與鐵齒模式一致。
 
 ## Tasks
 
-- [ ] Task 1：更新 `src/managers/gear_manager.py` — `_compute_rate()` 條件改為 `mode in ("normal", "risky")`；`get_upgrade_info()` risky 欄位回傳條件同步改為 `mode in ("normal", "risky")`；更新函式 docstring（`_compute_rate` 第 32 行與 `get_upgrade_info` 第 98 行）說明 normal 模式也套用此加成
-- [ ] Task 2：更新 `src/cogs/ui_renderer.py` — (a) 將第 356 行 `if mode == "risky" and rate > final_rate:` 改為 `if mode in ("normal", "risky") and rate > final_rate:`，讓 normal 模式的 `final_rate_pct` 也套用含 risky_failed_levels 加成的實際費率；(b) 將第 379 行 `if mode == "risky":` 改為 `if mode in ("normal", "risky"):`，讓 normal 模式也顯示炸裂加成行
-- [ ] Task 3：更新 `tests/test_gear_manager.py` — (a) 將 `test_compute_rate_normal_ignores_failed_levels` 改為驗證 normal 模式包含加成（含 assert 值）；(b) 更新 `test_get_upgrade_info_risky_rate_includes_failed_levels` 為驗證 normal 模式費率也反映 risky_failed_levels；(c) 更新 `test_get_upgrade_info_normal_does_not_return_risky_fields` 改為驗證 normal 模式確實回傳這兩個欄位（含值驗證）；(d) 新增 normal 模式 `attempt_upgrade()` 迴歸測試：確認 `risky_failed_levels` 影響回傳 `rate`
-- [ ] Task 4：更新 `tests/test_discord_commands.py` — (a) 修正 `normal` 模式下不顯示炸裂加成行的斷言，改為驗證確實顯示；(b) 補充驗證 normal 模式成功率文字反映加成後的費率
-- [ ] Task 5：更新 `docs/managers/gear-manager.md` — 成功率公式區塊中「標準 / 墊檔」分開列出，標準包含 risky_failed_levels 加成，墊檔不含；更新 `get_upgrade_info` 介面說明；更新 Changelog
+- [x] Task 1：更新 `src/managers/gear_manager.py` — `_compute_rate()` 條件改為 `mode in ("normal", "risky")`；`get_upgrade_info()` risky 欄位回傳條件同步改為 `mode in ("normal", "risky")`；更新函式 docstring（`_compute_rate` 第 32 行與 `get_upgrade_info` 第 98 行）說明 normal 模式也套用此加成
+- [x] Task 2：更新 `src/cogs/ui_renderer.py` — (a) 將第 356 行 `if mode == "risky" and rate > final_rate:` 改為 `if mode in ("normal", "risky") and rate > final_rate:`，讓 normal 模式的 `final_rate_pct` 也套用含 risky_failed_levels 加成的實際費率；(b) 將第 379 行 `if mode == "risky":` 改為 `if mode in ("normal", "risky"):`，讓 normal 模式也顯示炸裂加成行
+- [x] Task 3：更新 `tests/test_gear_manager.py` — (a) 將 `test_compute_rate_normal_ignores_failed_levels` 改為驗證 normal 模式包含加成（含 assert 值）；(b) 更新 `test_get_upgrade_info_risky_rate_includes_failed_levels` 為驗證 normal 模式費率也反映 risky_failed_levels；(c) 更新 `test_get_upgrade_info_normal_does_not_return_risky_fields` 改為驗證 normal 模式確實回傳這兩個欄位（含值驗證）；(d) 新增 normal 模式 `attempt_upgrade()` 迴歸測試：確認 `risky_failed_levels` 影響回傳 `rate`
+- [x] Task 4：更新 `tests/test_discord_commands.py` — (a) 修正 `normal` 模式下不顯示炸裂加成行的斷言，改為驗證確實顯示；(b) 補充驗證 normal 模式成功率文字反映加成後的費率
+- [x] Task 5：更新 `docs/managers/gear-manager.md` — 成功率公式區塊中「標準 / 墊檔」分開列出，標準包含 risky_failed_levels 加成，墊檔不含；更新 `get_upgrade_info` 介面說明；更新 Changelog

@@ -567,7 +567,7 @@ class TestGearEmbedRiskyLine(unittest.TestCase):
         gear_level = 3
         pity = 2
         base = max(min_rate, 1.0 - gear_level * loss_per)
-        rate = min(1.0, base + pity * pity_bonus)
+        rate = min(1.0, base + pity * pity_bonus + risky_failed_levels * 0.0001)
         info = {
             "gear_level": gear_level,
             "target_level": gear_level + 1,
@@ -580,7 +580,7 @@ class TestGearEmbedRiskyLine(unittest.TestCase):
             "materials": 5,
             "mode": mode,
         }
-        if mode == "risky":
+        if mode in ("normal", "risky"):
             info["risky_failed_levels"] = risky_failed_levels
             info["risky_bonus_pct"] = risky_bonus_pct
         return info
@@ -591,11 +591,18 @@ class TestGearEmbedRiskyLine(unittest.TestCase):
         embed = build_gear_embed(info, "gathering")
         self.assertIn("鐵齒等級: 5 (+0.05%)", embed.description)
 
-    def test_risky_line_not_in_normal_mode(self):
+    def test_risky_line_appears_in_normal_mode(self):
         from cogs.ui_renderer import build_gear_embed
-        info = self._make_info(mode="normal")
+        info = self._make_info(mode="normal", risky_failed_levels=5, risky_bonus_pct=0.05)
         embed = build_gear_embed(info, "gathering")
-        self.assertNotIn("鐵齒等級", embed.description)
+        self.assertIn("鐵齒等級: 5 (+0.05%)", embed.description)
+
+    def test_normal_mode_rate_reflects_risky_failed_levels(self):
+        from cogs.ui_renderer import build_gear_embed
+        info = self._make_info(mode="normal", risky_failed_levels=1000, risky_bonus_pct=10.0)
+        embed = build_gear_embed(info, "gathering")
+        # rate = base+pity+bonus; embed should display this boosted rate
+        self.assertIn(f"{round(info['rate'] * 100)}%", embed.description)
 
     def test_risky_line_not_in_buffer_mode(self):
         from cogs.ui_renderer import build_gear_embed
