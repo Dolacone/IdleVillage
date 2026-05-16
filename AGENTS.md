@@ -42,6 +42,11 @@ To understand the current system, read only files under `docs/`. Do not read sou
 
 Before finalizing the change document, identify all ambiguous or unclear aspects and ask the user to resolve them. Record every question and answer in `## Clarifications` using Q&A format. Do not advance until all clarifications are resolved.
 
+**Completion checklist (must verify before advancing):**
+- [ ] 所有模糊點已在 `## Clarifications` 以 Q&A 紀錄並解決
+- [ ] 變更文件已建立於 `docs/changelogs/`
+- [ ] 未觸碰任何既有檔案
+
 ### `plan`
 
 Skill: `planning-and-task-breakdown`
@@ -53,6 +58,14 @@ Must also update SSOT documents that own the behavior being changed. If none exi
 Each task must bundle its own tests: if a task changes behavior, configuration, commands, or public interfaces, the relevant test updates belong in that same task — not in a separate task. Do not create standalone "update tests" tasks.
 
 After completing the plan, spawn a review agent (per Universal Rules) to review the Architecture Decisions and task breakdown. If issues are found, revise and re-review. Maximum 2 review rounds; if still unresolved, stop and report. Auto-advance after the review agent approves — no human confirmation required.
+
+**Completion checklist (must verify before advancing):**
+- [ ] Architecture Decisions 已寫入變更文件
+- [ ] Tasks 已寫入變更文件，每個 task 已包含測試
+- [ ] 相關 SSOT 文件已更新（或確認無需更新）
+- [ ] 已 spawn review agent 審查 Architecture Decisions 與 task breakdown
+- [ ] Review agent 核准（或已修正並重新審查，最多 2 輪）
+- [ ] 狀態已更新為 `Ready-to-implement`
 
 ### `code`
 
@@ -71,6 +84,11 @@ After all tasks are complete, update status to `Ready-to-review`, then commit.
 
 For new Python projects, create Python git ignores before running Python commands that may generate cache files.
 
+**Completion checklist (must verify before advancing):**
+- [ ] 每個 task 已在變更文件勾選 `[x]`
+- [ ] 每個 task 的 code、文件、變更文件已一起 commit
+- [ ] 狀態已更新為 `Ready-to-review`
+
 ### `review`
 
 Skill: `code-review-and-quality`
@@ -85,6 +103,19 @@ After the review agent approves, the main agent:
 2. Adds work to `CHANGELOG.md` (create if missing).
 3. Sets status to `Done`.
 4. Commits all together.
+
+**Completion checklist — 共同（每輪必做）：**
+- [ ] 所有 tasks 與前輪 review issues 均已重新審查
+- [ ] 實作、文件、metadata、`source_paths`、行為描述均已對照程式碼驗證
+
+**若有問題（→ `Issues-confirmed`）：**
+- [ ] `## Review Issues` 已寫入變更文件
+- [ ] 狀態已設為 `Issues-confirmed` 並 commit
+
+**若核准（→ `Done`）：**
+- [ ] `doc-audit` 已執行
+- [ ] `CHANGELOG.md` 已更新
+- [ ] 狀態已設為 `Done` 並 commit
 
 ### `refactor`
 
