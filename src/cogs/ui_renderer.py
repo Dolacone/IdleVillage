@@ -352,17 +352,20 @@ def build_gear_embed(
     mode_labels = {"normal": "標準", "buffer": "墊檔", "risky": "鐵齒"}
     mode_label = mode_labels.get(mode, mode)
 
+    risky_failed_levels = upgrade_info.get("risky_failed_levels", 0)
+    risky_bonus_pct = upgrade_info.get("risky_bonus_pct", 0.0)
+
     # For normal/risky mode, use the actual rate from upgrade_info which includes the risky bonus
     if mode in ("normal", "risky") and rate > final_rate:
         final_rate_pct = _rate_percent(min(1.0, rate))
 
+    pity_total_pct = pity * pity_display
+    risky_bonus_display = f"{risky_bonus_pct:g}"
+
     if mode == "buffer":
         rate_line = "成功率：0%（墊檔不進行強化）"
     else:
-        rate_line = f"成功率：{base_rate_pct}%（+{pity}×{pity_display}% 保底）= {final_rate_pct}%"
-
-    risky_failed_levels = upgrade_info.get("risky_failed_levels", 0)
-    risky_bonus_pct = upgrade_info.get("risky_bonus_pct", 0.0)
+        rate_line = f"成功率：{base_rate_pct}%（+保底{pity_total_pct}% +鐵齒{risky_bonus_display}%）= {final_rate_pct}%"
 
     lines = [
         "🔨 工具強化",
@@ -370,14 +373,20 @@ def build_gear_embed(
         f"{label}：Lv{gear_level} → Lv{target_level}",
         f"模式：{mode_label}",
         rate_line,
+    ]
+
+    if mode in ("normal", "risky"):
+        lines.extend([
+            f"保底率：{pity} x {pity_display}% = {pity_total_pct}%",
+            f"鐵齒率：{risky_failed_levels} x 0.01% = {risky_bonus_display}%",
+        ])
+
+    lines.extend([
         f"消耗：⚡ 1 AP + {material_cost} 個 {mat_label}",
         f"持有素材：{materials} 個",
         f"⚡ AP：{ap} / {ap_cap}",
         f"工具等級上限：Lv{gear_cap}（研究所 Lv{gear_cap}）",
-    ]
-
-    if mode in ("normal", "risky"):
-        lines.append(f"鐵齒等級: {risky_failed_levels} (+{risky_bonus_pct}%)")
+    ])
 
     if result is not None:
         result_mode = result.get("mode", "normal")

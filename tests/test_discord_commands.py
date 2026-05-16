@@ -519,7 +519,7 @@ class TestRendererGearEmbed(unittest.TestCase):
         from cogs.ui_renderer import build_gear_embed
         info = self._make_info(gear_level=6, pity=0)
         embed = build_gear_embed(info, "gathering")
-        self.assertIn("成功率：40%（+0×5% 保底）= 40%", embed.description)
+        self.assertIn("成功率：40%（+保底0% +鐵齒0%）= 40%", embed.description)
 
 
 class TestRendererGearComponents(unittest.TestCase):
@@ -589,13 +589,13 @@ class TestGearEmbedRiskyLine(unittest.TestCase):
         from cogs.ui_renderer import build_gear_embed
         info = self._make_info(mode="risky", risky_failed_levels=5, risky_bonus_pct=0.05)
         embed = build_gear_embed(info, "gathering")
-        self.assertIn("鐵齒等級: 5 (+0.05%)", embed.description)
+        self.assertIn("鐵齒率：5 x 0.01% = 0.05%", embed.description)
 
     def test_risky_line_appears_in_normal_mode(self):
         from cogs.ui_renderer import build_gear_embed
         info = self._make_info(mode="normal", risky_failed_levels=5, risky_bonus_pct=0.05)
         embed = build_gear_embed(info, "gathering")
-        self.assertIn("鐵齒等級: 5 (+0.05%)", embed.description)
+        self.assertIn("鐵齒率：5 x 0.01% = 0.05%", embed.description)
 
     def test_normal_mode_rate_reflects_risky_failed_levels(self):
         from cogs.ui_renderer import build_gear_embed
@@ -608,13 +608,13 @@ class TestGearEmbedRiskyLine(unittest.TestCase):
         from cogs.ui_renderer import build_gear_embed
         info = self._make_info(mode="buffer")
         embed = build_gear_embed(info, "gathering")
-        self.assertNotIn("鐵齒等級", embed.description)
+        self.assertNotIn("鐵齒率", embed.description)
 
     def test_risky_line_zero_failed_levels(self):
         from cogs.ui_renderer import build_gear_embed
         info = self._make_info(mode="risky", risky_failed_levels=0, risky_bonus_pct=0.0)
         embed = build_gear_embed(info, "combat")
-        self.assertIn("鐵齒等級: 0 (+0.0%)", embed.description)
+        self.assertIn("鐵齒率：0 x 0.01% = 0%", embed.description)
 
 
 class TestRiskyDropdownDescription(unittest.TestCase):
