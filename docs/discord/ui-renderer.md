@@ -133,19 +133,23 @@ Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
 選擇強化模式：[Dropdown: 標準 / 墊檔 / 鐵齒]
 
 {gear_name}：Lv{current} → Lv{target}
-成功率：{base_rate}%（+{pity×5}% 保底）= {final_rate}%
+模式：標準
+成功率：{base_rate}%（+保底{pity_total}% +鐵齒{risky_bonus}%）= {final_rate}%
+保底率：{pity} x {pity_per}% = {pity_total}%
+鐵齒率：{risky_failed_levels} x 0.01% = {risky_bonus}%
 消耗：⚡ 1 AP + {n} 個 {material_name}
 持有素材：{material_count} 個
+⚡ AP：{ap} / {ap_cap}
 工具等級上限：Lv{cap}（研究所 Lv{n}）
-鐵齒等級: {risky_failed_levels} (+{risky_bonus_pct}%)   ← 僅鐵齒模式顯示
 ```
 
-墊檔模式下成功率欄位顯示 `0%`（不擲骰），消耗量依墊檔公式計算。
-`risky_bonus_pct` = `risky_failed_levels × 0.01`，顯示至小數點後兩位。
+保底率與鐵齒率明細行僅在標準（normal）與鐵齒（risky）模式下顯示；buffer 模式略去。
+墊檔模式下成功率欄位顯示 `0%（墊檔不進行強化）`，不顯示保底率/鐵齒率明細行。
+`{risky_bonus}` = `risky_failed_levels × 0.01`（去除尾隨零，如 1000 級顯示 `10%`）。
 
 成功率顯示必須和 managers/gear-manager.md 的成功率計算一致。若設定值代表整數百分比，
 UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL=0.10`
-時，Lv6、保底 0 的顯示為 `成功率：40%（+0×5% 保底）= 40%`。
+時，Lv6、保底 0、鐵齒 0 的顯示為 `成功率：40%（+保底0% +鐵齒0%）= 40%`。
 
 工具類型 Dropdown 每個選項附帶描述：
 - 未達上限：`Lv{n} → Lv{n+1}: {action_label}產出 +{n×pct}% → +{(n+1)×pct}%`（pct = floor(GEAR_BONUS_PER_LEVEL × 100)）
@@ -210,6 +214,7 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
   dashboard line `🏅 工具`, button `🔨 強化工具`, and full names
   採集工具, 建設工具, 狩獵工具, 研究工具.
 - 2026.05.15: Risky mode now shows `鐵齒等級: {n} (+{pct}%)` line. Risky dropdown description updated to reflect multi-level success.
+- 2026.05.16: Success rate line format updated to `成功率：{base}%（+保底{pity_total}% +鐵齒{risky}%）= {final}%`. Two detail lines added below (保底率、鐵齒率) for normal/risky modes. Bottom `鐵齒等級` line removed.
 - 2026.05.15: Added mode selection dropdown (`upgrade_mode_select:{gear_type}`) to the gear upgrade sub-menu. Mode descriptions shown inline. Buffer mode displays 0% success rate.
 - 2026-05-15: Added `build_manager_embed()` and `build_manager_components()` for the unified manager interface.
 - 2026.05.06.00: Gear upgrade success-rate display must match gear-manager precision semantics. Lv6 with no pity displays 40%, not 39%.

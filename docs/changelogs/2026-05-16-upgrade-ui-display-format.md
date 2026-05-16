@@ -7,6 +7,7 @@ last_reviewed: 2026-05-16
 source_paths:
   - src/cogs/ui_renderer.py
   - tests/test_discord_commands.py
+  - docs/discord/ui-renderer.md
 scope: "調整工具強化嵌入訊息中成功率行的顯示格式，並分拆保底率與鐵齒率的明細行。"
 ---
 
