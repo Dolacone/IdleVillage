@@ -50,6 +50,8 @@ Updates the change document only (append `## Architecture Decisions` and `## Tas
 
 Must also update SSOT documents that own the behavior being changed. If none exist and the plan affects setup, usage, commands, configuration, public behavior, or developer workflow, create the smallest appropriate doc, usually `README.md`.
 
+Each task must bundle its own tests: if a task changes behavior, configuration, commands, or public interfaces, the relevant test updates belong in that same task — not in a separate task. Do not create standalone "update tests" tasks.
+
 After completing the plan, spawn a review agent (per Universal Rules) to review the Architecture Decisions and task breakdown. If issues are found, revise and re-review. Maximum 2 review rounds; if still unresolved, stop and report. Auto-advance after the review agent approves — no human confirmation required.
 
 ### `code`
