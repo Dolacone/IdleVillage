@@ -2,6 +2,7 @@
 
 ## 2026-05-16
 
+- Gear upgrade embed: success rate line now shows both pity and risky bonus components (`+保底X% +鐵齒Y%`); two detail lines (保底率、鐵齒率) are inserted below for normal/risky modes; bottom 鐵齒等級 line removed.
 - Standard upgrade (normal mode) success rate now includes `risky_failed_levels × 0.0001` bonus, same as risky mode. `get_upgrade_info()` returns `risky_failed_levels` and `risky_bonus_pct` for normal mode. UI embed displays the risky bonus line in normal mode.
 
 ## 2026-05-15
