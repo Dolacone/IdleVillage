@@ -1,6 +1,6 @@
 ---
 title: "標準升級成功率納入鐵齒炸裂等級加成"
-status: Ready-to-review
+status: Done
 created: 2026-05-16
 doc_type: change
 last_reviewed: 2026-05-16

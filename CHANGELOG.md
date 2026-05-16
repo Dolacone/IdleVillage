@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-16
+
+- Standard upgrade (normal mode) success rate now includes `risky_failed_levels × 0.0001` bonus, same as risky mode. `get_upgrade_info()` returns `risky_failed_levels` and `risky_bonus_pct` for normal mode. UI embed displays the risky bonus line in normal mode.
+
 ## 2026-05-15
 
 - Simplified risky mode success: removed pity=0 random multi-level gain (+1/+2/+3 at 60/30/10%); success now always grants exactly gear +1 regardless of pity state. Failure behavior and success rate formula unchanged.
