@@ -632,7 +632,7 @@ class TestRiskyDropdownDescription(unittest.TestCase):
         descriptions = {option.value: option.description for option in mode_select.options}
         self.assertEqual(
             descriptions["risky"],
-            "僅消耗 1 個素材，失敗則 pity 歸零；成功無保底時 +1~+3",
+            "僅消耗 1 個素材，失敗則工具等級與 pity 均歸零",
         )
 
     def test_normal_and_buffer_descriptions_unchanged(self):
