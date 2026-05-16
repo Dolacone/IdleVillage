@@ -158,7 +158,7 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 強化模式 Dropdown（custom_id: `upgrade_mode_select:{gear_type}`）每個選項附帶描述：
 - 標準：`正常消耗，失敗 pity+1`
 - 墊檔：`半價素材，必定 pity+1，無需擲骰`
-- 鐵齒：`僅消耗 1 個素材，失敗則 pity 歸零；成功無保底時 +1~+3`
+- 鐵齒：`僅消耗 1 個素材，失敗則工具等級與 pity 均歸零`
 
 - **Button**：`🎲 強化`（Green，禁用條件：素材不足 / AP 不足 / 已達上限）
 - **Button**：`← 返回`（Gray）
