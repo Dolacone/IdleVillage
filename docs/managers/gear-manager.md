@@ -73,7 +73,7 @@ final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS)
 3. 依模式執行：
 
    標準 (normal)：
-     計算 final_rate（base_rate + pity × GEAR_PITY_BONUS）
+     計算 final_rate（base_rate + pity × GEAR_PITY_BONUS + risky_failed_levels × 0.0001）
      擲骰（random integer 1~100）：
        成功（roll <= final_rate）：gear_level += 1, pity = 0
        失敗：pity += 1
