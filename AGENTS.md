@@ -104,15 +104,15 @@ After the review agent approves, the main agent:
 3. Sets status to `Done`.
 4. Commits all together.
 
-**Completion checklist — 共同（每輪必做）：**
+Completion checklist — 共同（每輪必做）：
 - [ ] 所有 tasks 與前輪 review issues 均已重新審查
 - [ ] 實作、文件、metadata、`source_paths`、行為描述均已對照程式碼驗證
 
-**若有問題（→ `Issues-confirmed`）：**
+若有問題（→ `Issues-confirmed`）：
 - [ ] `## Review Issues` 已寫入變更文件
 - [ ] 狀態已設為 `Issues-confirmed` 並 commit
 
-**若核准（→ `Done`）：**
+若核准（→ `Done`）：
 - [ ] `doc-audit` 已執行
 - [ ] `CHANGELOG.md` 已更新
 - [ ] 狀態已設為 `Done` 並 commit
