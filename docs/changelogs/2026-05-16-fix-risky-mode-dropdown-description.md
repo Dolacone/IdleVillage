@@ -1,6 +1,6 @@
 ---
 title: "Fix: 鐵齒模式 Dropdown 描述與現況不符"
-status: Ready-to-review
+status: Done
 created: 2026-05-16
 doc_type: change
 last_reviewed: 2026-05-16
