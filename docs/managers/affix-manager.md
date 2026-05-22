@@ -33,8 +33,8 @@ source_paths:
 - `slot_count(gear_level) -> int` — 計算可用槽數
 - `get_affixes(db, user_id, gear_type) -> list[dict]` — 回傳 `[{slot_index, affix_type, value}, ...]`
 - `get_affix_bonuses(db, user_id, gear_type) -> dict[str, int]` — 彙總各類型總加成
-- `extract_affix(db, user_id, gear_type, gear_level, now)` — 消耗 `AFFIX_EXTRACT_COST` 對應素材，隨機抽一條詞條填入第一個空槽；滿槽時 raise ValueError
-- `clear_affix(db, user_id, gear_type, slot_index, gear_level, now)` — 消耗 `AFFIX_CLEAR_COST` 對應素材，清除指定槽；空槽時 raise ValueError
+- `extract_affix(db, user_id, gear_type, gear_level, now) -> dict` — 消耗 `AFFIX_EXTRACT_COST` 對應素材，隨機抽一條詞條填入第一個空槽；回傳 `{slot_index, affix_type, value}`；滿槽時 raise ValueError
+- `clear_affix(db, user_id, gear_type, slot_index, gear_level, now) -> dict` — 消耗 `AFFIX_CLEAR_COST` 對應素材，清除指定槽；回傳 `{affix_type, value}`；空槽時 raise ValueError
 - `clear_all_affixes(db, user_id, gear_type, now)` — 清除所有詞條（無素材成本，鐵齒炸裂時呼叫）
 
 ## 環境變數
