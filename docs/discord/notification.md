@@ -33,6 +33,8 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 | 建築升級 | building-manager 觸發升級 | `{建築名稱}` 從 Lv{x} 變成 Lv{y}，下一等級需求 {z} | Public |
 | 工具強化成功 | gear-manager 回傳成功 | `{user_display_name} 的 {gear_name} 升級成功 :tada: Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）` | Public |
 | 工具強化失敗 | gear-manager 回傳失敗 | `{user_display_name} 的 {gear_name} 升級失敗 :boom: Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）` | Public |
+| 詞條抽取 | `extract_affix` handler 成功後 | `{user_display_name} 的 {gear_name} 抽到詞條：{affix_label}（+{value}%）` | Public |
+| 詞條清除 | `clear_affix` handler 成功後 | `{user_display_name} 的 {gear_name} 清除詞條：{affix_label}（+{value}%）` | Public |
 
 ## 通知去重
 
@@ -43,6 +45,7 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 - 建築升級通知只在升級處理瞬間發送。
 - 建築一次升多級時，每個等級分開發送。
 - 工具強化成功/失敗為 Public 訊息，只在強化處理瞬間發送，不需要持久去重。
+- 詞條抽取/清除通知只在操作瞬間發送，不需持久去重。
 
 ## 同一 settlement 內的通知順序
 
@@ -91,6 +94,16 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 {user_display_name} 的 {gear_name} 升級失敗 :boom: Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）
 ```
 
+### 詞條抽取
+```
+{user_display_name} 的 {gear_name} 抽到詞條：{affix_label}（+{value}%）
+```
+
+### 詞條清除
+```
+{user_display_name} 的 {gear_name} 清除詞條：{affix_label}（+{value}%）
+```
+
 ## 工具強化通知欄位
 
 - `current_level`: 本次強化嘗試前的工具等級。
@@ -99,4 +112,5 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 
 ## Changelog
 
+- 2026-05-22: 新增詞條抽取/清除公告事件（`affix_extracted`、`affix_cleared`）。
 - 2026.05.06.01: 工具強化成功/失敗 Public notification 改為顯示 current level、target level、成功/失敗狀態與總失敗次數；official user-facing gear naming changed to tools: 採集工具, 建設工具, 狩獵工具, 研究工具.
