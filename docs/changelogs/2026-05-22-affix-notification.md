@@ -59,14 +59,16 @@ source_paths:
 
 ## Tasks
 
-- [ ] Task 1: `notification.py` — 在 `_format_event` 新增 `affix_extracted` 與 `affix_cleared` 兩個 kind 分支，加入 `AFFIX_TYPE_LABELS` 對照表；更新 `docs/discord/notification.md` 補上兩個新事件的規格與範本
-- [ ] Task 2: `affix_manager.py` + `actions.py` — 修改 `clear_affix` 回傳被清除的詞條 dict（`{affix_type, value}`，與 `extract_affix` 一致）；兩個 handler 改為 `result = await affix_manager.extract_affix(...)` / `result = await affix_manager.clear_affix(...)`，捕捉回傳值後建立事件並呼叫 `dispatch_events`；更新 `tests/test_discord_commands.py`（驗證 extract/clear 成功後觸發 dispatch_events）
+- [ ] Task 1: `notification.py` — 在 `_format_event` 新增 `affix_extracted` 與 `affix_cleared` 兩個 kind 分支，加入 `AFFIX_TYPE_LABELS` 對照表（7 種詞條的中文標籤）；更新 `docs/discord/notification.md`，在 `## 訊息範本` 新增 `### 詞條抽取` 與 `### 詞條清除` 小節
+- [ ] Task 2: `affix_manager.py` + `actions.py` — 修改 `clear_affix`：在 DELETE 前從 `existing` list 取出 `slot_index` 對應的 dict，函式改為回傳 `{"affix_type": ..., "value": ...}`（回傳型別 `-> dict`）；`extract_affix` handler 改為 `result = await affix_manager.extract_affix(...)`，`clear_affix` handler 改為 `result = await affix_manager.clear_affix(...)`；兩個 handler 成功後各建立事件 dict（含 `type`, `user_display_name`=`inter.author.display_name`, `gear_type`, `affix_type`=`result["affix_type"]`, `value`=`result["value"]`）並呼叫 `await notification.dispatch_events(self.bot, [event])`；更新 `tests/test_discord_commands.py`（驗證 extract/clear 成功後觸發 dispatch_events）
 
 ## Key Assumptions
 
 - `extract_affix` 已回傳 `{"slot_index", "affix_type", "value"}`，可直接用於事件內容，無需額外查 DB。
-- `clear_affix` 目前回傳 `None`，需改為回傳被清除詞條的 `{"affix_type", "value"}`；修改集中在同一個函式，影響小。
-- `GEAR_LABELS` 已在 `notification.py` 透過 `from cogs.ui_renderer import GEAR_LABELS` 引入，可直接使用。
+- `clear_affix` 目前回傳 `None`，需改為回傳 `{"affix_type", "value"}`；`existing` list 在函式內已可取得，在 DELETE 前取出目標 dict 即可。
+- `GEAR_LABELS` 已在 `notification.py` 透過 `from cogs.ui_renderer import GEAR_LABELS` 引入，`_format_event` 內直接使用 `GEAR_LABELS.get(gear_type, gear_type)` 轉換工具名稱（與現有 gear 事件一致）。
+- `user_display_name` 由 handler 傳入（`inter.author.display_name`），與現有 gear upgrade 通知的做法相同。
 - 詞條公告無需去重（與 gear upgrade 通知相同，只在操作瞬間發送）。
+- `docs/discord/notification.md` 事件清單已有詞條兩列（已在工作目錄修改，未 commit），Task 1 只需補訊息範本小節。
 
 ## Review Issues
