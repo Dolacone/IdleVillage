@@ -1047,6 +1047,27 @@ class AffixIntegrationTest(SettlementTestBase):
         actual_ct = _utc(datetime.fromisoformat(row[0]))
         self.assertAlmostEqual(actual_ct.timestamp(), expected_ct.timestamp(), delta=1)
 
+    async def test_burst_applies_efficiency_affix(self):
+        """settle_burst applies efficiency affix bonus to all 3 cycle outputs."""
+        now = _now()
+        cycle_end = now - timedelta(minutes=1)
+        await self._insert_player(action="gathering", completion_time=cycle_end, last_update_time=cycle_end)
+        async with schema.get_connection() as db:
+            await self._insert_affix(db, self.TEST_USER, "gathering", 0, "efficiency", 10)
+            await db.execute("UPDATE village_resources SET amount=1000 WHERE resource_type='food'")
+            await db.commit()
+
+        base = int(ALL_TEST_ENV["BASE_OUTPUT"])
+        food_cost = int(ALL_TEST_ENV["FOOD_COST"])
+        await settle_burst(self.TEST_USER, now)
+
+        async with schema.get_connection() as db:
+            row = await db.execute("SELECT amount FROM village_resources WHERE resource_type='food'")
+            row = await row.fetchone()
+        expected_per_cycle = math.floor(base * 1.10)
+        expected_food = 1000 - food_cost * 3 + expected_per_cycle * 3
+        self.assertEqual(row[0], expected_food)
+
 
 if __name__ == "__main__":
     unittest.main()

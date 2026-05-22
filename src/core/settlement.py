@@ -389,8 +389,9 @@ async def settle_burst(user_id: str, now: datetime) -> tuple[bool, list[dict]]:
 
         await player_manager.spend_ap(db, user_id, 1, now)
 
+        burst_affix_bonuses = await affix_manager.get_affix_bonuses(db, user_id, player["action"])
         for _ in range(3):
-            cycle_events = await _run_one_cycle(db, user_id, now, update_timestamps=False)
+            cycle_events = await _run_one_cycle(db, user_id, now, update_timestamps=False, affix_bonuses=burst_affix_bonuses)
             events.extend(cycle_events)
 
         await db.commit()

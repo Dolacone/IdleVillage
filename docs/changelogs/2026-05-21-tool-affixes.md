@@ -1,6 +1,6 @@
 ---
 title: "工具詞條抽取機制"
-status: Issues-confirmed
+status: Ready-to-review
 created: 2026-05-21
 doc_type: change
 last_reviewed: 2026-05-22
@@ -14,14 +14,20 @@ source_paths:
   - src/managers/gear_manager.py
   - src/cogs/actions.py
   - src/cogs/ui_renderer.py
+  - .env.example
+  - docs/README.md
+  - docs/discord/command-handler.md
+  - docs/engine/cycle-engine.md
+  - docs/engine/formula.md
+  - docs/managers/affix-manager.md
+  - docs/managers/gear-manager.md
+  - tests/support.py
   - tests/test_affix_manager.py
-  - tests/test_gear_manager.py
+  - tests/test_discord_commands.py
   - tests/test_engine_formula.py
   - tests/test_engine_settlement.py
-  - tests/test_discord_commands.py
+  - tests/test_gear_manager.py
   - tests/test_v2_schema_initialization.py
-  - tests/test_v2_config_validation.py
-  - tests/support.py
 scope: "為四種工具加入詞條系統：玩家可消耗素材抽取詞條，詞條在指定範圍內提供隨機加成，強化炸裂時清除。"
 ---
 
@@ -192,5 +198,5 @@ AP refund 透過 `player_manager.refund_ap(db, user_id, amount, now)` 實作（T
 
 ## Review Issues
 
-- [ ] [Major] `settle_burst` 未套用目前行動工具的詞條。`settle_burst` 呼叫 `_run_one_cycle(db, user_id, now, update_timestamps=False)`，而 `_run_one_cycle` 只有在 `update_timestamps=True` 時才會自行查 `affix_manager.get_affix_bonuses`，因此 burst 的三次結算會使用全 0 詞條。這違反 Key Assumptions：「cycle time 不影響 burst，efficiency/material_drop 正常套用」。Reproducer: `.venv/bin/python - <<'PY' ... PY` 建立採集玩家與 `efficiency +10%` 詞條後執行 `settle_burst`，輸出 `{'wood_delta': 60, 'expected_with_affix': 66, 'actual_indicates_no_affix': True}`。
-- [ ] [Major] `source_paths` 與實際 change diff 不一致。`git diff --name-only 12634c8..HEAD` 顯示本變更修改 `.env.example`、`docs/README.md`、`docs/discord/command-handler.md`、`docs/engine/cycle-engine.md`、`docs/engine/formula.md`、`docs/managers/affix-manager.md`、`docs/managers/gear-manager.md` 等檔案，但 `source_paths` 未列入；同時 `source_paths` 列出 `tests/test_v2_config_validation.py`，該檔不在本變更 diff 中。這使 checklist 的 metadata gate 無法驗證。
+- [x] [Major] `settle_burst` 未套用目前行動工具的詞條。修正：`settle_burst` 現在在迴圈前查 `affix_manager.get_affix_bonuses(db, user_id, player["action"])` 並傳入 `_run_one_cycle`。
+- [x] [Major] `source_paths` 與實際 change diff 不一致。修正：已更新 source_paths 移除 `test_v2_config_validation.py`，補入 `.env.example`、`docs/README.md`、`docs/discord/command-handler.md`、`docs/engine/cycle-engine.md`、`docs/engine/formula.md`、`docs/managers/affix-manager.md`、`docs/managers/gear-manager.md`。
