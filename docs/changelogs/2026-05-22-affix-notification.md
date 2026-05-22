@@ -6,6 +6,7 @@ doc_type: change
 last_reviewed: 2026-05-22
 source_paths:
   - src/core/notification.py
+  - src/managers/affix_manager.py
   - src/cogs/actions.py
   - docs/discord/notification.md
 ---
@@ -58,12 +59,14 @@ source_paths:
 
 ## Tasks
 
-- [ ] Task 1: `notification.py` 新增 `affix_extracted`/`affix_cleared` 事件處理，含工具名稱與詞條標籤對照表；更新 `docs/discord/notification.md`
-- [ ] Task 2: `actions.py` 的 `extract_affix` 與 `clear_affix` handler 在成功後建立並 dispatch 對應事件；更新 `tests/test_discord_commands.py`
+- [ ] Task 1: `notification.py` — 在 `_format_event` 新增 `affix_extracted` 與 `affix_cleared` 兩個 kind 分支，加入 `AFFIX_TYPE_LABELS` 對照表；更新 `docs/discord/notification.md` 補上兩個新事件的規格與範本
+- [ ] Task 2: `affix_manager.py` + `actions.py` — 修改 `clear_affix` 回傳被清除的詞條 dict（`{affix_type, value}`，與 `extract_affix` 一致）；兩個 handler 改為 `result = await affix_manager.extract_affix(...)` / `result = await affix_manager.clear_affix(...)`，捕捉回傳值後建立事件並呼叫 `dispatch_events`；更新 `tests/test_discord_commands.py`（驗證 extract/clear 成功後觸發 dispatch_events）
 
 ## Key Assumptions
 
-- 詞條清除時，需在 DB commit 前先讀取即將被清除的詞條值（type + value），才能放入事件內容。
-- `affix_manager.extract_affix` 目前不回傳抽到的詞條內容；需確認是否需要修改其簽名或改為查 DB。
+- `extract_affix` 已回傳 `{"slot_index", "affix_type", "value"}`，可直接用於事件內容，無需額外查 DB。
+- `clear_affix` 目前回傳 `None`，需改為回傳被清除詞條的 `{"affix_type", "value"}`；修改集中在同一個函式，影響小。
+- `GEAR_LABELS` 已在 `notification.py` 透過 `from cogs.ui_renderer import GEAR_LABELS` 引入，可直接使用。
+- 詞條公告無需去重（與 gear upgrade 通知相同，只在操作瞬間發送）。
 
 ## Review Issues
