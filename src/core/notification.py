@@ -171,23 +171,15 @@ def _format_event(event: dict) -> str | None:
             f"Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）"
         )
 
-    if kind == "affix_extracted":
+    if kind in ("affix_extracted", "affix_cleared"):
         user_name = event.get("user_display_name", "")
         gear_type = event.get("gear_type", "")
         affix_type = event.get("affix_type", "")
         value = event.get("value", 0)
         gear_name = GEAR_LABELS.get(gear_type, gear_type)
         affix_label = AFFIX_TYPE_LABELS.get(affix_type, affix_type)
-        return f"{user_name} 的 {gear_name} 抽到詞條：{affix_label}（+{value}%）"
-
-    if kind == "affix_cleared":
-        user_name = event.get("user_display_name", "")
-        gear_type = event.get("gear_type", "")
-        affix_type = event.get("affix_type", "")
-        value = event.get("value", 0)
-        gear_name = GEAR_LABELS.get(gear_type, gear_type)
-        affix_label = AFFIX_TYPE_LABELS.get(affix_type, affix_type)
-        return f"{user_name} 的 {gear_name} 清除詞條：{affix_label}（+{value}%）"
+        verb = "抽到" if kind == "affix_extracted" else "清除"
+        return f"{user_name} 的 {gear_name} {verb}詞條：{affix_label}（+{value}%）"
 
     return None
 
