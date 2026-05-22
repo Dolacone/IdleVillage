@@ -1,6 +1,6 @@
 ---
 title: "工具詞條抽取機制"
-status: Reviewed
+status: Done
 created: 2026-05-21
 doc_type: change
 last_reviewed: 2026-05-22
