@@ -65,6 +65,14 @@ async def spend_ap(db, user_id: str, amount: int, now: datetime) -> None:
 # Material helpers
 # ---------------------------------------------------------------------------
 
+async def get_material(db, user_id: str, gear_type: str) -> int:
+    """Return the player's current material count for the given gear type."""
+    col = ACTION_MATERIAL_COL[gear_type]
+    async with db.execute(f"SELECT {col} FROM players WHERE user_id=?", (user_id,)) as cur:
+        row = await cur.fetchone()
+    return row[0] if row else 0
+
+
 async def add_material(db, user_id: str, gear_type: str, amount: int, ts: datetime) -> None:
     """Add amount to the player's material balance for the given gear type."""
     col = ACTION_MATERIAL_COL[gear_type]
