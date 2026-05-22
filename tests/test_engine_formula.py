@@ -175,6 +175,37 @@ class ComputeOutputTest(DatabaseTestCase):
         self.assertEqual(result, expected)
 
 
+class AffixEfficiencyTest(DatabaseTestCase):
+    TEST_USER = "affix_eff_user"
+
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+        from database import schema
+        async with schema.get_connection() as db:
+            await db.execute(
+                """INSERT INTO players (user_id, created_at, updated_at, ap_full_time) VALUES (?,?,?,?)""",
+                (self.TEST_USER, now, now, now),
+            )
+            await db.commit()
+
+    async def test_affix_efficiency_adds_to_output(self):
+        base = int(ALL_TEST_ENV["BASE_OUTPUT"])
+        from database import schema
+        async with schema.get_connection() as db:
+            result = await compute_output(db, self.TEST_USER, "gathering", affix_efficiency_pct=10)
+        expected = math.floor(base * 1.10)
+        self.assertEqual(result, expected)
+
+    async def test_affix_efficiency_zero_no_change(self):
+        base = int(ALL_TEST_ENV["BASE_OUTPUT"])
+        from database import schema
+        async with schema.get_connection() as db:
+            result = await compute_output(db, self.TEST_USER, "gathering", affix_efficiency_pct=0)
+        self.assertEqual(result, base)
+
+
 class ActionConfigMapsTest(unittest.TestCase):
     def test_all_valid_actions_have_gear_col(self):
         for action in VALID_ACTIONS:

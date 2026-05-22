@@ -47,10 +47,10 @@ def action_costs(action: str) -> dict[str, int]:
     return costs
 
 
-async def compute_output(db, user_id: str, action: str) -> int:
+async def compute_output(db, user_id: str, action: str, affix_efficiency_pct: int = 0) -> int:
     """
-    Return floor(BASE_OUTPUT × (1 + stage_bonus + gear_bonus + facility_bonus)).
-    Reads stage_state, players, and buildings from the supplied open db connection.
+    Return floor(BASE_OUTPUT × (1 + stage_bonus + gear_bonus + facility_bonus + affix_efficiency)).
+    affix_efficiency_pct is the summed efficiency affix value for the current action's tool.
     """
     base = get_env_int("BASE_OUTPUT")
     stage_bonus_per = get_env_float("STAGE_BONUS_PER_CLEAR")
@@ -80,5 +80,6 @@ async def compute_output(db, user_id: str, action: str) -> int:
         upgrade_clears * stage_bonus_per
         + gear_level * gear_bonus_per
         + facility_level * facility_bonus_per
+        + affix_efficiency_pct / 100.0
     )
     return math.floor(base * (1 + bonus))

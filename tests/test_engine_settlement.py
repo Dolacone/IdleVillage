@@ -955,5 +955,98 @@ class APTest(SettlementTestBase):
         self.assertEqual(ap, 0)
 
 
+class AffixIntegrationTest(SettlementTestBase):
+    """Verify affix bonuses flow through settlement correctly."""
+
+    async def _insert_affix(self, db, user_id, gear_type, slot_index, affix_type, value):
+        await db.execute(
+            "INSERT INTO gear_affixes (user_id, gear_type, slot_index, affix_type, value) VALUES (?,?,?,?,?)",
+            (user_id, gear_type, slot_index, affix_type, value),
+        )
+
+    async def test_efficiency_affix_increases_output(self):
+        """efficiency affix adds to cycle output."""
+        now = _now()
+        cycle_end = now - timedelta(minutes=1)
+        last_update = now - timedelta(minutes=11)
+        await self._insert_player(action="gathering", completion_time=cycle_end, last_update_time=last_update)
+        async with schema.get_connection() as db:
+            await self._insert_affix(db, self.TEST_USER, "gathering", 0, "efficiency", 10)
+            await db.execute("UPDATE village_resources SET amount=1000 WHERE resource_type='food'")
+            await db.commit()
+
+        base = int(ALL_TEST_ENV["BASE_OUTPUT"])
+        food_cost = int(ALL_TEST_ENV["FOOD_COST"])
+        await settle_complete_cycles(self.TEST_USER, now)
+
+        async with schema.get_connection() as db:
+            row = await db.execute("SELECT amount FROM village_resources WHERE resource_type='food'")
+            row = await row.fetchone()
+        expected_output = math.floor(base * 1.10)
+        self.assertEqual(row[0], 1000 - food_cost + expected_output)
+
+    async def test_cycle_time_reduce_shortens_completion_time(self):
+        """cycle_time_reduce affix shortens the next completion_time after a cycle settles."""
+        os.environ["ACTION_CYCLE_MINUTES"] = "10"
+        now = _now()
+        cycle_end = now - timedelta(minutes=1)
+        last_update = now - timedelta(minutes=11)
+        await self._insert_player(action="gathering", completion_time=cycle_end, last_update_time=last_update)
+        async with schema.get_connection() as db:
+            await self._insert_affix(db, self.TEST_USER, "gathering", 0, "cycle_time_reduce", 10)
+            await db.commit()
+
+        await settle_complete_cycles(self.TEST_USER, now)
+
+        async with schema.get_connection() as db:
+            row = await db.execute("SELECT completion_time FROM players WHERE user_id=?", (self.TEST_USER,))
+            row = await row.fetchone()
+        import math as _math
+        effective_secs = _math.floor(10 * 60 * 0.90)
+        expected_ct = _utc(cycle_end) + timedelta(seconds=effective_secs)
+        actual_ct = _utc(datetime.fromisoformat(row[0]))
+        self.assertAlmostEqual(actual_ct.timestamp(), expected_ct.timestamp(), delta=1)
+
+    async def test_material_drop_affix_raises_drop_rate(self):
+        """material_drop affix adds to effective drop rate."""
+        now = _now()
+        cycle_end = now - timedelta(minutes=1)
+        last_update = now - timedelta(minutes=11)
+        await self._insert_player(action="gathering", completion_time=cycle_end, last_update_time=last_update)
+        async with schema.get_connection() as db:
+            await self._insert_affix(db, self.TEST_USER, "gathering", 0, "material_drop", 100)
+            await db.commit()
+
+        with patch("core.settlement.random.random", return_value=0.99):
+            await settle_complete_cycles(self.TEST_USER, now)
+
+        async with schema.get_connection() as db:
+            row = await db.execute(
+                "SELECT materials_gathering FROM players WHERE user_id=?", (self.TEST_USER,)
+            )
+            row = await row.fetchone()
+        self.assertEqual(row[0], 1)
+
+    async def test_change_action_new_completion_uses_new_action_affix(self):
+        """change_action sets completion_time using new action's cycle_time_reduce."""
+        os.environ["ACTION_CYCLE_MINUTES"] = "10"
+        now = _now()
+        await self._insert_player(action=None)
+        async with schema.get_connection() as db:
+            await self._insert_affix(db, self.TEST_USER, "combat", 0, "cycle_time_reduce", 10)
+            await db.commit()
+
+        await change_action(self.TEST_USER, "combat", None, now)
+
+        async with schema.get_connection() as db:
+            row = await db.execute("SELECT completion_time FROM players WHERE user_id=?", (self.TEST_USER,))
+            row = await row.fetchone()
+        import math as _math
+        effective_secs = _math.floor(10 * 60 * 0.90)
+        expected_ct = now + timedelta(seconds=effective_secs)
+        actual_ct = _utc(datetime.fromisoformat(row[0]))
+        self.assertAlmostEqual(actual_ct.timestamp(), expected_ct.timestamp(), delta=1)
+
+
 if __name__ == "__main__":
     unittest.main()
