@@ -1,6 +1,6 @@
 ---
 title: "詞條抽取/清除公告"
-status: Reviewed
+status: Refactored
 created: 2026-05-22
 doc_type: change
 last_reviewed: 2026-05-22
