@@ -1,6 +1,6 @@
 ---
 title: "工具詞條抽取機制"
-status: Ready-to-review
+status: Issues-confirmed
 created: 2026-05-21
 doc_type: change
 last_reviewed: 2026-05-22
@@ -189,3 +189,8 @@ AP refund 透過 `player_manager.refund_ap(db, user_id, amount, now)` 實作（T
 - 管理員直接降低工具等級後，已超出解鎖槽位的詞條繼續生效（管理員操作邊界，不做強制清除）。
 - affix bonuses 不對 burst 的三次結算做特殊處理（cycle time 不影響 burst，efficiency/material_drop 正常套用）。
 - 主介面效率數字不顯示 affix efficiency 加成（Not Doing）。
+
+## Review Issues
+
+- [ ] [Major] `settle_burst` 未套用目前行動工具的詞條。`settle_burst` 呼叫 `_run_one_cycle(db, user_id, now, update_timestamps=False)`，而 `_run_one_cycle` 只有在 `update_timestamps=True` 時才會自行查 `affix_manager.get_affix_bonuses`，因此 burst 的三次結算會使用全 0 詞條。這違反 Key Assumptions：「cycle time 不影響 burst，efficiency/material_drop 正常套用」。Reproducer: `.venv/bin/python - <<'PY' ... PY` 建立採集玩家與 `efficiency +10%` 詞條後執行 `settle_burst`，輸出 `{'wood_delta': 60, 'expected_with_affix': 66, 'actual_indicates_no_affix': True}`。
+- [ ] [Major] `source_paths` 與實際 change diff 不一致。`git diff --name-only 12634c8..HEAD` 顯示本變更修改 `.env.example`、`docs/README.md`、`docs/discord/command-handler.md`、`docs/engine/cycle-engine.md`、`docs/engine/formula.md`、`docs/managers/affix-manager.md`、`docs/managers/gear-manager.md` 等檔案，但 `source_paths` 未列入；同時 `source_paths` 列出 `tests/test_v2_config_validation.py`，該檔不在本變更 diff 中。這使 checklist 的 metadata gate 無法驗證。
