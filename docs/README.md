@@ -28,6 +28,7 @@ This directory is the v2 design preview. v2 is a fresh restart and replaces v1 g
 | Building XP, level cap, capped progress | `managers/building-manager.md` |
 | Player state, AP, materials | `managers/player-manager.md` |
 | Gear upgrade rates, pity, costs | `managers/gear-manager.md` |
+| Tool affix slots, extraction, bonuses | `managers/affix-manager.md` |
 | Village resources | `managers/resource-manager.md` |
 | SQLite schema | `db-schema.md` |
 | Slash command routing | `discord/command-handler.md` |

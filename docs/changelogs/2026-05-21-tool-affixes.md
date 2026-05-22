@@ -1,6 +1,6 @@
 ---
 title: "工具詞條抽取機制"
-status: Draft
+status: Ready-to-implement
 created: 2026-05-21
 doc_type: change
 last_reviewed: 2026-05-22
@@ -77,3 +77,98 @@ Not Doing：
 - 詞條交易
 - 管理員直接編輯詞條
 - 詞條顯示於公告/通知頻道
+- 主介面效率數字顯示 affix efficiency 加成（顯示 base gear+facility 效率，follow-up 處理）
+- 管理員降低工具等級後強制清除超出槽位的詞條
+
+## Architecture Decisions
+
+### DB：新增 `gear_affixes` 表
+
+```sql
+CREATE TABLE IF NOT EXISTS gear_affixes (
+    user_id    TEXT NOT NULL,
+    gear_type  TEXT NOT NULL,   -- gathering / building / combat / research
+    slot_index INTEGER NOT NULL, -- 0-based
+    affix_type TEXT NOT NULL,
+    value      INTEGER NOT NULL, -- 1–5
+    PRIMARY KEY (user_id, gear_type, slot_index)
+)
+```
+
+理由：affixes 是獨立行，新增/刪除不影響 players 資料列，查詢按 (user_id, gear_type) 索引即可。不在 players 表加欄位，避免 4 種工具 × N 槽 × 2 欄（type/value）炸列。
+
+### 新增 `affix_manager.py`
+
+所有詞條 CRUD 集中在此模組，其他模組透過 `get_affix_bonuses()` 取得彙總加成，不直接查表。
+
+`get_affix_bonuses(db, user_id, gear_type) -> dict[str, int]`：
+回傳 `{"efficiency": 0, "material_drop": 0, "upgrade_success": 0, "upgrade_cost_reduce": 0, "upgrade_ap_refund": 0, "upgrade_material_refund": 0, "cycle_time_reduce": 0}`，各欄位為所有同類型詞條 value 之和（同類可疊加）。
+
+### 環境變數
+
+| 變數 | 預設值 | 說明 |
+| :--- | :--- | :--- |
+| `AFFIX_SLOT_INTERVAL` | 5 | 每 N 工具等級解鎖 1 槽 |
+| `AFFIX_EXTRACT_COST` | 1 | 抽取消耗對應素材數量 |
+| `AFFIX_CLEAR_COST` | 3 | 清除消耗對應素材數量 |
+
+### formula.compute_output 整合 efficiency 詞條
+
+在 gear_bonus 計算後再疊加 affix efficiency：
+```
+bonus = ... + gear_level * gear_bonus_per + affix_efficiency/100.0
+```
+`compute_output` 簽名加入 `affix_efficiency_pct: int = 0` 參數；呼叫方（settlement `_run_one_cycle`）以 `get_affix_bonuses(db, user_id, action)["efficiency"]` 取值後傳入。
+
+理由：formula 不做 DB 查詢，保持純計算函式，易於測試。詞條效果只對 player 當前 action 對應工具生效——查詢以 `action` 為 `gear_type`，切換行動後自動套用新工具的詞條。
+
+### settlement 整合 material_drop 與 cycle_time
+
+所有詞條查詢都以玩家當前 `action` 作為 `gear_type`，例如 `action == "gathering"` 時只查採集工具的詞條，其他工具的詞條不生效。
+
+- `_effective_material_drop_rate`：加入 `affix_material_drop_pct` 參數，疊加 `affix_material_drop_pct/100.0`（min 1.0）。呼叫方從 `get_affix_bonuses(db, user_id, player["action"])` 取 `material_drop`。
+- `cycle_time_reduce` 作用範圍：有效週期秒 = `floor(ACTION_CYCLE_MINUTES * 60 * (1 - cycle_time_reduce/100))`，最低 60 秒。此函式抽取為 `_effective_cycle_seconds(cycle_time_reduce_pct)` 並用於：
+  1. `change_action` 設定 completion_time（用新行動的工具 affixes）
+  2. `settle_complete_cycles` 補算每次推進 completion_time（用玩家當前 action 的 affixes）
+  3. partial ratio 計算（`elapsed / effective_cycle_seconds`，同上）
+  全部統一呼叫 `get_affix_bonuses(db, user_id, player["action"])` 取 `cycle_time_reduce`。
+
+### gear_manager 整合升級詞條
+
+在 `attempt_upgrade` 中：
+1. 讀取 affix bonuses。
+2. `material_cost` 先 `_material_cost()` 後乘以 `(1 - upgrade_cost_reduce/100)`，floor，最低 1。
+3. `_compute_rate()` 的結果再加 `upgrade_success/100.0`，min 1.0。
+4. 強化成功後：`random() < upgrade_ap_refund/100` 則退還 1 AP（呼叫 `player_manager.refund_ap(db, user_id, 1, now)`）；`random() < upgrade_material_refund/100` 則退還已消耗素材（呼叫 `player_manager.add_material()`）。
+5. risky 失敗後：呼叫 `affix_manager.clear_all_affixes(db, user_id, gear_type, now)`。
+
+AP refund 透過 `player_manager.refund_ap(db, user_id, amount, now)` 實作（Task 4 同步在 `player_manager.py` 新增此函式）：`ap_full_time = max(ap_full_time - amount * AP_RECOVERY_MINUTES, now)`。此函式屬 player_manager 負責，Task 4 涉及 gear_manager + player_manager 兩個 source files，符合 2-file 限制。
+
+`get_upgrade_info` 同步回傳詞條調整後的 cost 與 rate，供 UI 顯示。
+
+### UI 整合
+
+在現有工具強化子選單（`open_gear_upgrade` 觸發）下方新增詞條區塊：
+- 顯示所有已解鎖槽位與當前詞條（或「空槽」）。
+- 「抽取詞條」按鈕：`extract_affix:{gear_type}`，滿槽時 disabled。
+- 「清除」按鈕：`clear_affix:{gear_type}:{slot_index}`，空槽時 hidden（不渲染）。
+
+互動路由新增至 `actions.py`。`_render_gear` 查詢 `affix_manager.get_affixes()` 與 `affix_manager.slot_count()` 後傳入 renderer，renderer 只負責純渲染。
+
+主介面（`build_main_embed`）不顯示 affix efficiency 加成數字（顯示 base gear+facility 效率）——納入 Not Doing，follow-up 再處理。
+
+## Tasks
+
+- [ ] Task 1: DB schema + env vars — 新增 `gear_affixes` 表至 `_create_v2_tables`；新增 `AFFIX_SLOT_INTERVAL`, `AFFIX_EXTRACT_COST`, `AFFIX_CLEAR_COST` 至 `config.py` 與 `.env.example`；更新 `docs/engine/formula.md` 環境變數清單；測試：`test_v2_schema_initialization.py` 驗證表存在、`test_v2_config_validation.py` 驗證三個新 key
+- [ ] Task 2: `affix_manager.py` — 實作 `slot_count`, `get_affixes`, `get_affix_bonuses`, `extract_affix`, `clear_affix`, `clear_all_affixes`；邊界驗證：gear_level < AFFIX_SLOT_INTERVAL 時 extract 拒絕、slot_index 超出已解鎖範圍時 clear 拒絕、slot 未填時 clear 拒絕、素材不足拒絕、滿槽拒絕；affix_type/value/gear_type 驗證在 manager 層；測試：`tests/test_affix_manager.py`（上述所有邊界 + bonuses 彙總）
+- [ ] Task 3: formula + settlement 整合 — `compute_output` 加入 `affix_efficiency_pct: int = 0` 參數；settlement `_run_one_cycle` 呼叫前查 affix_manager 傳入；`_effective_material_drop_rate` 加入 `affix_material_drop_pct`；抽取 `_effective_cycle_seconds(cycle_time_reduce_pct)` 並套用至 `change_action`、`settle_complete_cycles` 補算每次推進、partial ratio 三處；cycle-engine SSOT 已在 plan 階段更新，code 階段驗證實作一致即可；測試：更新 `test_engine_formula.py`、`test_engine_settlement.py`（含 cycle_time affix 一致性測試）
+- [ ] Task 4: gear_manager + player_manager 整合 — `player_manager.py` 新增 `refund_ap(db, user_id, amount, now)`；`attempt_upgrade` 套用 upgrade_cost_reduce/upgrade_success/upgrade_ap_refund/upgrade_material_refund；risky 失敗後呼叫 `clear_all_affixes`；`get_upgrade_info` 回傳詞條調整後的 cost/rate；測試：更新 `test_gear_manager.py`（各 affix 效果、refund 機率 mock、risky 失敗後詞條清除）
+- [ ] Task 5: UI — `actions.py` 的 `_render_gear` 呼叫 `affix_manager.get_affixes()` 與 `slot_count()` 並傳入 renderer；`ui_renderer.py` 新增詞條槽顯示與 extract/clear 元件（滿槽 extract disabled、空槽 clear hidden）；`actions.py` 新增 `extract_affix:{gear_type}` 與 `clear_affix:{gear_type}:{slot_index}` 路由；更新 `docs/discord/command-handler.md`；測試：更新 `test_discord_commands.py`（路由驗證、滿槽/空槽邊界）
+
+## Key Assumptions
+
+- 同類型詞條可疊加（多條 efficiency 加成直接相加）；上限由槽位數量自然限制。
+- `cycle_time_reduce` 影響所有週期計算（change_action、補算、partial ratio），透過 `_effective_cycle_seconds` 統一實作。
+- 管理員直接降低工具等級後，已超出解鎖槽位的詞條繼續生效（管理員操作邊界，不做強制清除）。
+- affix bonuses 不對 burst 的三次結算做特殊處理（cycle time 不影響 burst，efficiency/material_drop 正常套用）。
+- 主介面效率數字不顯示 affix efficiency 加成（Not Doing）。

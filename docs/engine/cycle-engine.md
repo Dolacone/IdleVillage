@@ -1,7 +1,7 @@
 ---
 title: "Module: cycle-engine"
 doc_type: module
-last_reviewed: 2026-05-01
+last_reviewed: 2026-05-22
 source_paths:
   - src/core/engine.py
 ---
@@ -13,7 +13,7 @@ source_paths:
 ## 核心模型：個人獨立週期
 
 每位玩家有自己的 `completion_time`，彼此完全獨立。
-- 玩家設定行動後：`completion_time = now + ACTION_CYCLE_MINUTES`
+- 玩家設定行動後：`completion_time = now + _effective_cycle_seconds(cycle_time_reduce_pct)`
 - 第一次設定行動時若 `last_update_time = null`，不做 partial settlement，直接設定 `last_update_time = now` 與新的 `completion_time`
 - 任何時刻 `completion_time <= now` → 立即觸發該玩家的結算
 - 若玩家長時間未互動導致多個週期積壓，以 while-loop 逐週期補算，不得跳過
@@ -35,7 +35,8 @@ source_paths:
 ```
 1. 呼叫 action-resolver（傳入玩家行動設定）→ 取得 output
 2. last_update_time = cycle_end_time
-3. completion_time += ACTION_CYCLE_MINUTES
+3. effective_secs = _effective_cycle_seconds(affix cycle_time_reduce_pct)
+   completion_time += effective_secs（timedelta(seconds=effective_secs)）
 4. 呼叫 stage-manager.addProgress(output, actionType)
 5. 呼叫 building-manager.checkUpgrade()
 6. 呼叫 notification（若有事件）
@@ -79,13 +80,14 @@ last_update_time 不變
 若 completion_time <= now：
   先以完整週期 while-loop 補算，直到 completion_time > now
 
-elapsed = now - last_update_time
-ratio   = elapsed / ACTION_CYCLE_SECONDS（0 ~ 1）
+elapsed        = now - last_update_time
+effective_secs = _effective_cycle_seconds(affix cycle_time_reduce_pct)
+ratio          = elapsed / effective_secs（0 ~ 1）
 
 若 `last_update_time = null`：
   1. 不做 partial settlement
   2. 寫入新行動類型與目標
-  3. completion_time = now + ACTION_CYCLE_MINUTES
+  3. completion_time = now + effective_secs（_effective_cycle_seconds 以新行動的 affix 計算）
   4. last_update_time = now
 
 否則：
@@ -94,7 +96,7 @@ ratio   = elapsed / ACTION_CYCLE_SECONDS（0 ~ 1）
   3. 將比例產出計入 stage-manager，若關卡逾時則只對 stage progress 套用逾時倍率
   4. partial cycle 不掉落素材
   5. 寫入新行動類型與目標
-  6. completion_time = now + ACTION_CYCLE_MINUTES
+  6. completion_time = now + effective_secs（_effective_cycle_seconds 以新行動的 affix 計算）
   7. last_update_time = now
 ```
 
@@ -107,11 +109,17 @@ ratio   = elapsed / ACTION_CYCLE_SECONDS（0 ~ 1）
 
 ## 週期設定
 
-- **週期長度**：`ACTION_CYCLE_MINUTES`
+- **週期長度**：`ACTION_CYCLE_MINUTES`（基礎值；玩家工具詞條 `cycle_time_reduce` 可縮短）
+- **有效週期秒**：`floor(ACTION_CYCLE_MINUTES * 60 * (1 - cycle_time_reduce_pct/100))`，最低 60 秒。抽取為 `_effective_cycle_seconds(cycle_time_reduce_pct)` 並統一用於：
+  - 玩家設定行動時計算 completion_time
+  - 補算每次推進 completion_time
+  - partial ratio 計算（`elapsed / effective_cycle_seconds`）
+- `cycle_time_reduce_pct` 從 `affix_manager.get_affix_bonuses(db, user_id, action)["cycle_time_reduce"]` 取得（以玩家當前 action 對應工具的詞條為準）
 - **Watcher heartbeat**：`WATCHER_HEARTBEAT_SECONDS`
 - **單次補算週期上限**：`MAX_CYCLES_PER_SETTLEMENT`
 - **AP 回復**：由 `ap_full_time` 倒推，見 `managers/player-manager.md`
 
 ## Changelog
 
+- 2026-05-22: Updated cycle timing to use `_effective_cycle_seconds(cycle_time_reduce_pct)` at all three calculation points (change_action, catch-up advance, partial ratio). `cycle_time_reduce` affix scoped to player's current action tool.
 - 2026.05.08.00: Burst material rolls now use the effective drop rate for the current stage at each settlement.

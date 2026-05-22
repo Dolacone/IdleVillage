@@ -1,7 +1,7 @@
 ---
 title: "Module: gear-manager"
 doc_type: module
-last_reviewed: 2026-05-15
+last_reviewed: 2026-05-22
 source_paths:
   - src/managers/gear_manager.py
 ---
@@ -100,8 +100,24 @@ final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS)
 - `attempt_upgrade(db, user_id, gear_type, now, mode="normal")` — 執行強化嘗試，回傳 `{success, new_level, level_gain, pity_before, pity_after, rate, mode}`
 - `get_upgrade_info(db, user_id, gear_type, now, mode="normal")` — 回傳強化預覽資訊（成功率、依模式計算的消耗量、保底狀態、模式）；標準與鐵齒模式額外回傳 `risky_failed_levels` 與 `risky_bonus_pct`
 
+## 詞條系統（Affix System）
+
+工具詞條由 `affix_manager` 管理，gear-manager 在升級流程中套用以下詞條：
+
+| 詞條 | 效果 |
+| :--- | :--- |
+| `upgrade_success` | 成功率 +X%（加在 `_compute_rate` 結果上，min 1.0） |
+| `upgrade_cost_reduce` | 素材消耗 -X%（floor，最低 1） |
+| `upgrade_ap_refund` | 成功時 X% 機率退還 1 AP |
+| `upgrade_material_refund` | 成功時 X% 機率退還消耗素材 |
+
+鐵齒失敗時，呼叫 `affix_manager.clear_all_affixes(db, user_id, gear_type, now)` 清除所有詞條。
+
+詳見 `docs/changelogs/2026-05-21-tool-affixes.md`。
+
 ## Changelog
 
+- 2026.05.22: 強化流程整合詞條：upgrade_success/upgrade_cost_reduce/upgrade_ap_refund/upgrade_material_refund；鐵齒炸裂後清除詞條。
 - 2026.05.16: Standard (normal) mode now includes `risky_failed_levels × 0.0001` in success rate, same as risky mode. `get_upgrade_info()` now returns `risky_failed_levels` and `risky_bonus_pct` for normal mode in addition to risky mode. UI embed displays the risky bonus line for normal mode.
 
 - 2026.05.15: Risky mode simplification — removed random multi-level gain on success (was +1/+2/+3 at 60/30/10% when pity=0); success now always grants exactly gear +1 regardless of pity state.

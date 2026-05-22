@@ -79,6 +79,9 @@ Discord UI 顯示使用繁體中文。資料庫與程式內部 enum 一律使用
 | `GEAR_PITY_BONUS` | `managers/gear-manager.md` |
 | `GEAR_MIN_SUCCESS_RATE` | `managers/gear-manager.md` |
 | `GEAR_RATE_LOSS_PER_LEVEL` | `managers/gear-manager.md` |
+| `AFFIX_SLOT_INTERVAL` | `managers/affix-manager.md` |
+| `AFFIX_EXTRACT_COST` | `managers/affix-manager.md` |
+| `AFFIX_CLEAR_COST` | `managers/affix-manager.md` |
 
 ## Material Drop Rate
 
@@ -94,6 +97,7 @@ Discord UI 顯示使用繁體中文。資料庫與程式內部 enum 一律使用
 
 ## Changelog
 
+- 2026-05-22: Added AFFIX_SLOT_INTERVAL, AFFIX_EXTRACT_COST, AFFIX_CLEAR_COST env vars owned by affix-manager.
 - 2026.05.08.00: Added material drop rate ownership note for stage-matching boost.
 - 2026.05.06.01: Official user-facing gear naming changed to tools:
   採集工具, 建設工具, 狩獵工具, 研究工具.
