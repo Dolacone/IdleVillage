@@ -1,7 +1,7 @@
 ---
 title: "Module: notification"
 doc_type: module
-last_reviewed: 2026-05-06
+last_reviewed: 2026-05-22
 source_paths:
   - src/core/notification.py
 ---

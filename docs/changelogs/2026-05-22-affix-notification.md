@@ -73,4 +73,4 @@ source_paths:
 
 ## Review Issues
 
-- [x] 💭 `docs/discord/notification.md` has `last_reviewed: 2026-05-06` but was modified in this change (Task 1 adds two new message template sections and a dedup note). The frontmatter date was not updated to 2026-05-22 as required by the change document checklist.
+- [x] [Minor] `docs/discord/notification.md` 的 `last_reviewed` 未更新至 2026-05-22。已修正。
