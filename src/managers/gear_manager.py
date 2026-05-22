@@ -12,7 +12,7 @@ from datetime import datetime
 from core.config import get_env_float, get_env_int
 from core.formula import ACTION_MATERIAL_COL
 from core.utils import dt_str
-from managers import building_manager, player_manager
+from managers import affix_manager, building_manager, player_manager
 
 GEAR_TYPES = ("gathering", "building", "combat", "research")
 UPGRADE_MODES = ("normal", "buffer", "risky")
@@ -45,13 +45,17 @@ def _compute_rate(gear_level: int, pity_count: int, risky_failed_levels: int = 0
     return min(1.0, rate)
 
 
-def _material_cost(target_level: int, mode: str) -> int:
-    """Return material cost for the given upgrade mode and target level."""
+def _material_cost(target_level: int, mode: str, upgrade_cost_reduce_pct: int = 0) -> int:
+    """Return material cost for the given upgrade mode and target level, after affix reduction."""
     if mode == "buffer":
-        return max(1, math.ceil(target_level / 2))
-    if mode == "risky":
-        return 1
-    return target_level
+        base = max(1, math.ceil(target_level / 2))
+    elif mode == "risky":
+        base = 1
+    else:
+        base = target_level
+    if upgrade_cost_reduce_pct > 0:
+        return max(1, math.floor(base * (1 - upgrade_cost_reduce_pct / 100.0)))
+    return base
 
 
 async def _get_materials(db, user_id: str, gear_type: str) -> int:
@@ -107,9 +111,11 @@ async def get_upgrade_info(db, user_id: str, gear_type: str, now: datetime, mode
     ap = await player_manager.get_ap(db, user_id, now)
     pity = await player_manager.get_pity(db, user_id, gear_type)
     risky_failed_levels = await _get_risky_failed_levels(db, user_id)
+    bonuses = await affix_manager.get_affix_bonuses(db, user_id, gear_type)
     target_level = gear_level + 1
-    material_cost = _material_cost(target_level, mode)
-    rate = _compute_rate(gear_level, pity, risky_failed_levels=risky_failed_levels, mode=mode)
+    material_cost = _material_cost(target_level, mode, upgrade_cost_reduce_pct=bonuses["upgrade_cost_reduce"])
+    base_rate = _compute_rate(gear_level, pity, risky_failed_levels=risky_failed_levels, mode=mode)
+    rate = min(1.0, base_rate + bonuses["upgrade_success"] / 100.0)
 
     materials = await _get_materials(db, user_id, gear_type)
 
@@ -169,7 +175,8 @@ async def attempt_upgrade(db, user_id: str, gear_type: str, now: datetime, mode:
         raise ValueError("Insufficient AP")
 
     target_level = gear_level + 1
-    material_cost = _material_cost(target_level, mode)
+    bonuses = await affix_manager.get_affix_bonuses(db, user_id, gear_type)
+    material_cost = _material_cost(target_level, mode, upgrade_cost_reduce_pct=bonuses["upgrade_cost_reduce"])
 
     materials = await _get_materials(db, user_id, gear_type)
     if materials < material_cost:
@@ -180,7 +187,8 @@ async def attempt_upgrade(db, user_id: str, gear_type: str, now: datetime, mode:
 
     pity = await player_manager.get_pity(db, user_id, gear_type)
     risky_failed_levels = await _get_risky_failed_levels(db, user_id)
-    rate = _compute_rate(gear_level, pity, risky_failed_levels=risky_failed_levels, mode=mode)
+    base_rate = _compute_rate(gear_level, pity, risky_failed_levels=risky_failed_levels, mode=mode)
+    rate = min(1.0, base_rate + bonuses["upgrade_success"] / 100.0)
 
     if mode == "buffer":
         await player_manager.set_pity(db, user_id, gear_type, pity + 1, now)
@@ -198,16 +206,26 @@ async def attempt_upgrade(db, user_id: str, gear_type: str, now: datetime, mode:
 
     success = random.random() < rate
 
+    ap_refunded = False
+    material_refunded = False
+
     if success:
         level_gain = 1
         new_level = gear_level + level_gain
         await player_manager.set_gear_level(db, user_id, gear_type, new_level, now)
         await player_manager.set_pity(db, user_id, gear_type, 0, now)
         pity_after = 0
+        if bonuses["upgrade_ap_refund"] > 0 and random.random() < bonuses["upgrade_ap_refund"] / 100.0:
+            await player_manager.refund_ap(db, user_id, 1, now)
+            ap_refunded = True
+        if bonuses["upgrade_material_refund"] > 0 and random.random() < bonuses["upgrade_material_refund"] / 100.0:
+            await player_manager.add_material(db, user_id, gear_type, material_cost, now)
+            material_refunded = True
     elif mode == "risky":
         await _add_risky_failed_levels(db, user_id, gear_level, now)
         await player_manager.set_gear_level(db, user_id, gear_type, 0, now)
         await player_manager.set_pity(db, user_id, gear_type, 0, now)
+        await affix_manager.clear_all_affixes(db, user_id, gear_type, now)
         new_level = 0
         level_gain = 0
         pity_after = 0
@@ -227,4 +245,6 @@ async def attempt_upgrade(db, user_id: str, gear_type: str, now: datetime, mode:
         "pity_before": pity,
         "pity_after": pity_after,
         "mode": mode,
+        "ap_refunded": ap_refunded,
+        "material_refunded": material_refunded,
     }

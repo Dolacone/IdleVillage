@@ -763,5 +763,102 @@ class TestRiskyModeEnhancements(DatabaseTestCase):
         self.assertAlmostEqual(result["rate"], expected_rate)
 
 
+class TestAffixIntegration(DatabaseTestCase):
+    """gear_manager correctly applies affix bonuses during upgrade."""
+
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        async with schema.get_connection() as db:
+            await _insert_player(db, USER, "gathering", gear_level=5, materials=20)
+            await db.execute("UPDATE buildings SET level=10 WHERE building_type='research_lab'")
+            await db.execute(
+                "UPDATE players SET ap_full_time=? WHERE user_id=?",
+                (NOW.isoformat(), USER),
+            )
+            await db.commit()
+
+    async def _insert_affix(self, db, affix_type, value, slot_index=0):
+        await db.execute(
+            "INSERT INTO gear_affixes (user_id, gear_type, slot_index, affix_type, value) VALUES (?,?,?,?,?)",
+            (USER, "gathering", slot_index, affix_type, value),
+        )
+
+    async def test_upgrade_cost_reduce_lowers_material_cost(self):
+        """upgrade_cost_reduce affix reduces material cost (floor, min 1)."""
+        async with schema.get_connection() as db:
+            await self._insert_affix(db, "upgrade_cost_reduce", 50)
+            await db.commit()
+        info = None
+        async with schema.get_connection() as db:
+            info = await gear_manager.get_upgrade_info(db, USER, "gathering", NOW, "normal")
+        # target_level=6, base_cost=6, -50% = 3
+        self.assertEqual(info["material_cost"], 3)
+
+    async def test_upgrade_success_affix_adds_to_rate(self):
+        """upgrade_success affix increases the displayed and actual success rate."""
+        async with schema.get_connection() as db:
+            await self._insert_affix(db, "upgrade_success", 5)
+            await db.commit()
+        async with schema.get_connection() as db:
+            info = await gear_manager.get_upgrade_info(db, USER, "gathering", NOW, "normal")
+        base_rate = gear_manager._compute_rate(5, 0, 0, mode="normal")
+        self.assertAlmostEqual(info["rate"], min(1.0, base_rate + 0.05))
+
+    async def test_ap_refund_triggered_on_success(self):
+        """upgrade_ap_refund affix refunds 1 AP when triggered."""
+        async with schema.get_connection() as db:
+            await self._insert_affix(db, "upgrade_ap_refund", 100)
+            await db.commit()
+        with patch("managers.gear_manager.random.random", return_value=0.0):
+            async with schema.get_connection() as db:
+                result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW)
+                await db.commit()
+        self.assertTrue(result["success"])
+        self.assertTrue(result["ap_refunded"])
+
+    async def test_material_refund_triggered_on_success(self):
+        """upgrade_material_refund affix refunds spent materials when triggered."""
+        async with schema.get_connection() as db:
+            await self._insert_affix(db, "upgrade_material_refund", 100)
+            await db.commit()
+        before_mats = 20 - 1  # deduct 1 AP-equivalent; mats = 20
+        with patch("managers.gear_manager.random.random", return_value=0.0):
+            async with schema.get_connection() as db:
+                result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW)
+                await db.commit()
+                mats = await player_manager.get_material(db, USER, "gathering")
+        self.assertTrue(result["material_refunded"])
+        # target_level=6 → cost=6, refunded → net = 20 - 6 + 6 = 20
+        self.assertEqual(mats, 20)
+
+    async def test_risky_failure_clears_all_affixes(self):
+        """risky failure clears all affixes for that tool."""
+        async with schema.get_connection() as db:
+            await self._insert_affix(db, "efficiency", 3, slot_index=0)
+            await db.commit()
+        with patch("managers.gear_manager.random.random", return_value=1.0):
+            async with schema.get_connection() as db:
+                await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="risky")
+                await db.commit()
+        from managers import affix_manager
+        async with schema.get_connection() as db:
+            affixes = await affix_manager.get_affixes(db, USER, "gathering")
+        self.assertEqual(affixes, [])
+
+    async def test_refund_not_triggered_on_failure(self):
+        """AP and material refund affixes do not trigger on failure."""
+        async with schema.get_connection() as db:
+            await self._insert_affix(db, "upgrade_ap_refund", 100, slot_index=0)
+            await self._insert_affix(db, "upgrade_material_refund", 100, slot_index=1)
+            await db.commit()
+        with patch("managers.gear_manager.random.random", return_value=1.0):
+            async with schema.get_connection() as db:
+                result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="normal")
+                await db.commit()
+        self.assertFalse(result["success"])
+        self.assertFalse(result["ap_refunded"])
+        self.assertFalse(result["material_refunded"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -65,6 +65,24 @@ async def spend_ap(db, user_id: str, amount: int, now: datetime) -> None:
 # Material helpers
 # ---------------------------------------------------------------------------
 
+async def refund_ap(db, user_id: str, amount: int, now: datetime) -> None:
+    """
+    Refund AP by pulling ap_full_time earlier.
+    ap_full_time = max(ap_full_time - amount × AP_RECOVERY_MINUTES, now).
+    """
+    async with db.execute("SELECT ap_full_time FROM players WHERE user_id=?", (user_id,)) as cur:
+        row = await cur.fetchone()
+    if row is None:
+        return
+    recovery_mins = get_env_int("AP_RECOVERY_MINUTES")
+    ap_full_time = parse_dt(row[0])
+    new_ap_full_time = max(now, ap_full_time - timedelta(minutes=amount * recovery_mins))
+    await db.execute(
+        "UPDATE players SET ap_full_time=?, updated_at=? WHERE user_id=?",
+        (dt_str(new_ap_full_time), dt_str(now), user_id),
+    )
+
+
 async def get_material(db, user_id: str, gear_type: str) -> int:
     """Return the player's current material count for the given gear type."""
     col = ACTION_MATERIAL_COL[gear_type]
