@@ -12,6 +12,7 @@ V2_TABLE_NAMES = {
     "buildings",
     "players",
     "guild_installations",
+    "gear_affixes",
 }
 
 

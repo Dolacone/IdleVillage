@@ -103,6 +103,18 @@ async def _create_v2_tables(db):
     )
     await db.execute(
         """
+        CREATE TABLE IF NOT EXISTS gear_affixes (
+            user_id    TEXT NOT NULL,
+            gear_type  TEXT NOT NULL,
+            slot_index INTEGER NOT NULL,
+            affix_type TEXT NOT NULL,
+            value      INTEGER NOT NULL,
+            PRIMARY KEY (user_id, gear_type, slot_index)
+        )
+        """
+    )
+    await db.execute(
+        """
         CREATE INDEX IF NOT EXISTS idx_players_completion_time
         ON players (completion_time)
         """
