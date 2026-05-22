@@ -50,6 +50,15 @@ STAGE_TYPE_LABELS = {
 }
 RESOURCE_LABELS = {"food": "食物", "wood": "木頭", "knowledge": "知識"}
 RESOURCE_EMOJIS = {"food": "🌾", "wood": "🪵", "knowledge": "🧠"}
+AFFIX_TYPE_LABELS = {
+    "efficiency": "效率",
+    "material_drop": "素材掉落",
+    "upgrade_success": "強化成功率",
+    "upgrade_cost_reduce": "強化素材減免",
+    "upgrade_ap_refund": "強化AP退還",
+    "upgrade_material_refund": "強化素材退還",
+    "cycle_time_reduce": "週期縮短",
+}
 
 # Valid building targets for the action dropdown (research_lab is facility for research, not a build target)
 UI_BUILDING_TARGETS = ("gathering_field", "workshop", "hunting_ground")
@@ -321,8 +330,29 @@ def build_main_components(
     return rows
 
 
+def _build_affix_section(affixes: list, max_slots: int) -> str:
+    """Return affix slot text block, or empty string when no slots unlocked."""
+    if max_slots == 0:
+        return ""
+    affix_by_slot = {a["slot_index"]: a for a in affixes}
+    lines = [f"─────────────────────────────", f"詞條槽（{len(affixes)}/{max_slots}）"]
+    for i in range(max_slots):
+        if i in affix_by_slot:
+            a = affix_by_slot[i]
+            label = AFFIX_TYPE_LABELS.get(a["affix_type"], a["affix_type"])
+            lines.append(f"槽 {i}: ✨ {label} +{a['value']}%")
+        else:
+            lines.append(f"槽 {i}: ─ 空槽")
+    return "\n" + "\n".join(lines)
+
+
 def build_gear_embed(
-    upgrade_info: dict, gear_type: str, result: dict | None = None
+    upgrade_info: dict,
+    gear_type: str,
+    result: dict | None = None,
+    *,
+    affixes: list | None = None,
+    max_slots: int = 0,
 ) -> disnake.Embed:
     label = GEAR_LABELS.get(gear_type, gear_type)
     emoji = ACTION_EMOJIS.get(gear_type, "")
@@ -388,6 +418,10 @@ def build_gear_embed(
         f"工具等級上限：Lv{gear_cap}（研究所 Lv{gear_cap}）",
     ])
 
+    affix_section = _build_affix_section(affixes or [], max_slots)
+    if affix_section:
+        lines.append(affix_section)
+
     if result is not None:
         result_mode = result.get("mode", "normal")
         if result.get("success"):
@@ -416,6 +450,9 @@ def build_gear_components(
     can_attempt: bool,
     player_gear: dict,
     gear_cap: int,
+    *,
+    affixes: list | None = None,
+    max_slots: int = 0,
 ) -> list:
     bonus_pct = math.floor(get_env_float("GEAR_BONUS_PER_LEVEL") * 100)
 
@@ -445,7 +482,7 @@ def build_gear_components(
         for label, value, desc in _UPGRADE_MODE_DEFS
     ]
 
-    return [
+    rows = [
         disnake.ui.ActionRow(
             disnake.ui.StringSelect(
                 custom_id="gear_type_select",
@@ -474,6 +511,36 @@ def build_gear_components(
             ),
         ),
     ]
+
+    if max_slots > 0:
+        affixes_list = affixes or []
+        is_full = len(affixes_list) >= max_slots
+        rows.append(
+            disnake.ui.ActionRow(
+                disnake.ui.Button(
+                    label="✨ 抽取詞條",
+                    style=disnake.ButtonStyle.primary,
+                    custom_id=f"extract_affix:{gear_type}",
+                    disabled=is_full,
+                )
+            )
+        )
+        occupied = [a for a in affixes_list]
+        if occupied:
+            rows.append(
+                disnake.ui.ActionRow(
+                    *[
+                        disnake.ui.Button(
+                            label=f"清除槽 {a['slot_index']}",
+                            style=disnake.ButtonStyle.danger,
+                            custom_id=f"clear_affix:{gear_type}:{a['slot_index']}",
+                        )
+                        for a in occupied
+                    ]
+                )
+            )
+
+    return rows
 
 
 def build_manager_embed(target_user_display_name: str, player_data: dict) -> disnake.Embed:

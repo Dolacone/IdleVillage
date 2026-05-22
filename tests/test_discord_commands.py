@@ -645,6 +645,128 @@ class TestRiskyDropdownDescription(unittest.TestCase):
         self.assertIn("一半素材", descriptions["buffer"])
 
 
+class TestAffixEmbedSection(unittest.TestCase):
+    """Affix slot display in gear embed."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def _make_info(self, gear_level=5):
+        from core.config import get_env_float
+        info = {
+            "gear_level": gear_level,
+            "target_level": gear_level + 1,
+            "material_cost": gear_level + 1,
+            "rate": 0.8,
+            "pity": 0,
+            "ap": 2,
+            "can_attempt": True,
+            "gear_cap": 10,
+            "materials": 10,
+            "mode": "normal",
+            "risky_failed_levels": 0,
+            "risky_bonus_pct": 0.0,
+        }
+        return info
+
+    def test_no_slots_hides_affix_section(self):
+        from cogs.ui_renderer import build_gear_embed
+        embed = build_gear_embed(self._make_info(gear_level=4), "gathering", max_slots=0)
+        self.assertNotIn("詞條槽", embed.description)
+
+    def test_empty_slots_shown_with_count(self):
+        from cogs.ui_renderer import build_gear_embed
+        embed = build_gear_embed(self._make_info(gear_level=5), "gathering", affixes=[], max_slots=1)
+        self.assertIn("詞條槽（0/1）", embed.description)
+        self.assertIn("空槽", embed.description)
+
+    def test_filled_slot_shows_affix_type_and_value(self):
+        from cogs.ui_renderer import build_gear_embed
+        affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
+        embed = build_gear_embed(self._make_info(gear_level=5), "gathering", affixes=affixes, max_slots=1)
+        self.assertIn("詞條槽（1/1）", embed.description)
+        self.assertIn("效率 +3%", embed.description)
+
+    def test_multiple_slots_mixed(self):
+        from cogs.ui_renderer import build_gear_embed
+        affixes = [{"slot_index": 0, "affix_type": "cycle_time_reduce", "value": 2}]
+        embed = build_gear_embed(self._make_info(gear_level=10), "gathering", affixes=affixes, max_slots=2)
+        self.assertIn("詞條槽（1/2）", embed.description)
+        self.assertIn("週期縮短 +2%", embed.description)
+        self.assertIn("空槽", embed.description)
+
+
+class TestAffixComponents(unittest.TestCase):
+    """Affix extract/clear buttons in gear components."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def _player_gear(self, level=5):
+        return {"gathering": level, "building": 0, "combat": 0, "research": 0}
+
+    def test_no_slots_no_affix_row(self):
+        from cogs.ui_renderer import build_gear_components
+        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, max_slots=0)
+        custom_ids = [c.custom_id for row in rows for c in row.children]
+        self.assertFalse(any("extract_affix" in cid for cid in custom_ids))
+
+    def test_extract_button_present_when_slots_unlocked(self):
+        from cogs.ui_renderer import build_gear_components
+        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, affixes=[], max_slots=1)
+        custom_ids = [c.custom_id for row in rows for c in row.children]
+        self.assertIn("extract_affix:gathering", custom_ids)
+
+    def test_extract_disabled_when_full(self):
+        from cogs.ui_renderer import build_gear_components
+        affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
+        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1)
+        buttons = {c.custom_id: c for row in rows for c in row.children}
+        self.assertTrue(buttons["extract_affix:gathering"].disabled)
+
+    def test_extract_enabled_when_slot_available(self):
+        from cogs.ui_renderer import build_gear_components
+        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, affixes=[], max_slots=2)
+        buttons = {c.custom_id: c for row in rows for c in row.children}
+        self.assertFalse(buttons["extract_affix:gathering"].disabled)
+
+    def test_clear_button_hidden_for_empty_slot(self):
+        from cogs.ui_renderer import build_gear_components
+        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, affixes=[], max_slots=1)
+        custom_ids = [c.custom_id for row in rows for c in row.children]
+        self.assertFalse(any("clear_affix" in cid for cid in custom_ids))
+
+    def test_clear_button_present_for_occupied_slot(self):
+        from cogs.ui_renderer import build_gear_components
+        affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
+        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1)
+        custom_ids = [c.custom_id for row in rows for c in row.children]
+        self.assertIn("clear_affix:gathering:0", custom_ids)
+
+
+class TestAffixRouteRegistration(unittest.TestCase):
+    """extract_affix and clear_affix are registered interaction routes."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def test_extract_affix_is_own_button(self):
+        from cogs.actions import _is_own_button
+        self.assertTrue(_is_own_button("extract_affix:gathering"))
+
+    def test_clear_affix_is_own_button(self):
+        from cogs.actions import _is_own_button
+        self.assertTrue(_is_own_button("clear_affix:gathering:0"))
+
+    def test_invalid_gear_type_not_routed_extract(self):
+        from cogs.actions import _is_own_button
+        # _is_own_button only checks prefix, gear_type validation is in handler
+        self.assertTrue(_is_own_button("extract_affix:invalid"))
+
+
 class TestAdminCheck(unittest.TestCase):
     """Admin guard uses ADMIN_IDS from config."""
 

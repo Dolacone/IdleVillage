@@ -1,7 +1,7 @@
 ---
 title: "Module: command-handler"
 doc_type: module
-last_reviewed: 2026-05-15
+last_reviewed: 2026-05-22
 source_paths:
   - src/cogs/actions.py
   - src/cogs/general.py
@@ -40,6 +40,8 @@ source_paths:
 | `gear_type_select` | 選擇工具類型 | 更新強化預覽資訊（保留當前模式） |
 | `upgrade_mode_select:{gear_type}` | 選擇強化模式（標準 / 墊檔 / 鐵齒） | 更新成本預覽與成功率顯示 |
 | `attempt_upgrade:{gear_type}:{mode}` | 點擊強化 | 呼叫 `gear-manager.attempt_upgrade(db, user_id, gear_type, now, mode)`，顯示結果 |
+| `extract_affix:{gear_type}` | 點擊抽取詞條 | 消耗 `AFFIX_EXTRACT_COST` 個對應素材，隨機填入第一個空槽；滿槽時按鈕 disabled |
+| `clear_affix:{gear_type}:{slot_index}` | 點擊清除槽 N | 消耗 `AFFIX_CLEAR_COST` 個對應素材，清除指定槽詞條；空槽時不渲染此按鈕 |
 | `back_to_main` | 點擊返回 | 重新渲染主介面 |
 
 ### 管理員介面（資源管理）
@@ -74,6 +76,7 @@ source_paths:
 
 ## Changelog
 
+- 2026-05-22: Added `extract_affix:{gear_type}` and `clear_affix:{gear_type}:{slot_index}` routes for the tool affix system.
 - 2026-05-15: Replaced five `/idlevillage-manager` sub-commands with a single unified interface driven by user select + modal edits.
 - 2026.05.15: Added `upgrade_mode_select:{gear_type}` interaction route for mode selection. `attempt_upgrade` custom_id now encodes gear_type and mode as `attempt_upgrade:{gear_type}:{mode}`.
 - 2026.05.06.01: Official user-facing gear naming changed to tools; command

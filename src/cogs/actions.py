@@ -15,10 +15,10 @@ from core.config import get_discord_guild_id, get_env_int
 from core.settlement import change_action, settle_burst, settle_complete_cycles
 from core.utils import dt_str
 from database.schema import get_connection
-from managers import gear_manager, player_manager
+from managers import affix_manager, gear_manager, player_manager
 
 _OWN_BUTTONS = frozenset({"burst_execute", "open_gear_upgrade", "back_to_main"})
-_OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:")
+_OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:", "extract_affix:", "clear_affix:")
 _OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "gear_type_select"})
 _OWN_DROPDOWN_PREFIXES = ("upgrade_mode_select:",)
 _VALID_GEAR_TYPES = frozenset({"gathering", "building", "combat", "research"})
@@ -127,6 +127,9 @@ class ActionsCog(commands.Cog):
         now = datetime.now(timezone.utc)
         async with get_connection() as db:
             upgrade_info = await gear_manager.get_upgrade_info(db, user_id, gear_type, now, mode=mode)
+            gear_level = upgrade_info["gear_level"]
+            max_slots = affix_manager.slot_count(gear_level)
+            affixes = await affix_manager.get_affixes(db, user_id, gear_type)
             async with db.execute(
                 """SELECT gear_gathering, gear_building, gear_combat, gear_research
                    FROM players WHERE user_id=?""",
@@ -149,9 +152,10 @@ class ActionsCog(commands.Cog):
                 "research": 0,
             }
 
-        embed = build_gear_embed(upgrade_info, gear_type, result)
+        embed = build_gear_embed(upgrade_info, gear_type, result, affixes=affixes, max_slots=max_slots)
         components = build_gear_components(
-            gear_type, mode, upgrade_info["can_attempt"], player_gear, upgrade_info["gear_cap"]
+            gear_type, mode, upgrade_info["can_attempt"], player_gear, upgrade_info["gear_cap"],
+            affixes=affixes, max_slots=max_slots,
         )
         await inter.edit_original_response(embed=embed, components=components)
 
@@ -249,6 +253,44 @@ class ActionsCog(commands.Cog):
                     }
                 await notification.dispatch_events(self.bot, [gear_event])
             await self._render_gear(inter, gear_type, mode=mode, result=result)
+
+        elif cid.startswith("extract_affix:"):
+            parts = cid.split(":")
+            gear_type = parts[1] if len(parts) > 1 else ""
+            if gear_type not in _VALID_GEAR_TYPES:
+                return
+            await inter.response.defer()
+            now = datetime.now(timezone.utc)
+            async with get_connection() as db:
+                gear_level = await player_manager.get_gear_level(db, user_id, gear_type)
+                try:
+                    await affix_manager.extract_affix(db, user_id, gear_type, gear_level, now)
+                    await db.commit()
+                except ValueError:
+                    pass
+            await self._render_gear(inter, gear_type)
+
+        elif cid.startswith("clear_affix:"):
+            parts = cid.split(":")
+            if len(parts) < 3:
+                return
+            gear_type = parts[1]
+            if gear_type not in _VALID_GEAR_TYPES:
+                return
+            try:
+                slot_index = int(parts[2])
+            except ValueError:
+                return
+            await inter.response.defer()
+            now = datetime.now(timezone.utc)
+            async with get_connection() as db:
+                gear_level = await player_manager.get_gear_level(db, user_id, gear_type)
+                try:
+                    await affix_manager.clear_affix(db, user_id, gear_type, slot_index, gear_level, now)
+                    await db.commit()
+                except ValueError:
+                    pass
+            await self._render_gear(inter, gear_type)
 
     @commands.Cog.listener("on_dropdown")
     async def on_dropdown(self, inter: disnake.MessageInteraction) -> None:

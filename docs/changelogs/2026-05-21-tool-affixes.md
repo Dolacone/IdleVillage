@@ -1,10 +1,27 @@
 ---
 title: "工具詞條抽取機制"
-status: Ready-to-implement
+status: Ready-to-review
 created: 2026-05-21
 doc_type: change
 last_reviewed: 2026-05-22
-source_paths: []
+source_paths:
+  - src/managers/affix_manager.py
+  - src/database/schema.py
+  - src/core/config.py
+  - src/core/formula.py
+  - src/core/settlement.py
+  - src/managers/player_manager.py
+  - src/managers/gear_manager.py
+  - src/cogs/actions.py
+  - src/cogs/ui_renderer.py
+  - tests/test_affix_manager.py
+  - tests/test_gear_manager.py
+  - tests/test_engine_formula.py
+  - tests/test_engine_settlement.py
+  - tests/test_discord_commands.py
+  - tests/test_v2_schema_initialization.py
+  - tests/test_v2_config_validation.py
+  - tests/support.py
 scope: "為四種工具加入詞條系統：玩家可消耗素材抽取詞條，詞條在指定範圍內提供隨機加成，強化炸裂時清除。"
 ---
 
@@ -163,7 +180,7 @@ AP refund 透過 `player_manager.refund_ap(db, user_id, amount, now)` 實作（T
 - [x] Task 2: `affix_manager.py` — 實作 `slot_count`, `get_affixes`, `get_affix_bonuses`, `extract_affix`, `clear_affix`, `clear_all_affixes`；邊界驗證：gear_level < AFFIX_SLOT_INTERVAL 時 extract 拒絕、slot_index 超出已解鎖範圍時 clear 拒絕、slot 未填時 clear 拒絕、素材不足拒絕、滿槽拒絕；affix_type/value/gear_type 驗證在 manager 層；測試：`tests/test_affix_manager.py`（上述所有邊界 + bonuses 彙總）
 - [x] Task 3: formula + settlement 整合 — `compute_output` 加入 `affix_efficiency_pct: int = 0` 參數；settlement `_run_one_cycle` 呼叫前查 affix_manager 傳入；`_effective_material_drop_rate` 加入 `affix_material_drop_pct`；抽取 `_effective_cycle_seconds(cycle_time_reduce_pct)` 並套用至 `change_action`、`settle_complete_cycles` 補算每次推進、partial ratio 三處；cycle-engine SSOT 已在 plan 階段更新，code 階段驗證實作一致即可；測試：更新 `test_engine_formula.py`、`test_engine_settlement.py`（含 cycle_time affix 一致性測試）
 - [x] Task 4: gear_manager + player_manager 整合 — `player_manager.py` 新增 `refund_ap(db, user_id, amount, now)`；`attempt_upgrade` 套用 upgrade_cost_reduce/upgrade_success/upgrade_ap_refund/upgrade_material_refund；risky 失敗後呼叫 `clear_all_affixes`；`get_upgrade_info` 回傳詞條調整後的 cost/rate；測試：更新 `test_gear_manager.py`（各 affix 效果、refund 機率 mock、risky 失敗後詞條清除）
-- [ ] Task 5: UI — `actions.py` 的 `_render_gear` 呼叫 `affix_manager.get_affixes()` 與 `slot_count()` 並傳入 renderer；`ui_renderer.py` 新增詞條槽顯示與 extract/clear 元件（滿槽 extract disabled、空槽 clear hidden）；`actions.py` 新增 `extract_affix:{gear_type}` 與 `clear_affix:{gear_type}:{slot_index}` 路由；更新 `docs/discord/command-handler.md`；測試：更新 `test_discord_commands.py`（路由驗證、滿槽/空槽邊界）
+- [x] Task 5: UI — `actions.py` 的 `_render_gear` 呼叫 `affix_manager.get_affixes()` 與 `slot_count()` 並傳入 renderer；`ui_renderer.py` 新增詞條槽顯示與 extract/clear 元件（滿槽 extract disabled、空槽 clear hidden）；`actions.py` 新增 `extract_affix:{gear_type}` 與 `clear_affix:{gear_type}:{slot_index}` 路由；更新 `docs/discord/command-handler.md`；測試：更新 `test_discord_commands.py`（路由驗證、滿槽/空槽邊界）
 
 ## Key Assumptions
 
