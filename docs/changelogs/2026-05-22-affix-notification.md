@@ -60,7 +60,7 @@ source_paths:
 ## Tasks
 
 - [ ] Task 1: `notification.py` — 在 `_format_event` 新增 `affix_extracted` 與 `affix_cleared` 兩個 kind 分支，加入 `AFFIX_TYPE_LABELS` 對照表（7 種詞條的中文標籤）；更新 `docs/discord/notification.md`，在 `## 訊息範本` 新增 `### 詞條抽取` 與 `### 詞條清除` 小節
-- [ ] Task 2: `affix_manager.py` + `actions.py` — 修改 `clear_affix`：在 DELETE 前從 `existing` list 取出 `slot_index` 對應的 dict，函式改為回傳 `{"affix_type": ..., "value": ...}`（回傳型別 `-> dict`）；`extract_affix` handler 改為 `result = await affix_manager.extract_affix(...)`，`clear_affix` handler 改為 `result = await affix_manager.clear_affix(...)`；兩個 handler 成功後各建立事件 dict（含 `type`, `user_display_name`=`inter.author.display_name`, `gear_type`, `affix_type`=`result["affix_type"]`, `value`=`result["value"]`）並呼叫 `await notification.dispatch_events(self.bot, [event])`；更新 `tests/test_discord_commands.py`（驗證 extract/clear 成功後觸發 dispatch_events）
+- [ ] Task 2: `affix_manager.py` + `actions.py` — 修改 `clear_affix`：在 DELETE 前從 `existing` list 取出 `slot_index` 對應的 dict，函式改為回傳 `{"affix_type": ..., "value": ...}`（回傳型別 `-> dict`）；`extract_affix` handler 改為 `result = await affix_manager.extract_affix(...)`，`clear_affix` handler 改為 `result = await affix_manager.clear_affix(...)`；兩個 handler 成功後各建立事件 dict（`type`=`"affix_extracted"` 或 `"affix_cleared"`，`user_display_name`=`inter.author.display_name`，`gear_type`，`affix_type`=`result["affix_type"]`，`value`=`result["value"]`）並呼叫 `await notification.dispatch_events(self.bot, [event])`；更新 `tests/test_discord_commands.py`（驗證 extract/clear 成功後觸發 dispatch_events）
 
 ## Key Assumptions
 
