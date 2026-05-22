@@ -1,6 +1,6 @@
 ---
 title: "詞條抽取/清除公告"
-status: Ready-to-review
+status: Reviewed
 created: 2026-05-22
 doc_type: change
 last_reviewed: 2026-05-22
@@ -72,3 +72,5 @@ source_paths:
 - `docs/discord/notification.md` 事件清單已有詞條兩列（已在工作目錄修改，未 commit），Task 1 只需補訊息範本小節。
 
 ## Review Issues
+
+- [x] 💭 `docs/discord/notification.md` has `last_reviewed: 2026-05-06` but was modified in this change (Task 1 adds two new message template sections and a dedup note). The frontmatter date was not updated to 2026-05-22 as required by the change document checklist.
