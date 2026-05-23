@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-23
+
+- Fixed `upgrade_cost_reduce` affix display sign: gear embed and affix notifications now show `-X%` instead of `+X%` for this affix type, matching the spec.
+
 ## 2026-05-22
 
 - Affix extract/clear actions now post a public announcement showing the player name, gear type, and the affix type and value drawn or removed.
