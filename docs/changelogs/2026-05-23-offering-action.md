@@ -1,10 +1,20 @@
 ---
 title: "奉獻行動（Offering Action）"
-status: Ready-to-implement
+status: Ready-to-review
 created: 2026-05-23
 doc_type: change
 last_reviewed: 2026-05-23
-source_paths: []
+source_paths:
+  - src/database/schema.py
+  - src/core/formula.py
+  - src/core/config.py
+  - src/core/settlement.py
+  - src/core/notification.py
+  - src/cogs/actions.py
+  - src/cogs/ui_renderer.py
+  - tests/test_engine_formula.py
+  - tests/test_engine_settlement.py
+  - tests/support.py
 scope: "新增第 5 種行動類型「奉獻」，消耗村莊資源換取全村集體素材獎勵。"
 ---
 
@@ -81,7 +91,7 @@ A: `OFFERING_THRESHOLD_PER_PLAYER = 1000`，12 人閾值 = 12,000。以平均 4 
   - Depends on: Task 2
   - Acceptance: 觸發時發送公開通知，包含累積量、閾值、全員獲得素材資訊；`notification.md` 的「同一 settlement 內的通知順序」區段已加入奉獻達標事件並定位順序
 
-- [ ] Task 4: UI — 奉獻加入 action_select + 資源選擇 dropdown + Dashboard accumulator 進度顯示 — 更新 `src/cogs/actions.py`（新增 offering + offering_resource_select 互動路由）、`src/cogs/ui_renderer.py`（Dashboard 累積進度行、主介面行動列表、奉獻 emoji 🎁）；更新 `docs/discord/command-handler.md`、`docs/discord/ui-renderer.md`
+- [x] Task 4: UI — 奉獻加入 action_select + 資源選擇 dropdown + Dashboard accumulator 進度顯示 — 更新 `src/cogs/actions.py`（新增 offering + offering_resource_select 互動路由）、`src/cogs/ui_renderer.py`（Dashboard 累積進度行、主介面行動列表、奉獻 emoji 🎁）；更新 `docs/discord/command-handler.md`、`docs/discord/ui-renderer.md`
   - Files: `src/cogs/actions.py`, `src/cogs/ui_renderer.py`
   - Depends on: Task 1, Task 2
   - Acceptance: action_select 含奉獻選項；選奉獻後出現資源 dropdown；Dashboard 顯示 accumulator 進度；村民行動區區別奉獻（食物）/奉獻（木頭）/奉獻（研究點）

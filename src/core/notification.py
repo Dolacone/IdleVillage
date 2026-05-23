@@ -32,7 +32,7 @@ AFFIX_TYPE_LABELS = {
 logger = logging.getLogger(__name__)
 
 
-async def _fetch_village_dashboard_data(db) -> tuple[dict, dict, dict, list]:
+async def _fetch_village_dashboard_data(db) -> tuple[dict, dict, dict, list, int, int]:
     async with db.execute("SELECT * FROM stage_state WHERE id=1") as cur:
         row = await cur.fetchone()
         cols = [d[0] for d in cur.description]
@@ -58,7 +58,17 @@ async def _fetch_village_dashboard_data(db) -> tuple[dict, dict, dict, list]:
         async for r in cur:
             action_counts.append((r[0], r[1], r[2]))
 
-    return stage_data, resources, buildings, action_counts
+    async with db.execute(
+        "SELECT offering_accumulator FROM village_state WHERE id=1"
+    ) as cur:
+        row = await cur.fetchone()
+    offering_accumulator = row[0] if row else 0
+
+    async with db.execute("SELECT COUNT(*) FROM players") as cur:
+        row = await cur.fetchone()
+    player_count = max(1, row[0] if row else 1)
+
+    return stage_data, resources, buildings, action_counts, offering_accumulator, player_count
 
 
 async def _clear_dashboard_reference(channel_id: str, message_id: str) -> None:
@@ -245,7 +255,7 @@ async def update_dashboard(bot) -> None:
             "SELECT dashboard_channel_id, dashboard_message_id FROM village_state"
         ) as cur:
             row = await cur.fetchone()
-        stage_data, resources, buildings, action_counts = (
+        stage_data, resources, buildings, action_counts, offering_accumulator, player_count = (
             await _fetch_village_dashboard_data(db)
         )
 
@@ -263,7 +273,11 @@ async def update_dashboard(bot) -> None:
 
     try:
         message = await channel.fetch_message(message_id)
-        embed = build_village_embed(stage_data, resources, buildings, action_counts)
+        offering_threshold = player_count * get_env_int("OFFERING_THRESHOLD_PER_PLAYER")
+        embed = build_village_embed(
+            stage_data, resources, buildings, action_counts,
+            offering_accumulator=offering_accumulator, offering_threshold=offering_threshold,
+        )
         await message.edit(embed=embed)
     except disnake.NotFound:
         await _clear_dashboard_reference(dashboard_channel_id, dashboard_message_id)

@@ -19,10 +19,11 @@ from managers import affix_manager, gear_manager, player_manager
 
 _OWN_BUTTONS = frozenset({"burst_execute", "open_gear_upgrade", "back_to_main"})
 _OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:", "extract_affix:", "clear_affix:")
-_OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "gear_type_select"})
+_OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "offering_resource_select", "gear_type_select"})
 _OWN_DROPDOWN_PREFIXES = ("upgrade_mode_select:",)
 _VALID_GEAR_TYPES = frozenset({"gathering", "building", "combat", "research"})
-_VALID_ACTIONS = frozenset({"gathering", "building", "combat", "research"})
+_VALID_ACTIONS = frozenset({"gathering", "building", "combat", "research", "offering"})
+_VALID_OFFERING_RESOURCES = frozenset({"food", "wood", "knowledge"})
 _VALID_UPGRADE_MODES = frozenset(gear_manager.UPGRADE_MODES)
 
 
@@ -57,7 +58,7 @@ class ActionsCog(commands.Cog):
 
     async def _fetch_all_data(
         self, db, user_id: str
-    ) -> tuple[dict, dict, dict, list, dict]:
+    ) -> tuple[dict, dict, dict, list, dict, int, int]:
         async with db.execute("SELECT * FROM stage_state WHERE id=1") as cur:
             row = await cur.fetchone()
             cols = [d[0] for d in cur.description]
@@ -92,7 +93,17 @@ class ActionsCog(commands.Cog):
             cols = [d[0] for d in cur.description]
             player_row = dict(zip(cols, row)) if row else {}
 
-        return stage_data, resources, buildings, action_counts, player_row
+        async with db.execute(
+            "SELECT offering_accumulator FROM village_state WHERE id=1"
+        ) as cur:
+            row = await cur.fetchone()
+        offering_accumulator = row[0] if row else 0
+
+        async with db.execute("SELECT COUNT(*) FROM players") as cur:
+            row = await cur.fetchone()
+        player_count = max(1, row[0] if row else 1)
+
+        return stage_data, resources, buildings, action_counts, player_row, offering_accumulator, player_count
 
     async def _render_main(
         self,
@@ -108,13 +119,17 @@ class ActionsCog(commands.Cog):
 
         async with get_connection() as db:
             await self._get_or_create_player(db, user_id, now)
-            stage_data, resources, buildings, action_counts, player_row = (
+            stage_data, resources, buildings, action_counts, player_row, offering_accumulator, player_count = (
                 await self._fetch_all_data(db, user_id)
             )
             ap = await player_manager.get_ap(db, user_id, now)
 
         player_row["_ap"] = ap
-        embed = build_main_embed(stage_data, resources, buildings, action_counts, player_row)
+        offering_threshold = player_count * get_env_int("OFFERING_THRESHOLD_PER_PLAYER")
+        embed = build_main_embed(
+            stage_data, resources, buildings, action_counts, player_row,
+            offering_accumulator=offering_accumulator, offering_threshold=offering_threshold,
+        )
         components = build_main_components(
             player_row, buildings, pending_action=pending_action, pending_target=pending_target
         )
@@ -204,6 +219,8 @@ class ActionsCog(commands.Cog):
             if action not in _VALID_ACTIONS:
                 return
             if action == "building" and target not in UI_BUILDING_TARGETS:
+                return
+            if action == "offering" and target not in _VALID_OFFERING_RESOURCES:
                 return
 
             await inter.response.defer()
@@ -327,6 +344,9 @@ class ActionsCog(commands.Cog):
             await self._render_main(inter, pending_action=value)
         elif cid == "building_target_select":
             await self._render_main(inter, pending_action="building", pending_target=value)
+        elif cid == "offering_resource_select":
+            if value in _VALID_OFFERING_RESOURCES:
+                await self._render_main(inter, pending_action="offering", pending_target=value)
         elif cid == "gear_type_select":
             if value in _VALID_GEAR_TYPES:
                 await self._render_gear(inter, value)

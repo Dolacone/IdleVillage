@@ -1,7 +1,7 @@
 ---
 title: "Module: ui-renderer"
 doc_type: module
-last_reviewed: 2026-05-15
+last_reviewed: 2026-05-23
 source_paths:
   - src/cogs/ui_renderer.py
 ---
@@ -28,6 +28,7 @@ source_paths:
 
 公用資源
 🌾 {food} | 🪵 {wood} | 🧠 {knowledge}
+🎁 奉獻進度：{offering_accumulator} / {offering_threshold}（{pct}%）   ← 僅當 offering_threshold > 0 時顯示
 
 公用設施 (等級上限：Lv{cap})
 🌾 採集場 Lv{n} ({pct}%)
@@ -62,6 +63,9 @@ source_paths:
 | 建設（狩獵場） | 建設（狩獵場） |
 | 戰鬥 | 戰鬥 |
 | 研究 | 研究 |
+| 奉獻（食物） | 奉獻（食物） |
+| 奉獻（木頭） | 奉獻（木頭） |
+| 奉獻（研究點） | 奉獻（研究點） |
 
 排序：人數降序；人數相同則動作名稱升序。
 
@@ -84,7 +88,7 @@ source_paths:
 `floor(stages_cleared / 5)`，不使用已通過總關卡數。
 emoji 順序與 工具 / 素材 欄位一致：🌾 🔨 ⚔️ 🔬。
 
-行動 emoji 對應：🌾採集、🔨建設、⚔️戰鬥、🔬研究
+行動 emoji 對應：🌾採集、🔨建設、⚔️戰鬥、🔬研究、🎁奉獻
 
 ## 互動元件
 
@@ -92,10 +96,10 @@ emoji 順序與 工具 / 素材 欄位一致：🌾 🔨 ⚔️ 🔬。
 
   Row 1: Button — ⚡ 消耗AP立刻完成三次行動 | 🔨 強化工具
   Row 2: Dropdown — 選擇行動
-  Row 3: Dropdown — 選擇建設目標（僅 building 時出現）
+  Row 3: Dropdown — 選擇建設目標（僅 building 時出現）或 選擇奉獻物資（僅 offering 時出現）
   Row 4: Button — ✅ 確認行動
 
-Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
+Discord 上限為 5 個 action row。選擇建設或奉獻時達到 4 rows。
 
 ### 瞬間行動
 
@@ -109,15 +113,19 @@ Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
 
 ### 行動選擇組
 - **Dropdown 1**：選擇行動
-  - 選項：採集 / 建設 / 戰鬥 / 研究
+  - 選項：採集 / 建設 / 戰鬥 / 研究 / 奉獻
   - 每個選項附帶描述，說明次要消耗與產出（食物消耗為全行動共用，不另列）：
     - 採集：`產出 🌾食物 + 🪵木頭`
     - 建設：`消耗 🪵木頭 | 產出 建築XP`
     - 戰鬥：`消耗 🪵木頭 | 產出 🧠知識`
     - 研究：`消耗 🧠知識 | 產出 研究所XP`
+    - 奉獻：`消耗四種行動產出合計 | 達標後全員素材各 +1`
 - **Dropdown 2**（僅選擇「建設」後出現）：選擇建設目標
   - 選項：採集場 / 加工廠 / 狩獵場
   - 顯示格式：`{建築名} Lv{n}（XP: {xp_progress}/{next_requirement}）`
+- **Dropdown 2**（僅選擇「奉獻」後出現）：選擇奉獻物資
+  - 選項：食物 / 木頭 / 研究點（custom_id: `offering_resource_select`）
+  - 顯示格式：`{emoji} {resource_name}`，描述：`消耗村莊 {resource_name}`
 - **Button**：`✅ 確認行動`（Green）
 
 ### 其他
@@ -210,6 +218,7 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
 - 2026.05.02.02: Action dropdown options now include descriptions showing secondary cost and output per action type. Gear type dropdown options now include descriptions showing the level transition and cumulative stat gain (`Lv{n} → Lv{n+1}: {type}產出 +{n×pct}% → +{(n+1)×pct}%`), or `已達等級上限 Lv{cap}` when at cap.
 - 2026.05.02.03: Removed incorrect special-case rule "若建築已達 level cap，顯示 100%". 100% is reached naturally when `xp_progress` reaches `next_req`; no display override is needed or correct.
 - 2026.05.04.00: Added 📊 效率 as line 1 of 個人資訊, before 裝備. Displays `{output}(+{pct}%)` per action type using the formula in engine/formula.md.
+- 2026-05-23: Added offering action to action dropdown (5th option); added offering_resource_select dropdown; added 🎁 奉獻進度 line to village section; updated villager action display names for offering.
 - 2026.05.06.01: Official user-facing gear naming changed to tools:
   dashboard line `🏅 工具`, button `🔨 強化工具`, and full names
   採集工具, 建設工具, 狩獵工具, 研究工具.

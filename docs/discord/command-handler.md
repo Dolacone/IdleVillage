@@ -1,7 +1,7 @@
 ---
 title: "Module: command-handler"
 doc_type: module
-last_reviewed: 2026-05-22
+last_reviewed: 2026-05-23
 source_paths:
   - src/cogs/actions.py
   - src/cogs/general.py
@@ -28,8 +28,9 @@ source_paths:
 ### 主介面
 | 元件 ID | 觸發條件 | 處理邏輯 |
 | :--- | :--- | :--- |
-| `action_select` | 選擇行動類型 | 若選建設則顯示 Dropdown 2，否則直接啟用確認按鈕 |
+| `action_select` | 選擇行動類型 | 若選建設則顯示建設目標 Dropdown；若選奉獻則顯示奉獻物資 Dropdown；否則直接啟用確認按鈕 |
 | `building_target_select` | 選擇建設目標 | 啟用確認按鈕 |
+| `offering_resource_select` | 選擇奉獻物資（食物/木頭/研究點） | 啟用確認按鈕 |
 | `confirm_action` | 點擊確認行動 | 呼叫 `player-manager.setAction()`，更新 Embed |
 | `burst_execute` | 點擊瞬間行動 | 確認 AP ≥ 1 → 呼叫 `cycle-engine.burst()`，更新 Embed |
 | `open_gear_upgrade` | 點擊強化工具 | 渲染工具強化子選單 |
@@ -76,6 +77,7 @@ source_paths:
 
 ## Changelog
 
+- 2026-05-23: Added `offering_resource_select` dropdown route and offering resource validation in `confirm_action:` handler for the offering action.
 - 2026-05-22: Added `extract_affix:{gear_type}` and `clear_affix:{gear_type}:{slot_index}` routes for the tool affix system.
 - 2026-05-15: Replaced five `/idlevillage-manager` sub-commands with a single unified interface driven by user select + modal edits.
 - 2026.05.15: Added `upgrade_mode_select:{gear_type}` interaction route for mode selection. `attempt_upgrade` custom_id now encodes gear_type and mode as `attempt_upgrade:{gear_type}:{mode}`.
