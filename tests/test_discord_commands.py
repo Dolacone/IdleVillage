@@ -696,6 +696,13 @@ class TestAffixEmbedSection(unittest.TestCase):
         self.assertIn("週期縮短 +2%", embed.description)
         self.assertIn("空槽", embed.description)
 
+    def test_upgrade_cost_reduce_slot_uses_negative_sign(self):
+        from cogs.ui_renderer import build_gear_embed
+        affixes = [{"slot_index": 0, "affix_type": "upgrade_cost_reduce", "value": 5}]
+        embed = build_gear_embed(self._make_info(gear_level=5), "gathering", affixes=affixes, max_slots=1)
+        self.assertIn("強化素材減免 -5%", embed.description)
+        self.assertNotIn("+5%", embed.description)
+
 
 class TestAffixComponents(unittest.TestCase):
     """Affix extract/clear buttons in gear components."""
