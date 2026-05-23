@@ -1069,5 +1069,161 @@ class AffixIntegrationTest(SettlementTestBase):
         self.assertEqual(row[0], expected_food)
 
 
+# ---------------------------------------------------------------------------
+# Offering action tests
+# ---------------------------------------------------------------------------
+
+class OfferingSettlementTest(SettlementTestBase):
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        await self._set_resource("food", 10000)
+        await self._set_resource("wood", 10000)
+        await self._set_resource("knowledge", 10000)
+
+    async def _get_offering_accumulator(self) -> int:
+        row = await self.fetchone("SELECT offering_accumulator FROM village_state WHERE id=1")
+        return row[0] if row else 0
+
+    async def test_offering_consumes_chosen_resource_and_increments_accumulator(self):
+        """Offering cycle consumes chosen resource and increments accumulator."""
+        cycle_end = _now() - timedelta(minutes=1)
+        await self._insert_player(
+            action="offering",
+            action_target="wood",
+            completion_time=cycle_end,
+            last_update_time=cycle_end - timedelta(minutes=10),
+        )
+        wood_before = await self._get_resource("wood")
+        acc_before = await self._get_offering_accumulator()
+
+        await settle_complete_cycles(self.TEST_USER, _now())
+
+        wood_after = await self._get_resource("wood")
+        acc_after = await self._get_offering_accumulator()
+        base = int(ALL_TEST_ENV["BASE_OUTPUT"])
+        food_cost = int(ALL_TEST_ENV["FOOD_COST"])
+        # offering_cost = 4 × base (all gear=0, no bonuses); wood also deducted by offering_cost
+        expected_offering_cost = base * 4
+        self.assertEqual(wood_before - wood_after, expected_offering_cost)
+        self.assertEqual(acc_after - acc_before, expected_offering_cost)
+
+    async def test_offering_does_not_add_stage_progress(self):
+        """Offering cycle does not contribute to stage progress."""
+        cycle_end = _now() - timedelta(minutes=1)
+        await self._insert_player(
+            action="offering",
+            action_target="food",
+            completion_time=cycle_end,
+            last_update_time=cycle_end - timedelta(minutes=10),
+        )
+        stage_before = await self._get_stage_state()
+        await settle_complete_cycles(self.TEST_USER, _now())
+        stage_after = await self._get_stage_state()
+        self.assertEqual(
+            stage_after["current_stage_progress"], stage_before["current_stage_progress"]
+        )
+
+    async def test_offering_does_not_drop_materials(self):
+        """Offering cycle never drops materials even with 100% drop rate."""
+        import os
+        os.environ["MATERIAL_DROP_RATE"] = "1.0"
+        cycle_end = _now() - timedelta(minutes=1)
+        await self._insert_player(
+            action="offering",
+            action_target="knowledge",
+            completion_time=cycle_end,
+            last_update_time=cycle_end - timedelta(minutes=10),
+        )
+        await settle_complete_cycles(self.TEST_USER, _now())
+        player = await self._get_player()
+        self.assertEqual(player["materials_gathering"], 0)
+        self.assertEqual(player["materials_building"], 0)
+        self.assertEqual(player["materials_combat"], 0)
+        self.assertEqual(player["materials_research"], 0)
+
+    async def test_offering_threshold_awards_all_players(self):
+        """When accumulator reaches threshold, all players get +1 to each material."""
+        threshold_per = int(ALL_TEST_ENV["OFFERING_THRESHOLD_PER_PLAYER"])
+        # Set accumulator just below threshold (1 player → threshold = threshold_per)
+        async with schema.get_connection() as db:
+            base = int(ALL_TEST_ENV["BASE_OUTPUT"])
+            offering_cost = base * 4  # sum of 4 outputs with no bonuses
+            # Set accumulator so next contribution crosses threshold
+            pre_acc = threshold_per - offering_cost + (offering_cost - 1)
+            await db.execute(
+                "UPDATE village_state SET offering_accumulator=? WHERE id=1",
+                (max(0, threshold_per - 1),),
+            )
+            await db.commit()
+
+        cycle_end = _now() - timedelta(minutes=1)
+        await self._insert_player(
+            action="offering",
+            action_target="food",
+            completion_time=cycle_end,
+            last_update_time=cycle_end - timedelta(minutes=10),
+        )
+        await settle_complete_cycles(self.TEST_USER, _now())
+
+        player = await self._get_player()
+        self.assertEqual(player["materials_gathering"], 1)
+        self.assertEqual(player["materials_building"], 1)
+        self.assertEqual(player["materials_combat"], 1)
+        self.assertEqual(player["materials_research"], 1)
+
+        acc_after = await self._get_offering_accumulator()
+        self.assertEqual(acc_after, 0)
+
+    async def test_offering_reward_event_emitted(self):
+        """Offering threshold emits offering_reward event."""
+        threshold_per = int(ALL_TEST_ENV["OFFERING_THRESHOLD_PER_PLAYER"])
+        async with schema.get_connection() as db:
+            await db.execute(
+                "UPDATE village_state SET offering_accumulator=? WHERE id=1",
+                (threshold_per - 1,),
+            )
+            await db.commit()
+
+        cycle_end = _now() - timedelta(minutes=1)
+        await self._insert_player(
+            action="offering",
+            action_target="food",
+            completion_time=cycle_end,
+            last_update_time=cycle_end - timedelta(minutes=10),
+        )
+        events = await settle_complete_cycles(self.TEST_USER, _now())
+        event_types = [e["type"] for e in events]
+        self.assertIn("offering_reward", event_types)
+
+    async def test_offering_shortage_contributes_available_amount(self):
+        """When chosen resource is insufficient, accumulator gets only what was available."""
+        await self._set_resource("wood", 5)
+        cycle_end = _now() - timedelta(minutes=1)
+        await self._insert_player(
+            action="offering",
+            action_target="wood",
+            completion_time=cycle_end,
+            last_update_time=cycle_end - timedelta(minutes=10),
+        )
+        acc_before = await self._get_offering_accumulator()
+        await settle_complete_cycles(self.TEST_USER, _now())
+        acc_after = await self._get_offering_accumulator()
+        self.assertEqual(acc_after - acc_before, 5)
+
+    async def test_offering_target_stored_as_action_target(self):
+        """change_action stores resource choice in action_target for offering."""
+        await self._insert_player(action=None, completion_time=None, last_update_time=None)
+        await change_action(self.TEST_USER, "offering", "knowledge", _now())
+        player = await self._get_player()
+        self.assertEqual(player["action"], "offering")
+        self.assertEqual(player["action_target"], "knowledge")
+
+    async def test_offering_invalid_resource_raises(self):
+        """change_action rejects invalid offering resource targets."""
+        await self._insert_player(action=None, completion_time=None, last_update_time=None)
+        with self.assertRaises(ValueError):
+            await change_action(self.TEST_USER, "offering", "not_a_resource", _now())
+
+
 if __name__ == "__main__":
     unittest.main()

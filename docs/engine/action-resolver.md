@@ -61,6 +61,23 @@ source_paths:
 | `building` | 建設 | 木頭 WOOD_COST | 指定建築 XP | `materials_building` |
 | `combat` | 戰鬥 | 木頭 WOOD_COST | 知識 | `materials_combat` |
 | `research` | 研究 | 知識 KNOWLEDGE_COST | 研究所 XP | `materials_research` |
+| `offering` | 奉獻 | 玩家選定物資（消耗量 = 四種行動產出合計） | 無（不產出資源/XP/素材/關卡進度） | 無 |
+
+## 奉獻行動結算
+
+奉獻行動的結算邏輯獨立於一般產出路徑：
+
+1. 照常扣除 `FOOD_COST`（基礎維持費，同其他行動）。
+2. 計算 `offering_cost = Σ floor(output_type)` for {gathering, building, combat, research}，使用各自的 gear/facility/stage bonus。
+3. 實際消耗量 = `min(村莊 action_target 資源餘額, offering_cost)`。
+4. 扣除實際消耗量；`village_state.offering_accumulator += 實際消耗量`。
+5. 若 `offering_accumulator >= total_players × OFFERING_THRESHOLD_PER_PLAYER`：
+   - 全員 `materials_gathering/building/combat/research += 1`。
+   - `offering_accumulator = 0`。
+   - 發送奉獻達標通知。
+6. 無 settlement_output，無關卡進度，無素材掉落。
+
+`action_target` 儲存玩家選定資源類型：`food`、`wood`、`knowledge`。
 
 ## Partial cycle
 

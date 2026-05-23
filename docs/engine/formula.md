@@ -39,9 +39,13 @@ Discord UI 顯示使用繁體中文。資料庫與程式內部 enum 一律使用
 | `building` | 建設 | 建設工具等級 | 加工廠等級 |
 | `combat` | 戰鬥 | 狩獵工具等級 | 狩獵場等級 |
 | `research` | 研究 | 研究工具等級 | 研究所等級 |
+| `offering` | 奉獻 | 無（不使用工具/設施加成） | 無 |
 
-`players.action` and stage type values use the same stored values: `gathering`, `building`, `combat`, `research`.
-`players.action_target` is required only when `players.action = building`; it stores a building enum value. Research does not store an `action_target`; the resolver maps `research` to `research_lab`.
+`players.action` stored values: `gathering`, `building`, `combat`, `research`, `offering`.
+`players.action_target` usage:
+- `building`: stores building enum value (required).
+- `offering`: stores chosen resource type — `food`, `wood`, or `knowledge` (required).
+- 其他行動: `null`。Research maps to `research_lab` internally.
 
 ## Environment variables
 
