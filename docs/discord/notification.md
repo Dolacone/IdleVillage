@@ -1,7 +1,7 @@
 ---
 title: "Module: notification"
 doc_type: module
-last_reviewed: 2026-05-22
+last_reviewed: 2026-05-23
 source_paths:
   - src/core/notification.py
 ---
@@ -33,8 +33,8 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 | 建築升級 | building-manager 觸發升級 | `{建築名稱}` 從 Lv{x} 變成 Lv{y}，下一等級需求 {z} | Public |
 | 工具強化成功 | gear-manager 回傳成功 | `{user_display_name} 的 {gear_name} 升級成功 :tada: Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）` | Public |
 | 工具強化失敗 | gear-manager 回傳失敗 | `{user_display_name} 的 {gear_name} 升級失敗 :boom: Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）` | Public |
-| 詞條抽取 | `extract_affix` handler 成功後 | `{user_display_name} 的 {gear_name} 抽到詞條：{affix_label}（+{value}%）` | Public |
-| 詞條清除 | `clear_affix` handler 成功後 | `{user_display_name} 的 {gear_name} 清除詞條：{affix_label}（+{value}%）` | Public |
+| 詞條抽取 | `extract_affix` handler 成功後 | `{user_display_name} 的 {gear_name} 抽到詞條：{affix_label}（{sign}{value}%）`，sign 為 `-`（reduce 類型）或 `+`（其他） | Public |
+| 詞條清除 | `clear_affix` handler 成功後 | `{user_display_name} 的 {gear_name} 清除詞條：{affix_label}（{sign}{value}%）`，sign 為 `-`（reduce 類型）或 `+`（其他） | Public |
 
 ## 通知去重
 
@@ -96,13 +96,15 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 
 ### 詞條抽取
 ```
-{user_display_name} 的 {gear_name} 抽到詞條：{affix_label}（+{value}%）
+{user_display_name} 的 {gear_name} 抽到詞條：{affix_label}（{sign}{value}%）
 ```
+sign 為 `-`（reduce 類型，如 `upgrade_cost_reduce`）或 `+`（其他類型）。
 
 ### 詞條清除
 ```
-{user_display_name} 的 {gear_name} 清除詞條：{affix_label}（+{value}%）
+{user_display_name} 的 {gear_name} 清除詞條：{affix_label}（{sign}{value}%）
 ```
+sign 為 `-`（reduce 類型，如 `upgrade_cost_reduce`）或 `+`（其他類型）。
 
 ## 工具強化通知欄位
 
