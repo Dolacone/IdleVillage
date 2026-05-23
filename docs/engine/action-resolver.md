@@ -12,7 +12,7 @@ source_paths:
 
 ## 輸入
 
-- 玩家當前行動類型。DB stored value: `gathering`, `building`, `combat`, `research`, or null。
+- 玩家當前行動類型。DB stored value: `gathering`, `building`, `combat`, `research`, `offering`, or null。
 - 玩家當前建設目標。僅 `action = building` 時需要。
 - Discord UI 顯示使用繁體中文，resolver 只處理英文 stored value。
 
