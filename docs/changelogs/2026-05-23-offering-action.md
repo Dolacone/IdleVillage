@@ -1,6 +1,6 @@
 ---
 title: "奉獻行動（Offering Action）"
-status: Reviewed
+status: Refactored
 created: 2026-05-23
 doc_type: change
 last_reviewed: 2026-05-23
