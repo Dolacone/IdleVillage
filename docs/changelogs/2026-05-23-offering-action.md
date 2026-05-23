@@ -1,6 +1,6 @@
 ---
 title: "奉獻行動（Offering Action）"
-status: Ready-to-review
+status: Reviewed
 created: 2026-05-23
 doc_type: change
 last_reviewed: 2026-05-23
@@ -95,3 +95,8 @@ A: `OFFERING_THRESHOLD_PER_PLAYER = 1000`，12 人閾值 = 12,000。以平均 4 
   - Files: `src/cogs/actions.py`, `src/cogs/ui_renderer.py`
   - Depends on: Task 1, Task 2
   - Acceptance: action_select 含奉獻選項；選奉獻後出現資源 dropdown；Dashboard 顯示 accumulator 進度；村民行動區區別奉獻（食物）/奉獻（木頭）/奉獻（研究點）
+
+## Review Issues
+
+- [ ] [Minor] `docs/db-schema.md`、`docs/engine/formula.md`、`docs/engine/action-resolver.md` 均在本次變更中修改，但 `last_reviewed` 未更新為 2026-05-23（分別為 2026-05-01、2026-05-06、2026-05-01）。
+- [ ] [Minor] `compute_offering_cost` 是 `formula.py` 新增的公開函式，但 `tests/test_engine_formula.py` 未直接測試它（僅透過 settlement 整合測試間接覆蓋）。與既有 formula 測試模式不符。
