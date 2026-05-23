@@ -1,6 +1,6 @@
 ---
 title: "Fix: upgrade_cost_reduce affix displays with negative sign"
-status: Ready-to-review
+status: Reviewed
 created: 2026-05-23
 doc_type: change
 last_reviewed: 2026-05-23
@@ -49,3 +49,5 @@ Alternatives excluded:
 - [x] Task 2: Fix `ui_renderer.py` `_build_affix_section` sign + add test
   - `ui_renderer.py` line 343 hard-codes `+`; add `REDUCE_AFFIX_TYPES = {"upgrade_cost_reduce"}` and derive sign
   - Acceptance: new test for `upgrade_cost_reduce` slot shows `-X%`; existing tests `test_filled_slot_shows_affix_type_and_value` and `test_multiple_slots_mixed` still pass
+
+## Review Issues
