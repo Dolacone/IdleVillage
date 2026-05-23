@@ -651,5 +651,49 @@ class TestGearUpgradeEventDispatch(unittest.TestCase):
         self.assertIn("Bob 的 狩獵工具 標準升級失敗 :boom:", text)
 
 
+class TestAffixNotificationSign(unittest.TestCase):
+    """upgrade_cost_reduce affix must display with - sign, not +."""
+
+    def test_upgrade_cost_reduce_affix_extracted_uses_negative_sign(self):
+        # Test for correct design — currently fails due to bug in src/core/notification.py:182
+        from core.notification import _format_event
+        ev = {
+            "type": "affix_extracted",
+            "user_display_name": "Alice",
+            "gear_type": "gathering",
+            "affix_type": "upgrade_cost_reduce",
+            "value": 5,
+        }
+        text = _format_event(ev)
+        self.assertIn("-5%", text)
+        self.assertNotIn("+5%", text)
+
+    def test_upgrade_cost_reduce_affix_cleared_uses_negative_sign(self):
+        # Test for correct design — currently fails due to bug in src/core/notification.py:182
+        from core.notification import _format_event
+        ev = {
+            "type": "affix_cleared",
+            "user_display_name": "Bob",
+            "gear_type": "gathering",
+            "affix_type": "upgrade_cost_reduce",
+            "value": 3,
+        }
+        text = _format_event(ev)
+        self.assertIn("-3%", text)
+        self.assertNotIn("+3%", text)
+
+    def test_positive_affix_still_uses_plus_sign(self):
+        from core.notification import _format_event
+        ev = {
+            "type": "affix_extracted",
+            "user_display_name": "Carol",
+            "gear_type": "gathering",
+            "affix_type": "upgrade_success",
+            "value": 5,
+        }
+        text = _format_event(ev)
+        self.assertIn("+5%", text)
+
+
 if __name__ == "__main__":
     unittest.main()
