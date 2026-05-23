@@ -1,7 +1,12 @@
 # Changelog
 
+## 2026-05-23
+
+- Fixed `upgrade_cost_reduce` affix display sign: gear embed and affix notifications now show `-X%` instead of `+X%` for this affix type, matching the spec.
+
 ## 2026-05-22
 
+- Affix extract/clear actions now post a public announcement showing the player name, gear type, and the affix type and value drawn or removed.
 - Added tool affix slot system for all four gear types (gathering / building / combat / research). Each gear level 5+ unlocks one affix slot (every 5 levels). Players can spend materials to extract a random affix (1–5%, 7 types) or clear an existing slot. Affixes boost efficiency, material drop rate, upgrade success rate, upgrade cost reduction, AP refund chance, material refund chance, or cycle time reduction. Risky mode failure now clears all affixes for that gear type. Burst settle applies affixes from the current action's gear type.
 
 ## 2026-05-16

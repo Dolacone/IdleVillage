@@ -50,6 +50,8 @@ STAGE_TYPE_LABELS = {
 }
 RESOURCE_LABELS = {"food": "食物", "wood": "木頭", "knowledge": "知識"}
 RESOURCE_EMOJIS = {"food": "🌾", "wood": "🪵", "knowledge": "🧠"}
+REDUCE_AFFIX_TYPES = {"upgrade_cost_reduce"}
+
 AFFIX_TYPE_LABELS = {
     "efficiency": "效率",
     "material_drop": "素材掉落",
@@ -340,7 +342,8 @@ def _build_affix_section(affixes: list, max_slots: int) -> str:
         if i in affix_by_slot:
             a = affix_by_slot[i]
             label = AFFIX_TYPE_LABELS.get(a["affix_type"], a["affix_type"])
-            lines.append(f"槽 {i}: ✨ {label} +{a['value']}%")
+            sign = "-" if a["affix_type"] in REDUCE_AFFIX_TYPES else "+"
+            lines.append(f"槽 {i}: ✨ {label} {sign}{a['value']}%")
         else:
             lines.append(f"槽 {i}: ─ 空槽")
     return "\n" + "\n".join(lines)

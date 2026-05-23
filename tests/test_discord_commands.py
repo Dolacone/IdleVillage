@@ -696,6 +696,13 @@ class TestAffixEmbedSection(unittest.TestCase):
         self.assertIn("週期縮短 +2%", embed.description)
         self.assertIn("空槽", embed.description)
 
+    def test_upgrade_cost_reduce_slot_uses_negative_sign(self):
+        from cogs.ui_renderer import build_gear_embed
+        affixes = [{"slot_index": 0, "affix_type": "upgrade_cost_reduce", "value": 5}]
+        embed = build_gear_embed(self._make_info(gear_level=5), "gathering", affixes=affixes, max_slots=1)
+        self.assertIn("強化素材減免 -5%", embed.description)
+        self.assertNotIn("+5%", embed.description)
+
 
 class TestAffixComponents(unittest.TestCase):
     """Affix extract/clear buttons in gear components."""
@@ -800,6 +807,114 @@ class TestRemovedCommandsAndRoutes(unittest.TestCase):
         from cogs.actions import _is_own_button
 
         self.assertFalse(_is_own_button("refresh"))
+
+
+class TestAffixHandlerNotification(unittest.IsolatedAsyncioTestCase):
+    """extract_affix and clear_affix handlers dispatch notification events on success."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def _make_inter(self, cid):
+        inter = MagicMock()
+        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+        inter.user.id = 12345
+        inter.user.display_name = "TestUser"
+        inter.component.custom_id = cid
+        inter.response.defer = AsyncMock()
+        inter.edit_original_response = AsyncMock()
+        return inter
+
+    def _make_db_cm(self):
+        db_mock = AsyncMock()
+        db_mock.commit = AsyncMock()
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=db_mock)
+        cm.__aexit__ = AsyncMock(return_value=False)
+        return cm
+
+    async def test_extract_affix_dispatches_affix_extracted_event(self):
+        from cogs.actions import ActionsCog
+
+        inter = self._make_inter("extract_affix:gathering")
+        with (
+            patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
+            patch("cogs.actions.player_manager.get_gear_level", new=AsyncMock(return_value=10)),
+            patch(
+                "cogs.actions.affix_manager.extract_affix",
+                new=AsyncMock(return_value={"slot_index": 0, "affix_type": "efficiency", "value": 3}),
+            ),
+            patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as mock_dispatch,
+            patch.object(ActionsCog, "_render_gear", new=AsyncMock()),
+        ):
+            cog = ActionsCog(bot=MagicMock())
+            await cog.on_button_click(inter)
+
+        mock_dispatch.assert_awaited_once()
+        event = mock_dispatch.call_args[0][1][0]
+        self.assertEqual(event["type"], "affix_extracted")
+        self.assertEqual(event["user_display_name"], "TestUser")
+        self.assertEqual(event["gear_type"], "gathering")
+        self.assertEqual(event["affix_type"], "efficiency")
+        self.assertEqual(event["value"], 3)
+
+    async def test_extract_affix_no_dispatch_on_failure(self):
+        from cogs.actions import ActionsCog
+
+        inter = self._make_inter("extract_affix:gathering")
+        with (
+            patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
+            patch("cogs.actions.player_manager.get_gear_level", new=AsyncMock(return_value=10)),
+            patch("cogs.actions.affix_manager.extract_affix", new=AsyncMock(side_effect=ValueError("full"))),
+            patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as mock_dispatch,
+            patch.object(ActionsCog, "_render_gear", new=AsyncMock()),
+        ):
+            cog = ActionsCog(bot=MagicMock())
+            await cog.on_button_click(inter)
+
+        mock_dispatch.assert_not_awaited()
+
+    async def test_clear_affix_dispatches_affix_cleared_event(self):
+        from cogs.actions import ActionsCog
+
+        inter = self._make_inter("clear_affix:gathering:0")
+        with (
+            patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
+            patch("cogs.actions.player_manager.get_gear_level", new=AsyncMock(return_value=10)),
+            patch(
+                "cogs.actions.affix_manager.clear_affix",
+                new=AsyncMock(return_value={"affix_type": "upgrade_success", "value": 5}),
+            ),
+            patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as mock_dispatch,
+            patch.object(ActionsCog, "_render_gear", new=AsyncMock()),
+        ):
+            cog = ActionsCog(bot=MagicMock())
+            await cog.on_button_click(inter)
+
+        mock_dispatch.assert_awaited_once()
+        event = mock_dispatch.call_args[0][1][0]
+        self.assertEqual(event["type"], "affix_cleared")
+        self.assertEqual(event["user_display_name"], "TestUser")
+        self.assertEqual(event["gear_type"], "gathering")
+        self.assertEqual(event["affix_type"], "upgrade_success")
+        self.assertEqual(event["value"], 5)
+
+    async def test_clear_affix_no_dispatch_on_failure(self):
+        from cogs.actions import ActionsCog
+
+        inter = self._make_inter("clear_affix:gathering:0")
+        with (
+            patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
+            patch("cogs.actions.player_manager.get_gear_level", new=AsyncMock(return_value=10)),
+            patch("cogs.actions.affix_manager.clear_affix", new=AsyncMock(side_effect=ValueError("empty"))),
+            patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as mock_dispatch,
+            patch.object(ActionsCog, "_render_gear", new=AsyncMock()),
+        ):
+            cog = ActionsCog(bot=MagicMock())
+            await cog.on_button_click(inter)
+
+        mock_dispatch.assert_not_awaited()
 
 
 if __name__ == "__main__":

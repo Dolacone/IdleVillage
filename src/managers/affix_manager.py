@@ -95,7 +95,7 @@ async def extract_affix(db, user_id: str, gear_type: str, gear_level: int, now: 
     return {"slot_index": empty_slot, "affix_type": affix_type, "value": value}
 
 
-async def clear_affix(db, user_id: str, gear_type: str, slot_index: int, gear_level: int, now: datetime) -> None:
+async def clear_affix(db, user_id: str, gear_type: str, slot_index: int, gear_level: int, now: datetime) -> dict:
     """
     Clear the affix at slot_index.
 
@@ -105,6 +105,7 @@ async def clear_affix(db, user_id: str, gear_type: str, slot_index: int, gear_le
       - slot_index is out of unlocked range
       - slot is empty
       - insufficient materials
+    Returns {affix_type, value} of the cleared affix.
     """
     if gear_type not in GEAR_TYPES:
         raise ValueError(f"Invalid gear_type: {gear_type!r}")
@@ -114,7 +115,8 @@ async def clear_affix(db, user_id: str, gear_type: str, slot_index: int, gear_le
         raise ValueError(f"slot_index {slot_index} out of unlocked range [0, {slots})")
 
     existing = await get_affixes(db, user_id, gear_type)
-    if not any(a["slot_index"] == slot_index for a in existing):
+    target = next((a for a in existing if a["slot_index"] == slot_index), None)
+    if target is None:
         raise ValueError(f"Slot {slot_index} is already empty")
 
     cost = get_env_int("AFFIX_CLEAR_COST")
@@ -127,6 +129,7 @@ async def clear_affix(db, user_id: str, gear_type: str, slot_index: int, gear_le
         "DELETE FROM gear_affixes WHERE user_id=? AND gear_type=? AND slot_index=?",
         (user_id, gear_type, slot_index),
     )
+    return {"affix_type": target["affix_type"], "value": target["value"]}
 
 
 async def clear_all_affixes(db, user_id: str, gear_type: str, now: datetime) -> None:

@@ -17,6 +17,18 @@ import disnake
 from core.config import get_env_float, get_env_int
 from cogs.ui_renderer import BUILDING_LABELS, GEAR_LABELS, STAGE_TYPE_LABELS
 
+REDUCE_AFFIX_TYPES = {"upgrade_cost_reduce"}
+
+AFFIX_TYPE_LABELS = {
+    "efficiency": "行動效率",
+    "material_drop": "素材掉落率",
+    "upgrade_success": "強化成功率",
+    "upgrade_cost_reduce": "強化素材消耗",
+    "upgrade_ap_refund": "強化 AP 退還",
+    "upgrade_material_refund": "強化素材退還",
+    "cycle_time_reduce": "行動週期縮短",
+}
+
 logger = logging.getLogger(__name__)
 
 
@@ -160,6 +172,17 @@ def _format_event(event: dict) -> str | None:
             f"{user_name} 的 {gear_name} {result_label} {result_emoji} "
             f"Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）"
         )
+
+    if kind in ("affix_extracted", "affix_cleared"):
+        user_name = event.get("user_display_name", "")
+        gear_type = event.get("gear_type", "")
+        affix_type = event.get("affix_type", "")
+        value = event.get("value", 0)
+        gear_name = GEAR_LABELS.get(gear_type, gear_type)
+        affix_label = AFFIX_TYPE_LABELS.get(affix_type, affix_type)
+        verb = "抽到" if kind == "affix_extracted" else "清除"
+        sign = "-" if affix_type in REDUCE_AFFIX_TYPES else "+"
+        return f"{user_name} 的 {gear_name} {verb}詞條：{affix_label}（{sign}{value}%）"
 
     return None
 
