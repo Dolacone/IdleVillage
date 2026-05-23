@@ -1,6 +1,6 @@
 ---
 title: "Fix: upgrade_cost_reduce affix displays with negative sign"
-status: Draft
+status: Ready-to-implement
 created: 2026-05-23
 doc_type: change
 last_reviewed: 2026-05-23
@@ -38,11 +38,14 @@ Alternatives excluded:
 - Fix `_build_affix_section` in `ui_renderer.py`
 - Fix `_format_event` affix branch in `notification.py`
 - Add failing tests for both locations (notification tests already written by bug skill)
+- Not doing: `cycle_time_reduce` — spec says "行動週期縮短 X%" without specifying sign; existing test asserts `+2%` and is not contradicted by the spec document. Out of scope.
 - Not doing: unify the two constants into a shared module (single caller each, no duplication risk yet)
 
 ## Tasks
 
 - [ ] Task 1: Fix `notification.py` affix sign + ensure pre-written tests pass
-  - Acceptance: `TestAffixNotificationSign` all pass; positive affixes still show `+`
+  - `notification.py` line 182 hard-codes `+`; add `REDUCE_AFFIX_TYPES = {"upgrade_cost_reduce"}` and derive sign
+  - Acceptance: `TestAffixNotificationSign` all pass; `test_positive_affix_still_uses_plus_sign` still passes
 - [ ] Task 2: Fix `ui_renderer.py` `_build_affix_section` sign + add test
-  - Acceptance: test for `upgrade_cost_reduce` slot shows `-X%`; positive affix slot shows `+X%`
+  - `ui_renderer.py` line 343 hard-codes `+`; add `REDUCE_AFFIX_TYPES = {"upgrade_cost_reduce"}` and derive sign
+  - Acceptance: new test for `upgrade_cost_reduce` slot shows `-X%`; existing tests `test_filled_slot_shows_affix_type_and_value` and `test_multiple_slots_mixed` still pass
