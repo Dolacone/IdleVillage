@@ -2,6 +2,7 @@
 
 ## 2026-05-23
 
+- Added new "奉獻" (Offering) action type — the 5th action. Players select one village resource (food/wood/knowledge) to consume each cycle; cost equals the sum of their 4 productive action outputs. Village-wide accumulator tracks all contributions across resource types. When accumulator reaches `OFFERING_THRESHOLD_PER_PLAYER × total players`, all players receive +1 to each of the 4 material types and the accumulator resets. Dashboard and main UI show accumulator progress. A public announcement fires on threshold trigger.
 - Fixed `upgrade_cost_reduce` affix display sign: gear embed and affix notifications now show `-X%` instead of `+X%` for this affix type, matching the spec.
 
 ## 2026-05-22
