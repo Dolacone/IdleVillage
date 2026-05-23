@@ -43,7 +43,7 @@ Alternatives excluded:
 
 ## Tasks
 
-- [ ] Task 1: Fix `notification.py` affix sign + ensure pre-written tests pass
+- [x] Task 1: Fix `notification.py` affix sign + ensure pre-written tests pass
   - `notification.py` line 182 hard-codes `+`; add `REDUCE_AFFIX_TYPES = {"upgrade_cost_reduce"}` and derive sign
   - Acceptance: `TestAffixNotificationSign` all pass; `test_positive_affix_still_uses_plus_sign` still passes
 - [ ] Task 2: Fix `ui_renderer.py` `_build_affix_section` sign + add test
