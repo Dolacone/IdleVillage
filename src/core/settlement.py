@@ -270,11 +270,12 @@ async def _run_one_cycle(
 
     # Update player cycle timestamps
     if update_timestamps:
+        now_str = dt_str(cycle_end_time)
         effective_secs = _effective_cycle_seconds(affix_bonuses["cycle_time_reduce"])
         new_completion = dt_str(cycle_end_time + timedelta(seconds=effective_secs))
         await db.execute(
             "UPDATE players SET last_update_time=?, completion_time=?, updated_at=? WHERE user_id=?",
-            (dt_str(cycle_end_time), new_completion, dt_str(cycle_end_time), user_id),
+            (now_str, new_completion, now_str, user_id),
         )
 
     return events

@@ -577,8 +577,7 @@ def build_gear_components(
                 )
             )
         )
-        occupied = [a for a in affixes_list]
-        if occupied:
+        if affixes_list:
             rows.append(
                 disnake.ui.ActionRow(
                     *[
@@ -587,7 +586,7 @@ def build_gear_components(
                             style=disnake.ButtonStyle.danger,
                             custom_id=f"clear_affix:{gear_type}:{a['slot_index']}",
                         )
-                        for a in occupied
+                        for a in affixes_list
                     ]
                 )
             )
