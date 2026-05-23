@@ -71,15 +71,15 @@ A: `OFFERING_THRESHOLD_PER_PLAYER = 1000`，12 人閾值 = 12,000。以平均 4 
   - Files: `src/database/schema.py`, `.env.example`
   - Acceptance: schema.py 建立 offering_accumulator 欄位；.env.example 包含新 key；兩份 docs 已更新
 
-- [ ] Task 2: Settlement — 奉獻行動結算邏輯 — 在 `src/core/settlement.py` 處理 `action='offering'`：計算 offering_cost、扣除 FOOD_COST + 選定資源、更新 accumulator、觸發檢查（全員素材 +1 + 歸零）；更新 `docs/engine/action-resolver.md`
+- [ ] Task 2: Settlement — 奉獻行動結算邏輯 — 在 `src/core/settlement.py` 處理 `action='offering'`：計算 offering_cost、扣除 FOOD_COST + 選定資源、更新 accumulator、觸發檢查（全員素材 +1 + 歸零）；更新 `docs/engine/action-resolver.md`、`docs/engine/formula.md`（stored value 表加入 `offering`；`action_target` 說明加入 offering 的 `food`/`wood`/`knowledge` 值；action-to-field mapping table 加入 offering 行）
   - Files: `src/core/settlement.py`, `docs/engine/action-resolver.md`
   - Depends on: Task 1
-  - Acceptance: offering 結算正確扣除資源；accumulator 遞增；觸發後全員 +1 且歸零；shortage 時以實際扣除量計入
+  - Acceptance: offering 結算正確扣除資源；accumulator 遞增；觸發後全員 +1 且歸零；shortage 時以實際扣除量計入；formula.md 三處已更新
 
 - [ ] Task 3: Notification — 奉獻達標 Public 通知 — 在 `src/core/notification.py` 加入奉獻達標事件；更新 `docs/discord/notification.md`
   - Files: `src/core/notification.py`, `docs/discord/notification.md`
   - Depends on: Task 2
-  - Acceptance: 觸發時發送公開通知，包含累積量、閾值、全員獲得素材資訊
+  - Acceptance: 觸發時發送公開通知，包含累積量、閾值、全員獲得素材資訊；`notification.md` 的「同一 settlement 內的通知順序」區段已加入奉獻達標事件並定位順序
 
 - [ ] Task 4: UI — 奉獻加入 action_select + 資源選擇 dropdown + Dashboard accumulator 進度顯示 — 更新 `src/cogs/actions.py`（新增 offering + offering_resource_select 互動路由）、`src/cogs/ui_renderer.py`（Dashboard 累積進度行、主介面行動列表、奉獻 emoji 🎁）；更新 `docs/discord/command-handler.md`、`docs/discord/ui-renderer.md`
   - Files: `src/cogs/actions.py`, `src/cogs/ui_renderer.py`
