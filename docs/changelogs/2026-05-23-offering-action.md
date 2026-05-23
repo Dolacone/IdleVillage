@@ -67,7 +67,7 @@ A: `OFFERING_THRESHOLD_PER_PLAYER = 1000`，12 人閾值 = 12,000。以平均 4 
 
 ## Tasks
 
-- [ ] Task 1: DB schema + env var — 在 `village_state` 加 `offering_accumulator`，`.env.example` 加 `OFFERING_THRESHOLD_PER_PLAYER=1000`，更新 `docs/db-schema.md`、`docs/engine/formula.md`
+- [x] Task 1: DB schema + env var — 在 `village_state` 加 `offering_accumulator`，`.env.example` 加 `OFFERING_THRESHOLD_PER_PLAYER=1000`，更新 `docs/db-schema.md`、`docs/engine/formula.md`
   - Files: `src/database/schema.py`, `.env.example`
   - Acceptance: schema.py 建立 offering_accumulator 欄位；.env.example 包含新 key；兩份 docs 已更新
 

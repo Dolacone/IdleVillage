@@ -7,7 +7,7 @@ import math
 
 from core.config import get_env_float, get_env_int
 
-VALID_ACTIONS = ("gathering", "building", "combat", "research")
+VALID_ACTIONS = ("gathering", "building", "combat", "research", "offering")
 
 # Stage type stored values by index 0–4. Index 4 is the upgrade stage.
 STAGE_TYPES = ("gathering", "building", "combat", "research", "upgrade")
@@ -45,6 +45,14 @@ def action_costs(action: str) -> dict[str, int]:
     elif action == "research":
         costs["knowledge"] = get_env_int("KNOWLEDGE_COST")
     return costs
+
+
+async def compute_offering_cost(db, user_id: str) -> int:
+    """Return offering cost: sum of floor(output) for all 4 productive action types."""
+    total = 0
+    for action_type in ("gathering", "building", "combat", "research"):
+        total += await compute_output(db, user_id, action_type)
+    return total
 
 
 async def compute_output(db, user_id: str, action: str, affix_efficiency_pct: int = 0) -> int:

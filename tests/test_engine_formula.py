@@ -206,18 +206,30 @@ class AffixEfficiencyTest(DatabaseTestCase):
         self.assertEqual(result, base)
 
 
+_PRODUCTIVE_ACTIONS = ("gathering", "building", "combat", "research")
+
+
 class ActionConfigMapsTest(unittest.TestCase):
-    def test_all_valid_actions_have_gear_col(self):
-        for action in VALID_ACTIONS:
+    def test_productive_actions_have_gear_col(self):
+        for action in _PRODUCTIVE_ACTIONS:
             self.assertIn(action, ACTION_GEAR_COL)
 
-    def test_all_valid_actions_have_material_col(self):
-        for action in VALID_ACTIONS:
+    def test_offering_not_in_gear_col(self):
+        self.assertNotIn("offering", ACTION_GEAR_COL)
+
+    def test_productive_actions_have_material_col(self):
+        for action in _PRODUCTIVE_ACTIONS:
             self.assertIn(action, ACTION_MATERIAL_COL)
 
-    def test_all_valid_actions_have_facility(self):
-        for action in VALID_ACTIONS:
+    def test_offering_not_in_material_col(self):
+        self.assertNotIn("offering", ACTION_MATERIAL_COL)
+
+    def test_productive_actions_have_facility(self):
+        for action in _PRODUCTIVE_ACTIONS:
             self.assertIn(action, ACTION_FACILITY_BUILDING)
+
+    def test_offering_not_in_facility_building(self):
+        self.assertNotIn("offering", ACTION_FACILITY_BUILDING)
 
     def test_research_facility_is_research_lab(self):
         self.assertEqual(ACTION_FACILITY_BUILDING["research"], "research_lab")

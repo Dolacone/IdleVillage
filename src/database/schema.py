@@ -26,7 +26,8 @@ async def _create_v2_tables(db):
             updated_at TEXT NOT NULL,
             dashboard_channel_id TEXT,
             dashboard_message_id TEXT,
-            announcement_channel_id TEXT
+            announcement_channel_id TEXT,
+            offering_accumulator INTEGER NOT NULL DEFAULT 0
         )
         """
     )
@@ -180,6 +181,14 @@ async def _migrate_v2_columns(db):
     if "risky_failed_levels" not in columns:
         await db.execute(
             "ALTER TABLE players ADD COLUMN risky_failed_levels INTEGER NOT NULL DEFAULT 0"
+        )
+
+    async with db.execute("PRAGMA table_info(village_state)") as cur:
+        vs_columns = {row[1] async for row in cur}
+
+    if "offering_accumulator" not in vs_columns:
+        await db.execute(
+            "ALTER TABLE village_state ADD COLUMN offering_accumulator INTEGER NOT NULL DEFAULT 0"
         )
 
 

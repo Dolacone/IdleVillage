@@ -82,6 +82,7 @@ Discord UI 顯示使用繁體中文。資料庫與程式內部 enum 一律使用
 | `AFFIX_SLOT_INTERVAL` | `managers/affix-manager.md` |
 | `AFFIX_EXTRACT_COST` | `managers/affix-manager.md` |
 | `AFFIX_CLEAR_COST` | `managers/affix-manager.md` |
+| `OFFERING_THRESHOLD_PER_PLAYER` | `engine/action-resolver.md` |
 
 ## Material Drop Rate
 
