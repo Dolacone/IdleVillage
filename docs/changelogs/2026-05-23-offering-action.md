@@ -76,7 +76,7 @@ A: `OFFERING_THRESHOLD_PER_PLAYER = 1000`，12 人閾值 = 12,000。以平均 4 
   - Depends on: Task 1
   - Acceptance: offering 結算正確扣除資源；accumulator 遞增；觸發後全員 +1 且歸零；shortage 時以實際扣除量計入；formula.md 三處已更新
 
-- [ ] Task 3: Notification — 奉獻達標 Public 通知 — 在 `src/core/notification.py` 加入奉獻達標事件；更新 `docs/discord/notification.md`
+- [x] Task 3: Notification — 奉獻達標 Public 通知 — 在 `src/core/notification.py` 加入奉獻達標事件；更新 `docs/discord/notification.md`
   - Files: `src/core/notification.py`, `docs/discord/notification.md`
   - Depends on: Task 2
   - Acceptance: 觸發時發送公開通知，包含累積量、閾值、全員獲得素材資訊；`notification.md` 的「同一 settlement 內的通知順序」區段已加入奉獻達標事件並定位順序

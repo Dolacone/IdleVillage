@@ -184,6 +184,15 @@ def _format_event(event: dict) -> str | None:
         sign = "-" if affix_type in REDUCE_AFFIX_TYPES else "+"
         return f"{user_name} 的 {gear_name} {verb}詞條：{affix_label}（{sign}{value}%）"
 
+    if kind == "offering_reward":
+        total = event.get("total_contributed", 0)
+        threshold = event.get("threshold", 0)
+        return (
+            f"🎁 奉獻達標！全村素材各 +1\n"
+            f"累積消耗：{total} / {threshold}（已重置）\n"
+            f"全體玩家獲得：🌾 +1 ｜ 🔨 +1 ｜ ⚔️ +1 ｜ 🔬 +1"
+        )
+
     return None
 
 
