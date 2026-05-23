@@ -1,7 +1,7 @@
 ---
 title: "Module: action-resolver"
 doc_type: module
-last_reviewed: 2026-05-01
+last_reviewed: 2026-05-23
 source_paths:
   - src/core/settlement.py
 ---

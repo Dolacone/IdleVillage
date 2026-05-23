@@ -1,7 +1,7 @@
 ---
 title: "Module: formula"
 doc_type: module
-last_reviewed: 2026-05-06
+last_reviewed: 2026-05-23
 source_paths:
   - src/core/formula.py
 ---

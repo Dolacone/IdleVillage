@@ -16,6 +16,7 @@ from core.formula import (
     ACTION_MATERIAL_COL,
     VALID_ACTIONS,
     action_costs,
+    compute_offering_cost,
     compute_output,
 )
 
@@ -204,6 +205,26 @@ class AffixEfficiencyTest(DatabaseTestCase):
         async with schema.get_connection() as db:
             result = await compute_output(db, self.TEST_USER, "gathering", affix_efficiency_pct=0)
         self.assertEqual(result, base)
+
+
+class ComputeOfferingCostTest(DatabaseTestCase):
+    TEST_USER = "offering_cost_user"
+
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        from database import schema
+        async with schema.get_connection() as db:
+            await db.execute(
+                "INSERT OR IGNORE INTO players (user_id) VALUES (?)", (self.TEST_USER,)
+            )
+            await db.commit()
+
+    async def test_returns_sum_of_four_outputs(self):
+        base = int(ALL_TEST_ENV["BASE_OUTPUT"])
+        from database import schema
+        async with schema.get_connection() as db:
+            result = await compute_offering_cost(db, self.TEST_USER)
+        self.assertEqual(result, base * 4)
 
 
 _PRODUCTIVE_ACTIONS = ("gathering", "building", "combat", "research")
