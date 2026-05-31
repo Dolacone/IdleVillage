@@ -1,6 +1,6 @@
 ---
 title: "鐵齒升級成功隨機多段升級（50/35/15%）"
-status: Ready-to-implement
+status: Ready-to-review
 created: 2026-05-31
 doc_type: change
 last_reviewed: 2026-05-31
@@ -11,6 +11,8 @@ source_paths:
   - src/cogs/ui_renderer.py
   - docs/discord/ui-renderer.md
   - tests/test_discord_commands.py
+  - src/cogs/actions.py
+  - docs/discord/notification.md
 scope: "鐵齒升級成功時改為隨機 +1/+2/+3（50/35/15%），不限 pity 狀態。"
 ---
 
@@ -76,7 +78,7 @@ scope: "鐵齒升級成功時改為隨機 +1/+2/+3（50/35/15%），不限 pity 
   - Depends on: Task 1（level_gain 結構確認）
   - Acceptance: 鐵齒 Dropdown 描述含「+1~+3（50/35/15%）」字樣；至少一個測試驗證描述文字
 
-- [ ] Task 3: 修正工具強化成功通知使用實際 `new_level` 而非固定 `current_level + 1`；更新 `docs/discord/notification.md` 的 `target_level` 定義；在 `tests/test_discord_commands.py` 或 `tests/test_discord_notifications.py` 驗證通知使用正確終點等級
+- [x] Task 3: 修正工具強化成功通知使用實際 `new_level` 而非固定 `current_level + 1`；更新 `docs/discord/notification.md` 的 `target_level` 定義；在 `tests/test_discord_commands.py` 或 `tests/test_discord_notifications.py` 驗證通知使用正確終點等級
   - Files: `src/cogs/actions.py`, `docs/discord/notification.md`, `tests/test_discord_commands.py`
   - Depends on: Task 1（level_gain 結構確認）
   - Acceptance: 鐵齒成功 +2 時通知顯示 `Lv{n} -> Lv{n+2}`；至少一個測試覆蓋此路徑

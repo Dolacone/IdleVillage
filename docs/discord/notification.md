@@ -118,10 +118,11 @@ sign 為 `-`（reduce 類型，如 `upgrade_cost_reduce`）或 `+`（其他類�
 ## 工具強化通知欄位
 
 - `current_level`: 本次強化嘗試前的工具等級。
-- `target_level`: 本次嘗試想升到的等級，等於 `current_level + 1`。
+- `target_level`: 成功時為實際到達等級（`new_level` = `current_level + level_gain`）；失敗時為嘗試目標（`current_level + 1`）。
 - `failure_count`: 總失敗次數。成功時顯示成功前累積失敗次數；失敗時顯示含本次失敗後的累積失敗次數。
 
 ## Changelog
 
+- 2026-05-31: 工具強化成功通知的 `target_level` 改為使用實際到達等級（`new_level`），以正確反映鐵齒 +2/+3 多段升級結果。失敗通知不變，仍顯示 `current_level + 1`。
 - 2026-05-22: 新增詞條抽取/清除公告事件（`affix_extracted`、`affix_cleared`）。
 - 2026.05.06.01: 工具強化成功/失敗 Public notification 改為顯示 current level、target level、成功/失敗狀態與總失敗次數；official user-facing gear naming changed to tools: 採集工具, 建設工具, 狩獵工具, 研究工具.

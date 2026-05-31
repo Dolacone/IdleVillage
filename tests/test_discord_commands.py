@@ -917,5 +917,62 @@ class TestAffixHandlerNotification(unittest.IsolatedAsyncioTestCase):
         mock_dispatch.assert_not_awaited()
 
 
+class TestGearUpgradeNotificationTargetLevel(unittest.IsolatedAsyncioTestCase):
+    """Gear upgrade success notification must use actual new_level, not fixed current+1."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def _make_inter(self):
+        inter = MagicMock()
+        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+        inter.user.id = 12345
+        inter.user.display_name = "TestUser"
+        inter.component.custom_id = "attempt_upgrade:gathering"
+        inter.response.defer = AsyncMock()
+        inter.edit_original_response = AsyncMock()
+        return inter
+
+    def _make_db_cm(self):
+        db_mock = AsyncMock()
+        db_mock.commit = AsyncMock()
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=db_mock)
+        cm.__aexit__ = AsyncMock(return_value=False)
+        return cm
+
+    async def test_success_notification_target_level_uses_new_level(self):
+        """When risky success yields level_gain=2, notification target_level == new_level (not current+1)."""
+        from cogs.actions import ActionsCog
+
+        inter = self._make_inter()
+        upgrade_result = {
+            "success": True,
+            "current_level": 5,
+            "new_level": 7,
+            "level_gain": 2,
+            "target_level": 6,  # old fixed value; should NOT be used for success notification
+            "pity_before": 0,
+            "pity_after": 0,
+            "rate": 0.5,
+            "mode": "risky",
+        }
+        with (
+            patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
+            patch("cogs.actions.gear_manager.attempt_upgrade", new=AsyncMock(return_value=upgrade_result)),
+            patch("cogs.actions.gear_manager.get_upgrade_info", new=AsyncMock(return_value={})),
+            patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as mock_dispatch,
+            patch.object(ActionsCog, "_render_gear", new=AsyncMock()),
+        ):
+            cog = ActionsCog(bot=MagicMock())
+            await cog.on_button_click(inter)
+
+        mock_dispatch.assert_awaited_once()
+        event = mock_dispatch.call_args[0][1][0]
+        self.assertEqual(event["type"], "gear_success")
+        self.assertEqual(event["target_level"], 7)
+
+
 if __name__ == "__main__":
     unittest.main()
