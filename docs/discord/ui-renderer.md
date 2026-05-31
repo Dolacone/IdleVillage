@@ -1,7 +1,7 @@
 ---
 title: "Module: ui-renderer"
 doc_type: module
-last_reviewed: 2026-05-23
+last_reviewed: 2026-05-31
 source_paths:
   - src/cogs/ui_renderer.py
 ---
@@ -169,6 +169,7 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 - 鐵齒：`僅消耗 1 個素材，失敗則工具等級與 pity 均歸零`
 
 - **Button**：`🎲 強化`（Green，禁用條件：素材不足 / AP 不足 / 已達上限）
+- **Button**：`🩸 獻祭`（Red，禁用條件：所選工具類型素材 == 0）；custom_id: `sacrifice_material:{gear_type}`；與 🎲 強化、← 返回 **同一 ActionRow**，不佔新列
 - **Button**：`← 返回`（Gray）
 
 ## 管理員介面 Embed（/idlevillage-manage）

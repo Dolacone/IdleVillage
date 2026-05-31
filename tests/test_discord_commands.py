@@ -917,5 +917,44 @@ class TestAffixHandlerNotification(unittest.IsolatedAsyncioTestCase):
         mock_dispatch.assert_not_awaited()
 
 
+class TestSacrificeButton(unittest.TestCase):
+    """Sacrifice material button in gear components and embed result display."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def _player_gear(self, level=3):
+        return {"gathering": level, "building": 0, "combat": 0, "research": 0}
+
+    def test_sacrifice_button_present(self):
+        from cogs.ui_renderer import build_gear_components
+        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, materials=5)
+        custom_ids = [c.custom_id for row in rows for c in row.children]
+        self.assertIn("sacrifice_material:gathering", custom_ids)
+
+    def test_sacrifice_button_disabled_when_no_materials(self):
+        from cogs.ui_renderer import build_gear_components
+        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, materials=0)
+        buttons = {c.custom_id: c for row in rows for c in row.children}
+        self.assertTrue(buttons["sacrifice_material:gathering"].disabled)
+
+    def test_sacrifice_button_enabled_when_materials_available(self):
+        from cogs.ui_renderer import build_gear_components
+        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, materials=3)
+        buttons = {c.custom_id: c for row in rows for c in row.children}
+        self.assertFalse(buttons["sacrifice_material:gathering"].disabled)
+
+    def test_sacrifice_result_shown_in_embed(self):
+        from cogs.ui_renderer import build_gear_embed
+        info = {"gear_level": 3, "target_level": 4, "rate": 0.7, "pity": 0,
+                "material_cost": 4, "ap": 5, "materials": 10, "gear_cap": 10, "mode": "normal",
+                "risky_failed_levels": 0, "risky_bonus_pct": 0.0, "can_attempt": True}
+        result = {"type": "sacrifice", "sacrificed": 5, "gear_type": "gathering", "risky_failed_levels_after": 5}
+        embed = build_gear_embed(info, "gathering", result)
+        self.assertIn("🩸 獻祭完成", embed.description)
+        self.assertIn("消耗 5 個", embed.description)
+
+
 if __name__ == "__main__":
     unittest.main()

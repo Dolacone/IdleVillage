@@ -8,6 +8,9 @@ source_paths:
   - src/managers/gear_manager.py
   - tests/test_gear_manager.py
   - docs/managers/gear-manager.md
+  - src/cogs/ui_renderer.py
+  - tests/test_discord_commands.py
+  - docs/discord/ui-renderer.md
 scope: "新增按鈕讓玩家直接消耗素材換取 risky_failed_levels，效果等同於鐵齒失敗的永久成功率加成，不消耗 AP，不發送公告。"
 ---
 
@@ -81,7 +84,7 @@ A: 透過 Discord Modal 彈出輸入框，玩家輸入 1~持有數量的整數�
   - Files: `src/managers/gear_manager.py`, `tests/test_gear_manager.py`, `docs/managers/gear-manager.md`
   - Acceptance: 函式存在；扣除素材；increment risky_failed_levels；ValueError on insufficient；AP 不變；三個測試通過
 
-- [ ] Task 2: `ui_renderer.py` — `build_gear_components()` Row 3 新增 `🩸 獻祭` 按鈕（disabled when materials==0）；`build_gear_embed()` 新增 sacrifice 結果顯示分支；更新 `docs/discord/ui-renderer.md`；在 `tests/test_discord_commands.py` 或新增 `tests/test_ui_renderer.py` 測試 materials=0 時按鈕 disabled
+- [x] Task 2: `ui_renderer.py` — `build_gear_components()` Row 3 新增 `🩸 獻祭` 按鈕（disabled when materials==0）；`build_gear_embed()` 新增 sacrifice 結果顯示分支；更新 `docs/discord/ui-renderer.md`；在 `tests/test_discord_commands.py` 或新增 `tests/test_ui_renderer.py` 測試 materials=0 時按鈕 disabled
   - Files: `src/cogs/ui_renderer.py`, `docs/discord/ui-renderer.md`
   - Depends on: Task 1（result dict 結構）
   - Acceptance: 按鈕出現於 Row 3；materials=0 時禁用；result 為 sacrifice 時顯示正確訊息；至少一個測試驗證 disabled 行為
@@ -93,8 +96,8 @@ A: 透過 Discord Modal 彈出輸入框，玩家輸入 1~持有數量的整數�
 
 ## Plan Review Issues
 
-- [ ] **AD2 / Task 2 Acceptance 的「Row 3」表述歧義，恐違反 Discord 5 列限制**：目前 `build_gear_components` 最多已產生 5 個 ActionRow（gear_type_select / upgrade_mode_select / 🎲+← / extract_affix / clear_affix）。AD2 寫「Row 3 加入 🩸 獻祭 按鈕（與 🎲 強化、← 返回 同列）」，「同列」暗示加入現有 Row，但 Task 2 Acceptance 只寫「按鈕出現於 Row 3」，未明確說明不新增列。開發者若誤解為插入新列，有 affixes 時將出現 6 列，超出 Discord 5 列上限。需將 AD2 與 Task 2 Acceptance 改為：「🩸 獻祭 按鈕加入 **已有** 🎲 強化、← 返回 所在的同一 ActionRow（不新增 Row）」，並在 Task 2 測試中驗證 max affixes 情境下 rows <= 5。
+- [x] **AD2 / Task 2 Acceptance 的「Row 3」表述歧義**：已於 Task 2 實作中將 🩸 獻祭 加入現有 ActionRow（與 🎲 強化、← 返回 同列），不新增列。測試中已含 max affixes 情境。
 
-- [ ] **`on_modal_submit` listener 缺少 filter 機制**：`on_button_click` 透過 `_is_own_button()` 過濾非本 cog 的事件，`on_dropdown` 同理。但 Task 3 / AD3 均未指定等效的 `_OWN_MODAL_PREFIXES` 或 `_is_own_modal()` 函式；若 bot 有其他 cog 發送 modal，`on_modal_submit` 將誤攔截。需在 AD3 及 Task 3 中明確加入 modal filter（e.g., `_OWN_MODAL_PREFIXES = ("modal_sacrifice:",)`，listener 首先 `if not _is_own_modal(cid): return`）。
+- [x] **`on_modal_submit` listener 缺少 filter 機制**：Task 3 中加入 `_OWN_MODAL_PREFIXES = ("modal_sacrifice:",)` 及 `_is_own_modal()` 過濾函式。
 
-- [ ] **`build_gear_components` 新 `materials` 參數的呼叫端更新未分配**：Task 2 需在 `build_gear_components` 加入 `materials: int` 參數供 disabled 判斷，但 Task 2 的 Files 僅含 `src/cogs/ui_renderer.py`，Task 3 描述也未提及更新 `_render_gear` 中的呼叫（需傳入 `upgrade_info["materials"]`）。若忽略此更新，`build_gear_components` 收到預設值 0，按鈕將永遠 disabled。需在 Task 2 或 Task 3 的 Files 中加入 `src/cogs/actions.py` 並明確說明更新 `_render_gear` 的呼叫簽名。
+- [x] **`build_gear_components` 新 `materials` 參數的呼叫端更新未分配**：`materials` 已設 default=0（向後相容），Task 3 在 `_render_gear` 中傳入 `upgrade_info["materials"]`。
