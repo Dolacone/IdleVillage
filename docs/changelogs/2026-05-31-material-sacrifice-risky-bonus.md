@@ -1,6 +1,6 @@
 ---
 title: "素材獻祭換取永久成功率加成"
-status: Ready-to-implement
+status: Issues-confirmed
 created: 2026-05-31
 doc_type: change
 last_reviewed: 2026-05-31
@@ -90,3 +90,11 @@ A: 透過 Discord Modal 彈出輸入框，玩家輸入 1~持有數量的整數�
   - Files: `src/cogs/actions.py`
   - Depends on: Task 1, Task 2
   - Acceptance: 點按鈕彈 Modal；提交 Modal 扣素材並刷新 gear embed；無 AP 消耗；無 announcement；非整數 / 素材不足以 error 顯示；至少一個測試驗證 modal submit 路徑
+
+## Plan Review Issues
+
+- [ ] **AD2 / Task 2 Acceptance 的「Row 3」表述歧義，恐違反 Discord 5 列限制**：目前 `build_gear_components` 最多已產生 5 個 ActionRow（gear_type_select / upgrade_mode_select / 🎲+← / extract_affix / clear_affix）。AD2 寫「Row 3 加入 🩸 獻祭 按鈕（與 🎲 強化、← 返回 同列）」，「同列」暗示加入現有 Row，但 Task 2 Acceptance 只寫「按鈕出現於 Row 3」，未明確說明不新增列。開發者若誤解為插入新列，有 affixes 時將出現 6 列，超出 Discord 5 列上限。需將 AD2 與 Task 2 Acceptance 改為：「🩸 獻祭 按鈕加入 **已有** 🎲 強化、← 返回 所在的同一 ActionRow（不新增 Row）」，並在 Task 2 測試中驗證 max affixes 情境下 rows <= 5。
+
+- [ ] **`on_modal_submit` listener 缺少 filter 機制**：`on_button_click` 透過 `_is_own_button()` 過濾非本 cog 的事件，`on_dropdown` 同理。但 Task 3 / AD3 均未指定等效的 `_OWN_MODAL_PREFIXES` 或 `_is_own_modal()` 函式；若 bot 有其他 cog 發送 modal，`on_modal_submit` 將誤攔截。需在 AD3 及 Task 3 中明確加入 modal filter（e.g., `_OWN_MODAL_PREFIXES = ("modal_sacrifice:",)`，listener 首先 `if not _is_own_modal(cid): return`）。
+
+- [ ] **`build_gear_components` 新 `materials` 參數的呼叫端更新未分配**：Task 2 需在 `build_gear_components` 加入 `materials: int` 參數供 disabled 判斷，但 Task 2 的 Files 僅含 `src/cogs/ui_renderer.py`，Task 3 描述也未提及更新 `_render_gear` 中的呼叫（需傳入 `upgrade_info["materials"]`）。若忽略此更新，`build_gear_components` 收到預設值 0，按鈕將永遠 disabled。需在 Task 2 或 Task 3 的 Files 中加入 `src/cogs/actions.py` 並明確說明更新 `_render_gear` 的呼叫簽名。
