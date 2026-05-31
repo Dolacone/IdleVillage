@@ -349,7 +349,7 @@ class ActionsCog(commands.Cog):
                 ) as cur:
                     row = await cur.fetchone()
             holdings = row[0] if row else 0
-            mat_label = f"{ACTION_EMOJIS.get(gear_type, '')} {ACTION_LABELS.get(gear_type, gear_type)} 素材"
+            mat_label = f"{ACTION_EMOJIS[gear_type]} {ACTION_LABELS[gear_type]} 素材"
             await inter.response.send_modal(
                 disnake.ui.Modal(
                     title="🩸 獻祭素材",
@@ -388,7 +388,7 @@ class ActionsCog(commands.Cog):
                     result = await gear_manager.sacrifice_material(db, str(inter.user.id), gear_type, amount, now)
                     await db.commit()
             except (ValueError, KeyError) as exc:
-                result = {"error": str(exc) if str(exc) else "無效輸入"}
+                result = {"error": str(exc) or "無效輸入"}
             await self._render_gear(inter, gear_type, result=result)
 
     @commands.Cog.listener("on_dropdown")

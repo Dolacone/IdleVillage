@@ -104,15 +104,15 @@ async def sacrifice_material(db, user_id: str, gear_type: str, amount: int, now:
     if materials < amount:
         raise ValueError(f"Insufficient materials: need {amount}, have {materials}")
 
+    risky_before = await _get_risky_failed_levels(db, user_id)
     await player_manager.spend_material(db, user_id, gear_type, amount, now)
     await _add_risky_failed_levels(db, user_id, amount, now)
 
-    risky_failed_levels_after = await _get_risky_failed_levels(db, user_id)
     return {
         "type": "sacrifice",
         "sacrificed": amount,
         "gear_type": gear_type,
-        "risky_failed_levels_after": risky_failed_levels_after,
+        "risky_failed_levels_after": risky_before + amount,
     }
 
 

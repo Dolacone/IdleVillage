@@ -477,9 +477,7 @@ def build_gear_embed(
     if result is not None:
         if result.get("type") == "sacrifice":
             n = result.get("sacrificed", 0)
-            bonus = round(n * 0.01, 2)
-            bonus_str = f"{bonus:g}"
-            lines.append(f"\n🩸 獻祭完成！消耗 {n} 個 {mat_label}，鐵齒加成 +{bonus_str}%")
+            lines.append(f"\n🩸 獻祭完成！消耗 {n} 個 {mat_label}，鐵齒加成 +{round(n * 0.01, 2):g}%")
         elif result.get("error"):
             lines.append(f"\n⚠️ 操作失敗：{result['error']}")
         else:
