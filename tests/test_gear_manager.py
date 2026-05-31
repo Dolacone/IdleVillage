@@ -845,7 +845,6 @@ class TestAffixIntegration(DatabaseTestCase):
         async with schema.get_connection() as db:
             await self._insert_affix(db, "upgrade_material_refund", 100)
             await db.commit()
-        before_mats = 20 - 1  # deduct 1 AP-equivalent; mats = 20
         with patch("managers.gear_manager.random.random", return_value=0.0):
             async with schema.get_connection() as db:
                 result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW)

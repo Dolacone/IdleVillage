@@ -156,7 +156,7 @@ async def attempt_upgrade(db, user_id: str, gear_type: str, now: datetime, mode:
       normal — spend target_level materials, roll; success: gear+1 pity=0, failure: pity+1
       buffer — spend ceil(target_level/2) materials, no roll; pity+1 immediately
       risky  — spend 1 material, roll;
-                success: gear +1, pity=0
+                success: gear +1/+2/+3, pity=0
                 failure: gear=0, pity=0, risky_failed_levels += current_level
 
     Returns a result dict with success, new_level, level_gain, pity_before, pity_after, rate, mode.

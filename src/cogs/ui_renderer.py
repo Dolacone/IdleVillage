@@ -386,7 +386,7 @@ def _build_affix_section(affixes: list, max_slots: int) -> str:
     if max_slots == 0:
         return ""
     affix_by_slot = {a["slot_index"]: a for a in affixes}
-    lines = [f"─────────────────────────────", f"詞條槽（{len(affixes)}/{max_slots}）"]
+    lines = ["─────────────────────────────", f"詞條槽（{len(affixes)}/{max_slots}）"]
     for i in range(max_slots):
         if i in affix_by_slot:
             a = affix_by_slot[i]
