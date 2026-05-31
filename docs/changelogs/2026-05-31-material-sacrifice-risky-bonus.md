@@ -1,6 +1,6 @@
 ---
 title: "素材獻祭換取永久成功率加成"
-status: Done
+status: Refactored
 created: 2026-05-31
 doc_type: change
 last_reviewed: 2026-05-31
