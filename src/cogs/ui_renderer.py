@@ -475,15 +475,21 @@ def build_gear_embed(
         lines.append(affix_section)
 
     if result is not None:
-        result_mode = result.get("mode", "normal")
-        if result.get("success"):
-            lines.append(f"\n✅ 強化成功！{label} 升至 Lv{result.get('new_level', target_level)}")
-        elif result_mode == "buffer":
-            lines.append(f"\n🛡️ 墊檔完成。保底計數 +1（現為 {result.get('pity_after', pity + 1)}）")
-        elif result_mode == "risky":
-            lines.append(f"\n💀 鐵齒失敗！等級與保底計數歸零")
+        if result.get("type") == "sacrifice":
+            n = result.get("sacrificed", 0)
+            lines.append(f"\n🩸 獻祭完成！消耗 {n} 個 {mat_label}，鐵齒加成 +{round(n * 0.01, 2):g}%")
+        elif result.get("error"):
+            lines.append(f"\n⚠️ 操作失敗：{result['error']}")
         else:
-            lines.append(f"\n❌ 強化失敗。保底計數 +1")
+            result_mode = result.get("mode", "normal")
+            if result.get("success"):
+                lines.append(f"\n✅ 強化成功！{label} 升至 Lv{result.get('new_level', target_level)}")
+            elif result_mode == "buffer":
+                lines.append(f"\n🛡️ 墊檔完成。保底計數 +1（現為 {result.get('pity_after', pity + 1)}）")
+            elif result_mode == "risky":
+                lines.append(f"\n💀 鐵齒失敗！等級與保底計數歸零")
+            else:
+                lines.append(f"\n❌ 強化失敗。保底計數 +1")
 
     color = disnake.Color.green() if (result and result.get("success")) else disnake.Color.blue()
     return disnake.Embed(description="\n".join(lines), color=color)
@@ -505,6 +511,7 @@ def build_gear_components(
     *,
     affixes: list | None = None,
     max_slots: int = 0,
+    materials: int = 0,
 ) -> list:
     bonus_pct = math.floor(get_env_float("GEAR_BONUS_PER_LEVEL") * 100)
 
@@ -555,6 +562,12 @@ def build_gear_components(
                 style=disnake.ButtonStyle.success,
                 custom_id=f"attempt_upgrade:{gear_type}:{mode}",
                 disabled=not can_attempt,
+            ),
+            disnake.ui.Button(
+                label="🩸 獻祭",
+                style=disnake.ButtonStyle.danger,
+                custom_id=f"sacrifice_material:{gear_type}",
+                disabled=(materials == 0),
             ),
             disnake.ui.Button(
                 label="← 返回",

@@ -917,5 +917,119 @@ class TestAffixHandlerNotification(unittest.IsolatedAsyncioTestCase):
         mock_dispatch.assert_not_awaited()
 
 
+class TestSacrificeModalSubmit(unittest.IsolatedAsyncioTestCase):
+    """on_modal_submit handles modal_sacrifice:{gear_type} correctly."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def _make_modal_inter(self, cid, amount_value):
+        inter = MagicMock()
+        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+        inter.user.id = 12345
+        inter.custom_id = cid
+        inter.text_values = {"sacrifice_amount": amount_value}
+        inter.response.defer = AsyncMock()
+        inter.edit_original_response = AsyncMock()
+        return inter
+
+    def _make_db_cm(self):
+        db_mock = AsyncMock()
+        db_mock.commit = AsyncMock()
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=db_mock)
+        cm.__aexit__ = AsyncMock(return_value=False)
+        return cm
+
+    async def test_modal_submit_calls_sacrifice_and_renders(self):
+        from cogs.actions import ActionsCog
+
+        inter = self._make_modal_inter("modal_sacrifice:gathering", "3")
+        sacrifice_result = {"type": "sacrifice", "sacrificed": 3, "gear_type": "gathering", "risky_failed_levels_after": 3}
+        with (
+            patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
+            patch("cogs.actions.gear_manager.sacrifice_material", new=AsyncMock(return_value=sacrifice_result)),
+            patch.object(ActionsCog, "_render_gear", new=AsyncMock()) as mock_render,
+        ):
+            cog = ActionsCog(bot=MagicMock())
+            await cog.on_modal_submit(inter)
+
+        mock_render.assert_awaited_once()
+        _, kwargs = mock_render.call_args
+        self.assertEqual(kwargs.get("result"), sacrifice_result)
+
+    async def test_modal_submit_invalid_input_returns_error_result(self):
+        from cogs.actions import ActionsCog
+
+        inter = self._make_modal_inter("modal_sacrifice:gathering", "not_a_number")
+        with (
+            patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
+            patch("cogs.actions.gear_manager.sacrifice_material", new=AsyncMock()),
+            patch.object(ActionsCog, "_render_gear", new=AsyncMock()) as mock_render,
+        ):
+            cog = ActionsCog(bot=MagicMock())
+            await cog.on_modal_submit(inter)
+
+        mock_render.assert_awaited_once()
+        _, kwargs = mock_render.call_args
+        self.assertIn("error", kwargs.get("result", {}))
+
+    async def test_modal_submit_does_not_dispatch_notification(self):
+        from cogs.actions import ActionsCog
+
+        inter = self._make_modal_inter("modal_sacrifice:gathering", "5")
+        sacrifice_result = {"type": "sacrifice", "sacrificed": 5, "gear_type": "gathering", "risky_failed_levels_after": 5}
+        with (
+            patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
+            patch("cogs.actions.gear_manager.sacrifice_material", new=AsyncMock(return_value=sacrifice_result)),
+            patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as mock_dispatch,
+            patch.object(ActionsCog, "_render_gear", new=AsyncMock()),
+        ):
+            cog = ActionsCog(bot=MagicMock())
+            await cog.on_modal_submit(inter)
+
+        mock_dispatch.assert_not_awaited()
+
+
+class TestSacrificeButton(unittest.TestCase):
+    """Sacrifice material button in gear components and embed result display."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def _player_gear(self, level=3):
+        return {"gathering": level, "building": 0, "combat": 0, "research": 0}
+
+    def test_sacrifice_button_present(self):
+        from cogs.ui_renderer import build_gear_components
+        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, materials=5)
+        custom_ids = [c.custom_id for row in rows for c in row.children]
+        self.assertIn("sacrifice_material:gathering", custom_ids)
+
+    def test_sacrifice_button_disabled_when_no_materials(self):
+        from cogs.ui_renderer import build_gear_components
+        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, materials=0)
+        buttons = {c.custom_id: c for row in rows for c in row.children}
+        self.assertTrue(buttons["sacrifice_material:gathering"].disabled)
+
+    def test_sacrifice_button_enabled_when_materials_available(self):
+        from cogs.ui_renderer import build_gear_components
+        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, materials=3)
+        buttons = {c.custom_id: c for row in rows for c in row.children}
+        self.assertFalse(buttons["sacrifice_material:gathering"].disabled)
+
+    def test_sacrifice_result_shown_in_embed(self):
+        from cogs.ui_renderer import build_gear_embed
+        info = {"gear_level": 3, "target_level": 4, "rate": 0.7, "pity": 0,
+                "material_cost": 4, "ap": 5, "materials": 10, "gear_cap": 10, "mode": "normal",
+                "risky_failed_levels": 0, "risky_bonus_pct": 0.0, "can_attempt": True}
+        result = {"type": "sacrifice", "sacrificed": 5, "gear_type": "gathering", "risky_failed_levels_after": 5}
+        embed = build_gear_embed(info, "gathering", result)
+        self.assertIn("🩸 獻祭完成", embed.description)
+        self.assertIn("消耗 5 個", embed.description)
+
+
 if __name__ == "__main__":
     unittest.main()

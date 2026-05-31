@@ -1,7 +1,7 @@
 ---
 title: "Module: gear-manager"
 doc_type: module
-last_reviewed: 2026-05-22
+last_reviewed: 2026-05-31
 source_paths:
   - src/managers/gear_manager.py
 ---
@@ -99,6 +99,7 @@ final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS)
 
 - `attempt_upgrade(db, user_id, gear_type, now, mode="normal")` — 執行強化嘗試，回傳 `{success, new_level, level_gain, pity_before, pity_after, rate, mode}`
 - `get_upgrade_info(db, user_id, gear_type, now, mode="normal")` — 回傳強化預覽資訊（成功率、依模式計算的消耗量、保底狀態、模式）；標準與鐵齒模式額外回傳 `risky_failed_levels` 與 `risky_bonus_pct`
+- `sacrifice_material(db, user_id, gear_type, amount, now)` — 消耗 amount 個指定類型素材，直接將 `risky_failed_levels += amount`；不消耗 AP，不觸發通知；回傳 `{type: "sacrifice", sacrificed, gear_type, risky_failed_levels_after}`
 
 ## 詞條系統（Affix System）
 
@@ -117,6 +118,7 @@ final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS)
 
 ## Changelog
 
+- 2026-05-31: Added `sacrifice_material(db, user_id, gear_type, amount, now)` — consume N materials of a chosen type to gain `risky_failed_levels += N` without spending AP or triggering notifications. Returns `{type: "sacrifice", sacrificed, gear_type, risky_failed_levels_after}`.
 - 2026.05.22: 強化流程整合詞條：upgrade_success/upgrade_cost_reduce/upgrade_ap_refund/upgrade_material_refund；鐵齒炸裂後清除詞條。
 - 2026.05.16: Standard (normal) mode now includes `risky_failed_levels × 0.0001` in success rate, same as risky mode. `get_upgrade_info()` now returns `risky_failed_levels` and `risky_bonus_pct` for normal mode in addition to risky mode. UI embed displays the risky bonus line for normal mode.
 

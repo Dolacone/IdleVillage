@@ -1,7 +1,7 @@
 ---
 title: "Module: ui-renderer"
 doc_type: module
-last_reviewed: 2026-05-23
+last_reviewed: 2026-05-31
 source_paths:
   - src/cogs/ui_renderer.py
 ---
@@ -169,6 +169,7 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 - 鐵齒：`僅消耗 1 個素材，失敗則工具等級與 pity 均歸零`
 
 - **Button**：`🎲 強化`（Green，禁用條件：素材不足 / AP 不足 / 已達上限）
+- **Button**：`🩸 獻祭`（Red，禁用條件：所選工具類型素材 == 0）；custom_id: `sacrifice_material:{gear_type}`；與 🎲 強化、← 返回 **同一 ActionRow**，不佔新列
 - **Button**：`← 返回`（Gray）
 
 ## 管理員介面 Embed（/idlevillage-manage）
@@ -214,6 +215,7 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
 
 ## Changelog
 
+- 2026-05-31: Added 🩸 獻祭 button (Red/Danger) to the gear upgrade action row alongside 🎲 強化 and ← 返回; disabled when the selected gear type's material count is 0. Sacrifice result appended to embed description when `result["type"] == "sacrifice"`, showing consumed count and incremental risky bonus. Error result branch also added.
 - 2026.05.02.00: Stage line format changed to `📋 關卡 {n}: {type_zh}`; deadline prefixed with `期限:`; section headers localised to `公用資源` / `公用設施` / `村民行動` / `個人資訊`; building list moved out of code block with per-row emoji; gear line label changed to `裝備`, category text labels and `Lv` prefix removed; materials line category text labels removed; burst button renamed `⚡ 消耗AP立刻完成三次行動` and moved to Row 1 alongside `🔨 強化裝備`; Refresh button removed.
 - 2026.05.02.02: Action dropdown options now include descriptions showing secondary cost and output per action type. Gear type dropdown options now include descriptions showing the level transition and cumulative stat gain (`Lv{n} → Lv{n+1}: {type}產出 +{n×pct}% → +{(n+1)×pct}%`), or `已達等級上限 Lv{cap}` when at cap.
 - 2026.05.02.03: Removed incorrect special-case rule "若建築已達 level cap，顯示 100%". 100% is reached naturally when `xp_progress` reaches `next_req`; no display override is needed or correct.
