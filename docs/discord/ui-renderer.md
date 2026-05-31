@@ -215,6 +215,8 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
 
 ## Changelog
 
+- 2026.05.31: Added 🩸 獻祭 button (Red/Danger) to the gear upgrade action row alongside 🎲 強化 and ← 返回; disabled when the selected gear type's material count is 0. Sacrifice result appended to embed description when `result["type"] == "sacrifice"`, showing consumed count and incremental risky bonus.
+
 - 2026-05-31: Added 🩸 獻祭 button (Red) to gear upgrade sub-menu Row 3, same ActionRow as 🎲 強化 and ← 返回; disabled when materials==0. build_gear_embed now shows sacrifice result and error result branches.
 - 2026.05.02.00: Stage line format changed to `📋 關卡 {n}: {type_zh}`; deadline prefixed with `期限:`; section headers localised to `公用資源` / `公用設施` / `村民行動` / `個人資訊`; building list moved out of code block with per-row emoji; gear line label changed to `裝備`, category text labels and `Lv` prefix removed; materials line category text labels removed; burst button renamed `⚡ 消耗AP立刻完成三次行動` and moved to Row 1 alongside `🔨 強化裝備`; Refresh button removed.
 - 2026.05.02.02: Action dropdown options now include descriptions showing secondary cost and output per action type. Gear type dropdown options now include descriptions showing the level transition and cumulative stat gain (`Lv{n} → Lv{n+1}: {type}產出 +{n×pct}% → +{(n+1)×pct}%`), or `已達等級上限 Lv{cap}` when at cap.
