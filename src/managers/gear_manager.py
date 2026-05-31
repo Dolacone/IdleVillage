@@ -85,6 +85,37 @@ async def _add_risky_failed_levels(db, user_id: str, amount: int, now: datetime)
     )
 
 
+async def sacrifice_material(db, user_id: str, gear_type: str, amount: int, now: datetime) -> dict:
+    """
+    Sacrifice materials to directly increase risky_failed_levels (permanent success rate bonus).
+
+    Preconditions (raises ValueError if unmet):
+      - amount >= 1
+      - player has >= amount materials of the given gear_type
+
+    Does NOT consume AP and does NOT raise any notification events.
+
+    Returns {"type": "sacrifice", "sacrificed": amount, "gear_type": gear_type, "risky_failed_levels_after": int}.
+    """
+    if amount < 1:
+        raise ValueError("amount must be at least 1")
+
+    materials = await _get_materials(db, user_id, gear_type)
+    if materials < amount:
+        raise ValueError(f"Insufficient materials: need {amount}, have {materials}")
+
+    await player_manager.spend_material(db, user_id, gear_type, amount, now)
+    await _add_risky_failed_levels(db, user_id, amount, now)
+
+    risky_failed_levels_after = await _get_risky_failed_levels(db, user_id)
+    return {
+        "type": "sacrifice",
+        "sacrificed": amount,
+        "gear_type": gear_type,
+        "risky_failed_levels_after": risky_failed_levels_after,
+    }
+
+
 async def get_upgrade_info(db, user_id: str, gear_type: str, now: datetime, mode: str = "normal") -> dict:
     """
     Return upgrade preview information for the given gear type and mode.

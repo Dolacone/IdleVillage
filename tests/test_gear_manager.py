@@ -860,5 +860,48 @@ class TestAffixIntegration(DatabaseTestCase):
         self.assertFalse(result["material_refunded"])
 
 
+class TestSacrificeMaterial(DatabaseTestCase):
+    """Tests for gear_manager.sacrifice_material()."""
+
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        async with schema.get_connection() as db:
+            await _insert_player(db, USER, "gathering", gear_level=3, materials=10, risky_failed_levels=0)
+            await _set_research_lab_level(db, 10)
+
+    async def test_sacrifice_deducts_materials_and_increments_risky_failed_levels(self):
+        """Sacrificing N materials deducts them and adds N to risky_failed_levels."""
+        async with schema.get_connection() as db:
+            result = await gear_manager.sacrifice_material(db, USER, "gathering", 5, NOW)
+            await db.commit()
+        self.assertEqual(result["type"], "sacrifice")
+        self.assertEqual(result["sacrificed"], 5)
+        self.assertEqual(result["risky_failed_levels_after"], 5)
+        row = await self.fetchone(
+            "SELECT materials_gathering, risky_failed_levels FROM players WHERE user_id=?", (USER,)
+        )
+        self.assertEqual(row[0], 5)
+        self.assertEqual(row[1], 5)
+
+    async def test_sacrifice_raises_on_insufficient_materials(self):
+        """ValueError when requested amount exceeds holdings."""
+        async with schema.get_connection() as db:
+            with self.assertRaises(ValueError):
+                await gear_manager.sacrifice_material(db, USER, "gathering", 99, NOW)
+
+    async def test_sacrifice_does_not_consume_ap(self):
+        """AP must not change after sacrifice."""
+        ap_before_row = await self.fetchone(
+            "SELECT ap_full_time FROM players WHERE user_id=?", (USER,)
+        )
+        async with schema.get_connection() as db:
+            await gear_manager.sacrifice_material(db, USER, "gathering", 3, NOW)
+            await db.commit()
+        ap_after_row = await self.fetchone(
+            "SELECT ap_full_time FROM players WHERE user_id=?", (USER,)
+        )
+        self.assertEqual(ap_before_row[0], ap_after_row[0])
+
+
 if __name__ == "__main__":
     unittest.main()

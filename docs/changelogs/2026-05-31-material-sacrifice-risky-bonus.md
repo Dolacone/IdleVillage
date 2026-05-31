@@ -4,7 +4,10 @@ status: Ready-to-implement
 created: 2026-05-31
 doc_type: change
 last_reviewed: 2026-05-31
-source_paths: []
+source_paths:
+  - src/managers/gear_manager.py
+  - tests/test_gear_manager.py
+  - docs/managers/gear-manager.md
 scope: "新增按鈕讓玩家直接消耗素材換取 risky_failed_levels，效果等同於鐵齒失敗的永久成功率加成，不消耗 AP，不發送公告。"
 ---
 
@@ -74,7 +77,7 @@ A: 透過 Discord Modal 彈出輸入框，玩家輸入 1~持有數量的整數�
 
 ## Tasks
 
-- [ ] Task 1: `gear_manager.py` — 新增 `sacrifice_material()` 公開函式，加入 `tests/test_gear_manager.py` 三個測試（正常扣除、素材不足拒絕、risky_failed_levels 正確累加）；更新 `docs/managers/gear-manager.md` 操作介面區段
+- [x] Task 1: `gear_manager.py` — 新增 `sacrifice_material()` 公開函式，加入 `tests/test_gear_manager.py` 三個測試（正常扣除、素材不足拒絕、risky_failed_levels 正確累加）；更新 `docs/managers/gear-manager.md` 操作介面區段
   - Files: `src/managers/gear_manager.py`, `tests/test_gear_manager.py`, `docs/managers/gear-manager.md`
   - Acceptance: 函式存在；扣除素材；increment risky_failed_levels；ValueError on insufficient；AP 不變；三個測試通過
 
