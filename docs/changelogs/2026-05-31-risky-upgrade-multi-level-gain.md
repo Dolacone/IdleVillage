@@ -8,6 +8,9 @@ source_paths:
   - src/managers/gear_manager.py
   - tests/test_gear_manager.py
   - docs/managers/gear-manager.md
+  - src/cogs/ui_renderer.py
+  - docs/discord/ui-renderer.md
+  - tests/test_discord_commands.py
 scope: "鐵齒升級成功時改為隨機 +1/+2/+3（50/35/15%），不限 pity 狀態。"
 ---
 
@@ -68,7 +71,7 @@ scope: "鐵齒升級成功時改為隨機 +1/+2/+3（50/35/15%），不限 pity 
   - Files: `src/managers/gear_manager.py`, `tests/test_gear_manager.py`, `docs/managers/gear-manager.md`
   - Acceptance: 鐵齒成功可回傳 level_gain=1/2/3；gear_level 正確累加；pity 歸零；舊 level_gain=1 固定測試移除或更新；三條路徑均有測試
 
-- [ ] Task 2: `ui_renderer.py` 鐵齒 Dropdown 描述更新；更新 `docs/discord/ui-renderer.md`；在 `tests/test_discord_commands.py` 驗證 Dropdown 描述文字
+- [x] Task 2: `ui_renderer.py` 鐵齒 Dropdown 描述更新；更新 `docs/discord/ui-renderer.md`；在 `tests/test_discord_commands.py` 驗證 Dropdown 描述文字
   - Files: `src/cogs/ui_renderer.py`, `docs/discord/ui-renderer.md`, `tests/test_discord_commands.py`
   - Depends on: Task 1（level_gain 結構確認）
   - Acceptance: 鐵齒 Dropdown 描述含「+1~+3（50/35/15%）」字樣；至少一個測試驗證描述文字
