@@ -1,7 +1,7 @@
 ---
 title: "Module: ui-renderer"
 doc_type: module
-last_reviewed: 2026-05-23
+last_reviewed: 2026-05-31
 source_paths:
   - src/cogs/ui_renderer.py
 ---
@@ -164,8 +164,8 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 - 已達上限：`已達等級上限 Lv{cap}`
 
 強化模式 Dropdown（custom_id: `upgrade_mode_select:{gear_type}`）每個選項附帶描述：
-- 標準：`正常消耗，失敗 pity+1`
-- 墊檔：`半價素材，必定 pity+1，無需擲骰`
+- 標準：`正常強化：消耗全額素材，成功升級，失敗保底+1`
+- 墊檔：`消耗一半素材，直接獲得一個保底計數，不進行強化`
 - 鐵齒：`僅消耗 1 個素材，成功 +1~+3（50/35/15%），失敗則工具等級與 pity 均歸零`
 
 - **Button**：`🎲 強化`（Green，禁用條件：素材不足 / AP 不足 / 已達上限）

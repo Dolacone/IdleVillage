@@ -1,9 +1,10 @@
 ---
 title: "Module: notification"
 doc_type: module
-last_reviewed: 2026-05-23
+last_reviewed: 2026-05-31
 source_paths:
   - src/core/notification.py
+  - src/cogs/actions.py
 ---
 
 # Module: notification
