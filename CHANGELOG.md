@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-05-31
+
+- Added "🩸 獻祭素材" button to the gear upgrade sub-menu. Players select a gear type (which determines the material type consumed), then enter a quantity via a Discord Modal. Each material sacrificed increases `risky_failed_levels` by 1 (+0.01% permanent success rate bonus). No AP is consumed, no public announcement is made — only the player's gear embed updates to reflect the result. Insufficient materials or invalid input shows an error message in the embed.
+
 ## 2026-05-23
 
 - Added new "奉獻" (Offering) action type — the 5th action. Players select one village resource (food/wood/knowledge) to consume each cycle; cost equals the sum of their 4 productive action outputs. Village-wide accumulator tracks all contributions across resource types. When accumulator reaches `OFFERING_THRESHOLD_PER_PLAYER × total players`, all players receive +1 to each of the 4 material types and the accumulator resets. Dashboard and main UI show accumulator progress. A public announcement fires on threshold trigger.
