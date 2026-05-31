@@ -1,6 +1,6 @@
 ---
 title: "素材獻祭換取永久成功率加成"
-status: Issues-confirmed
+status: Ready-to-review
 created: 2026-05-31
 doc_type: change
 last_reviewed: 2026-05-31
@@ -9,6 +9,7 @@ source_paths:
   - tests/test_gear_manager.py
   - docs/managers/gear-manager.md
   - src/cogs/ui_renderer.py
+  - src/cogs/actions.py
   - tests/test_discord_commands.py
   - docs/discord/ui-renderer.md
 scope: "新增按鈕讓玩家直接消耗素材換取 risky_failed_levels，效果等同於鐵齒失敗的永久成功率加成，不消耗 AP，不發送公告。"
@@ -89,7 +90,7 @@ A: 透過 Discord Modal 彈出輸入框，玩家輸入 1~持有數量的整數�
   - Depends on: Task 1（result dict 結構）
   - Acceptance: 按鈕出現於 Row 3；materials=0 時禁用；result 為 sacrifice 時顯示正確訊息；至少一個測試驗證 disabled 行為
 
-- [ ] Task 3: `actions.py` — 新增 `sacrifice_material:{gear_type}` 到 `_OWN_BUTTON_PREFIXES`；`on_button_click` 處理 sacrifice 按鈕（查 DB 取 holdings → send_modal）；新增 `on_modal_submit` listener 處理 `modal_sacrifice:{gear_type}`（呼叫 gear_manager.sacrifice_material → _render_gear with result，非整數輸入 / 素材不足均以 error result 回應）；在 `tests/test_discord_commands.py` 補充 modal submit 邏輯測試
+- [x] Task 3: `actions.py` — 新增 `sacrifice_material:{gear_type}` 到 `_OWN_BUTTON_PREFIXES`；`on_button_click` 處理 sacrifice 按鈕（查 DB 取 holdings → send_modal）；新增 `on_modal_submit` listener 處理 `modal_sacrifice:{gear_type}`（呼叫 gear_manager.sacrifice_material → _render_gear with result，非整數輸入 / 素材不足均以 error result 回應）；在 `tests/test_discord_commands.py` 補充 modal submit 邏輯測試
   - Files: `src/cogs/actions.py`
   - Depends on: Task 1, Task 2
   - Acceptance: 點按鈕彈 Modal；提交 Modal 扣素材並刷新 gear embed；無 AP 消耗；無 announcement；非整數 / 素材不足以 error 顯示；至少一個測試驗證 modal submit 路徑

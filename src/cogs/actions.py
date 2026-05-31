@@ -18,9 +18,10 @@ from database.schema import get_connection
 from managers import affix_manager, gear_manager, player_manager
 
 _OWN_BUTTONS = frozenset({"burst_execute", "open_gear_upgrade", "back_to_main"})
-_OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:", "extract_affix:", "clear_affix:")
+_OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:", "extract_affix:", "clear_affix:", "sacrifice_material:")
 _OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "offering_resource_select", "gear_type_select"})
 _OWN_DROPDOWN_PREFIXES = ("upgrade_mode_select:",)
+_OWN_MODAL_PREFIXES = ("modal_sacrifice:",)
 _VALID_GEAR_TYPES = frozenset({"gathering", "building", "combat", "research"})
 _VALID_ACTIONS = frozenset({"gathering", "building", "combat", "research", "offering"})
 _VALID_OFFERING_RESOURCES = frozenset({"food", "wood", "knowledge"})
@@ -33,6 +34,10 @@ def _is_own_button(cid: str) -> bool:
 
 def _is_own_dropdown(cid: str) -> bool:
     return cid in _OWN_DROPDOWNS or any(cid.startswith(p) for p in _OWN_DROPDOWN_PREFIXES)
+
+
+def _is_own_modal(cid: str) -> bool:
+    return any(cid.startswith(p) for p in _OWN_MODAL_PREFIXES)
 
 
 class ActionsCog(commands.Cog):
@@ -170,7 +175,7 @@ class ActionsCog(commands.Cog):
         embed = build_gear_embed(upgrade_info, gear_type, result, affixes=affixes, max_slots=max_slots)
         components = build_gear_components(
             gear_type, mode, upgrade_info["can_attempt"], player_gear, upgrade_info["gear_cap"],
-            affixes=affixes, max_slots=max_slots,
+            affixes=affixes, max_slots=max_slots, materials=upgrade_info["materials"],
         )
         await inter.edit_original_response(embed=embed, components=components)
 
@@ -328,6 +333,62 @@ class ActionsCog(commands.Cog):
             if affix_event:
                 await notification.dispatch_events(self.bot, [affix_event])
             await self._render_gear(inter, gear_type)
+
+        elif cid.startswith("sacrifice_material:"):
+            parts = cid.split(":")
+            gear_type = parts[1] if len(parts) > 1 else ""
+            if gear_type not in _VALID_GEAR_TYPES:
+                return
+            from core.formula import ACTION_MATERIAL_COL
+            from cogs.ui_renderer import ACTION_EMOJIS, ACTION_LABELS
+            mat_col = ACTION_MATERIAL_COL[gear_type]
+            async with get_connection() as db:
+                async with db.execute(
+                    f"SELECT {mat_col} FROM players WHERE user_id=?", (user_id,)
+                ) as cur:
+                    row = await cur.fetchone()
+            holdings = row[0] if row else 0
+            mat_label = f"{ACTION_EMOJIS.get(gear_type, '')} {ACTION_LABELS.get(gear_type, gear_type)} 素材"
+            await inter.response.send_modal(
+                disnake.ui.Modal(
+                    title="🩸 獻祭素材",
+                    custom_id=f"modal_sacrifice:{gear_type}",
+                    components=[
+                        disnake.ui.TextInput(
+                            label=f"投入 {mat_label}（持有：{holdings}）",
+                            custom_id="sacrifice_amount",
+                            style=disnake.TextInputStyle.short,
+                            placeholder=f"1 ~ {holdings}",
+                            required=True,
+                        ),
+                    ],
+                )
+            )
+
+    @commands.Cog.listener("on_modal_submit")
+    async def on_modal_submit(self, inter: disnake.ModalInteraction) -> None:
+        if not self._check_guild(inter):
+            return
+        cid = inter.custom_id
+        if not _is_own_modal(cid):
+            return
+
+        if cid.startswith("modal_sacrifice:"):
+            gear_type = cid.split(":", 1)[1]
+            if gear_type not in _VALID_GEAR_TYPES:
+                return
+            await inter.response.defer()
+            raw = inter.text_values.get("sacrifice_amount", "").strip()
+            now = datetime.now(timezone.utc)
+            result: dict | None = None
+            try:
+                amount = int(raw)
+                async with get_connection() as db:
+                    result = await gear_manager.sacrifice_material(db, str(inter.user.id), gear_type, amount, now)
+                    await db.commit()
+            except (ValueError, KeyError) as exc:
+                result = {"error": str(exc) if str(exc) else "無效輸入"}
+            await self._render_gear(inter, gear_type, result=result)
 
     @commands.Cog.listener("on_dropdown")
     async def on_dropdown(self, inter: disnake.MessageInteraction) -> None:

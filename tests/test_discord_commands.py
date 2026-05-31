@@ -917,6 +917,81 @@ class TestAffixHandlerNotification(unittest.IsolatedAsyncioTestCase):
         mock_dispatch.assert_not_awaited()
 
 
+class TestSacrificeModalSubmit(unittest.IsolatedAsyncioTestCase):
+    """on_modal_submit handles modal_sacrifice:{gear_type} correctly."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def _make_modal_inter(self, cid, amount_value):
+        inter = MagicMock()
+        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+        inter.user.id = 12345
+        inter.custom_id = cid
+        inter.text_values = {"sacrifice_amount": amount_value}
+        inter.response.defer = AsyncMock()
+        inter.edit_original_response = AsyncMock()
+        return inter
+
+    def _make_db_cm(self):
+        db_mock = AsyncMock()
+        db_mock.commit = AsyncMock()
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=db_mock)
+        cm.__aexit__ = AsyncMock(return_value=False)
+        return cm
+
+    async def test_modal_submit_calls_sacrifice_and_renders(self):
+        from cogs.actions import ActionsCog
+
+        inter = self._make_modal_inter("modal_sacrifice:gathering", "3")
+        sacrifice_result = {"type": "sacrifice", "sacrificed": 3, "gear_type": "gathering", "risky_failed_levels_after": 3}
+        with (
+            patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
+            patch("cogs.actions.gear_manager.sacrifice_material", new=AsyncMock(return_value=sacrifice_result)),
+            patch.object(ActionsCog, "_render_gear", new=AsyncMock()) as mock_render,
+        ):
+            cog = ActionsCog(bot=MagicMock())
+            await cog.on_modal_submit(inter)
+
+        mock_render.assert_awaited_once()
+        _, kwargs = mock_render.call_args
+        self.assertEqual(kwargs.get("result"), sacrifice_result)
+
+    async def test_modal_submit_invalid_input_returns_error_result(self):
+        from cogs.actions import ActionsCog
+
+        inter = self._make_modal_inter("modal_sacrifice:gathering", "not_a_number")
+        with (
+            patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
+            patch("cogs.actions.gear_manager.sacrifice_material", new=AsyncMock()),
+            patch.object(ActionsCog, "_render_gear", new=AsyncMock()) as mock_render,
+        ):
+            cog = ActionsCog(bot=MagicMock())
+            await cog.on_modal_submit(inter)
+
+        mock_render.assert_awaited_once()
+        _, kwargs = mock_render.call_args
+        self.assertIn("error", kwargs.get("result", {}))
+
+    async def test_modal_submit_does_not_dispatch_notification(self):
+        from cogs.actions import ActionsCog
+
+        inter = self._make_modal_inter("modal_sacrifice:gathering", "5")
+        sacrifice_result = {"type": "sacrifice", "sacrificed": 5, "gear_type": "gathering", "risky_failed_levels_after": 5}
+        with (
+            patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
+            patch("cogs.actions.gear_manager.sacrifice_material", new=AsyncMock(return_value=sacrifice_result)),
+            patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as mock_dispatch,
+            patch.object(ActionsCog, "_render_gear", new=AsyncMock()),
+        ):
+            cog = ActionsCog(bot=MagicMock())
+            await cog.on_modal_submit(inter)
+
+        mock_dispatch.assert_not_awaited()
+
+
 class TestSacrificeButton(unittest.TestCase):
     """Sacrifice material button in gear components and embed result display."""
 
