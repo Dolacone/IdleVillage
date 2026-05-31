@@ -1,6 +1,6 @@
 ---
 title: "鐵齒升級成功隨機多段升級（50/35/15%）"
-status: Draft
+status: Ready-to-implement
 created: 2026-05-31
 doc_type: change
 last_reviewed: 2026-05-31
@@ -57,6 +57,7 @@ scope: "鐵齒升級成功時改為隨機 +1/+2/+3（50/35/15%），不限 pity 
 3. 回傳的 `level_gain` 可為 1/2/3，呼叫端（UI）已使用此欄位，無需修改介面簽名。
 4. 文件同步：`gear-manager.md` 強化模式表與流程、`ui-renderer.md` Dropdown 描述。
 5. `ui_renderer.py` 鐵齒 Dropdown 描述更新為：`僅消耗 1 個素材，成功 +1~+3（50/35/15%），失敗則工具等級與 pity 均歸零`。
+6. 工具強化成功通知的 `target_level` 改為使用 `new_level`（= `current_level + level_gain`）而非固定 `current_level + 1`，以正確反映多段升級結果。`notification.md` 更新 `target_level` 定義；`notification.py`/`actions.py` 傳入實際 `new_level`。
 
 ## Tasks
 
@@ -64,7 +65,17 @@ scope: "鐵齒升級成功時改為隨機 +1/+2/+3（50/35/15%），不限 pity 
   - Files: `src/managers/gear_manager.py`, `tests/test_gear_manager.py`, `docs/managers/gear-manager.md`
   - Acceptance: 鐵齒成功可回傳 level_gain=1/2/3；gear_level 正確累加；pity 歸零；舊 level_gain=1 固定測試移除或更新；三條路徑均有測試
 
-- [ ] Task 2: `ui_renderer.py` 鐵齒 Dropdown 描述更新；更新 `docs/discord/ui-renderer.md`；在現有測試中驗證 Dropdown 描述文字
-  - Files: `src/cogs/ui_renderer.py`, `docs/discord/ui-renderer.md`
+- [ ] Task 2: `ui_renderer.py` 鐵齒 Dropdown 描述更新；更新 `docs/discord/ui-renderer.md`；在 `tests/test_discord_commands.py` 驗證 Dropdown 描述文字
+  - Files: `src/cogs/ui_renderer.py`, `docs/discord/ui-renderer.md`, `tests/test_discord_commands.py`
   - Depends on: Task 1（level_gain 結構確認）
   - Acceptance: 鐵齒 Dropdown 描述含「+1~+3（50/35/15%）」字樣；至少一個測試驗證描述文字
+
+- [ ] Task 3: 修正工具強化成功通知使用實際 `new_level` 而非固定 `current_level + 1`；更新 `docs/discord/notification.md` 的 `target_level` 定義；在 `tests/test_discord_commands.py` 或 `tests/test_discord_notifications.py` 驗證通知使用正確終點等級
+  - Files: `src/cogs/actions.py`, `docs/discord/notification.md`, `tests/test_discord_commands.py`
+  - Depends on: Task 1（level_gain 結構確認）
+  - Acceptance: 鐵齒成功 +2 時通知顯示 `Lv{n} -> Lv{n+2}`；至少一個測試覆蓋此路徑
+
+## Plan Review Issues
+
+- [x] 公開強化通知仍以 `target_level = current_level + 1` 顯示結果；鐵齒成功 +2/+3 時會公告錯誤終點等級。已新增 Task 3 修正，並在 AD6 說明決策。
+- [x] Task 2 要求「在現有測試中驗證 Dropdown 描述文字」，但 Files 未列出對應測試檔。已補入 `tests/test_discord_commands.py`。
