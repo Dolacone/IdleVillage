@@ -4,7 +4,10 @@ status: Ready-to-implement
 created: 2026-05-31
 doc_type: change
 last_reviewed: 2026-05-31
-source_paths: []
+source_paths:
+  - src/managers/gear_manager.py
+  - tests/test_gear_manager.py
+  - docs/managers/gear-manager.md
 scope: "鐵齒升級成功時改為隨機 +1/+2/+3（50/35/15%），不限 pity 狀態。"
 ---
 
@@ -61,7 +64,7 @@ scope: "鐵齒升級成功時改為隨機 +1/+2/+3（50/35/15%），不限 pity 
 
 ## Tasks
 
-- [ ] Task 1: `gear_manager.py` 鐵齒成功分支改用 50/35/15% 隨機 level_gain；更新 `tests/test_gear_manager.py` 覆蓋三條路徑；更新 `docs/managers/gear-manager.md` 強化模式表與流程
+- [x] Task 1: `gear_manager.py` 鐵齒成功分支改用 50/35/15% 隨機 level_gain；更新 `tests/test_gear_manager.py` 覆蓋三條路徑；更新 `docs/managers/gear-manager.md` 強化模式表與流程
   - Files: `src/managers/gear_manager.py`, `tests/test_gear_manager.py`, `docs/managers/gear-manager.md`
   - Acceptance: 鐵齒成功可回傳 level_gain=1/2/3；gear_level 正確累加；pity 歸零；舊 level_gain=1 固定測試移除或更新；三條路徑均有測試
 

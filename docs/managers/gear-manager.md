@@ -27,7 +27,7 @@ source_paths:
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | `normal` | 標準 | 目標等級個（升至 n 級消耗 n 個） | 是 | gear +1，pity 歸零 | pity +1 |
 | `buffer` | 墊檔 | ceil(目標等級 / 2)，最少 1 個 | 否 | — | pity +1（保證觸發） |
-| `risky` | 鐵齒 | 1 個 | 是 | gear +1，pity 歸零 | gear 歸零、pity 歸零；`risky_failed_levels` += 當前等級 |
+| `risky` | 鐵齒 | 1 個 | 是 | gear +1/+2/+3（50/35/15%），pity 歸零 | gear 歸零、pity 歸零；`risky_failed_levels` += 當前等級 |
 
 三種模式共用相同前置條件：gear_level < research_institute_level、AP >= 1、素材 >= 該模式消耗量。
 失敗時 AP 與素材**全部消耗，不退還**。
@@ -85,8 +85,8 @@ final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS)
      計算 final_rate（base_rate + pity × GEAR_PITY_BONUS + risky_failed_levels × 0.0001）
      擲骰（random integer 1~100）：
        成功（roll <= final_rate）：
-         level_gain = 1
-         gear_level += 1, pity = 0
+         level_gain = random.choices([1, 2, 3], weights=[50, 35, 15])[0]
+         gear_level += level_gain, pity = 0
        失敗：
          risky_failed_levels += current_level（強化前等級）
          gear_level = 0（工具等級歸零）
@@ -117,6 +117,7 @@ final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS)
 
 ## Changelog
 
+- 2026-05-31: Risky mode success now rolls +1/+2/+3 at 50/35/15% (unconditional, regardless of pity state), replacing the fixed +1 from the 2026-05-15 simplification.
 - 2026.05.22: 強化流程整合詞條：upgrade_success/upgrade_cost_reduce/upgrade_ap_refund/upgrade_material_refund；鐵齒炸裂後清除詞條。
 - 2026.05.16: Standard (normal) mode now includes `risky_failed_levels × 0.0001` in success rate, same as risky mode. `get_upgrade_info()` now returns `risky_failed_levels` and `risky_bonus_pct` for normal mode in addition to risky mode. UI embed displays the risky bonus line for normal mode.
 
