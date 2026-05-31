@@ -1,6 +1,6 @@
 ---
 title: "鐵齒升級成功隨機多段升級（50/35/15%）"
-status: Refactored
+status: Done
 created: 2026-05-31
 doc_type: change
 last_reviewed: 2026-05-31

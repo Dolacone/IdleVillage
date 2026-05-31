@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-05-31
+
+- Risky mode upgrade success now rolls +1/+2/+3 at 50/35/15% (previously always +1). The random gain is unconditional — pity state does not affect the probability. Research institute level cap is still precondition-only and does not truncate multi-level results.
+- Gear upgrade success notifications now show the actual new level reached (e.g. Lv5 → Lv8 on a +3 roll), instead of always showing the attempted target (Lv5 → Lv6).
+
 ## 2026-05-23
 
 - Added new "奉獻" (Offering) action type — the 5th action. Players select one village resource (food/wood/knowledge) to consume each cycle; cost equals the sum of their 4 productive action outputs. Village-wide accumulator tracks all contributions across resource types. When accumulator reaches `OFFERING_THRESHOLD_PER_PLAYER × total players`, all players receive +1 to each of the 4 material types and the accumulator resets. Dashboard and main UI show accumulator progress. A public announcement fires on threshold trigger.
