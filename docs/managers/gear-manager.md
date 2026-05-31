@@ -118,6 +118,7 @@ final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS)
 
 ## Changelog
 
+- 2026-05-31: 新增 `sacrifice_material()`：直接消耗素材增加 `risky_failed_levels`，不消耗 AP，不觸發通知。
 - 2026.05.22: 強化流程整合詞條：upgrade_success/upgrade_cost_reduce/upgrade_ap_refund/upgrade_material_refund；鐵齒炸裂後清除詞條。
 - 2026.05.16: Standard (normal) mode now includes `risky_failed_levels × 0.0001` in success rate, same as risky mode. `get_upgrade_info()` now returns `risky_failed_levels` and `risky_bonus_pct` for normal mode in addition to risky mode. UI embed displays the risky bonus line for normal mode.
 
