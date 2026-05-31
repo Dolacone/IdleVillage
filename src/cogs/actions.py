@@ -144,7 +144,7 @@ class ActionsCog(commands.Cog):
         await inter.edit_original_response(embed=embed, components=components)
 
     async def _render_gear(
-        self, inter, gear_type: str, *, mode: str = "normal", result: dict | None = None
+        self, inter, gear_type: str, *, mode: str = "normal", result: dict | None = None, respond=None
     ) -> None:
         user_id = str(inter.user.id)
         now = datetime.now(timezone.utc)
@@ -180,7 +180,10 @@ class ActionsCog(commands.Cog):
             gear_type, mode, upgrade_info["can_attempt"], player_gear, upgrade_info["gear_cap"],
             affixes=affixes, max_slots=max_slots, materials=upgrade_info["materials"],
         )
-        await inter.edit_original_response(embed=embed, components=components)
+        if respond is not None:
+            await respond(embed=embed, components=components)
+        else:
+            await inter.edit_original_response(embed=embed, components=components)
 
     @commands.slash_command(name="idlevillage", description="開啟 Idle Village 個人介面")
     async def idlevillage(self, inter: disnake.ApplicationCommandInteraction) -> None:
@@ -378,7 +381,6 @@ class ActionsCog(commands.Cog):
             gear_type = cid.split(":", 1)[1]
             if gear_type not in _VALID_GEAR_TYPES:
                 return
-            await inter.response.defer()
             raw = inter.text_values.get("sacrifice_amount", "").strip()
             now = datetime.now(timezone.utc)
             result: dict | None = None
@@ -389,7 +391,10 @@ class ActionsCog(commands.Cog):
                     await db.commit()
             except (ValueError, KeyError) as exc:
                 result = {"error": str(exc) or "無效輸入"}
-            await self._render_gear(inter, gear_type, result=result)
+            await self._render_gear(
+                inter, gear_type, result=result,
+                respond=lambda **kw: inter.response.edit_message(**kw),
+            )
 
     @commands.Cog.listener("on_dropdown")
     async def on_dropdown(self, inter: disnake.MessageInteraction) -> None:
