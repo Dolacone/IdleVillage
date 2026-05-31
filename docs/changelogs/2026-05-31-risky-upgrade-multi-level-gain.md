@@ -1,6 +1,6 @@
 ---
 title: "鐵齒升級成功隨機多段升級（50/35/15%）"
-status: Ready-to-review
+status: Reviewed
 created: 2026-05-31
 doc_type: change
 last_reviewed: 2026-05-31
@@ -87,3 +87,7 @@ scope: "鐵齒升級成功時改為隨機 +1/+2/+3（50/35/15%），不限 pity 
 
 - [x] 公開強化通知仍以 `target_level = current_level + 1` 顯示結果；鐵齒成功 +2/+3 時會公告錯誤終點等級。已新增 Task 3 修正，並在 AD6 說明決策。
 - [x] Task 2 要求「在現有測試中驗證 Dropdown 描述文字」，但 Files 未列出對應測試檔。已補入 `tests/test_discord_commands.py`。
+
+## Review Issues
+
+無。
