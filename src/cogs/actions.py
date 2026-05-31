@@ -4,6 +4,8 @@ import disnake
 from disnake.ext import commands
 
 from cogs.ui_renderer import (
+    ACTION_EMOJIS,
+    ACTION_LABELS,
     UI_BUILDING_TARGETS,
     build_gear_components,
     build_gear_embed,
@@ -12,6 +14,7 @@ from cogs.ui_renderer import (
 )
 from core import notification
 from core.config import get_discord_guild_id, get_env_int
+from core.formula import ACTION_MATERIAL_COL
 from core.settlement import change_action, settle_burst, settle_complete_cycles
 from core.utils import dt_str
 from database.schema import get_connection
@@ -339,8 +342,6 @@ class ActionsCog(commands.Cog):
             gear_type = parts[1] if len(parts) > 1 else ""
             if gear_type not in _VALID_GEAR_TYPES:
                 return
-            from core.formula import ACTION_MATERIAL_COL
-            from cogs.ui_renderer import ACTION_EMOJIS, ACTION_LABELS
             mat_col = ACTION_MATERIAL_COL[gear_type]
             async with get_connection() as db:
                 async with db.execute(
