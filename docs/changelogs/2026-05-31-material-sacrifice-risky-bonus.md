@@ -1,6 +1,6 @@
 ---
 title: "素材獻祭換取永久成功率加成"
-status: Draft
+status: Ready-to-implement
 created: 2026-05-31
 doc_type: change
 last_reviewed: 2026-05-31
@@ -49,5 +49,41 @@ A: 透過 Discord Modal 彈出輸入框，玩家輸入 1~持有數量的整數�
 
 ## Key Assumptions
 
-- Discord Modal 最多 5 個 TextInput，本需求只需 1 個（數量），類型透過另一個 TextInput 或改為先選下拉再點按鈕的方式處理
-- 實際 UI 流程待 plan 階段確認現有 Modal 使用模式後決定
+- Discord Modal 最多 5 個 TextInput，本需求只需 1 個（數量），素材類型透過當前選擇的 gear_type 決定（玩家先切換工具類型再點獻祭）
+
+## Architecture Decisions
+
+1. **新增 `sacrifice_material(db, user_id, gear_type, amount, now)`** 於 `gear_manager.py`：
+   - 驗證 amount >= 1 且 materials[gear_type] >= amount，否則 raise ValueError
+   - 扣除 materials[gear_type] by amount
+   - 呼叫既有 `_add_risky_failed_levels(db, user_id, amount, now)`
+   - 回傳 `{"type": "sacrifice", "sacrificed": amount, "gear_type": gear_type, "risky_failed_levels_after": int}`
+   - 不消耗 AP，不觸發任何 notification event
+
+2. **按鈕放置**：在 `build_gear_components()` Row 3 加入 `🩸 獻祭` 按鈕（與 🎲 強化、← 返回 同列）。custom_id: `sacrifice_material:{gear_type}`。禁用條件：materials == 0。
+
+3. **Modal 流程**：
+   - 點擊按鈕 → 查詢 DB 取得持有量 → `inter.response.send_modal()`（不可 defer）
+   - Modal title: `🩸 獻祭素材`，TextInput label: `投入 {mat_label}（持有：{holdings}）`，placeholder: `1 ~ {holdings}`
+   - custom_id: `modal_sacrifice:{gear_type}`
+   - `on_modal_submit` listener 加入 `actions.py`（沿用 general.py 的前綴過濾模式）
+
+4. **Embed 結果顯示**：`build_gear_embed()` 在 `result["type"] == "sacrifice"` 時附加：`\n🩸 獻祭完成！消耗 {n} 個 {mat_label}，鐵齒加成 +{bonus}%`
+
+5. **素材類型選擇 via 現有 UI**：玩家在工具類型 Dropdown 選擇目標工具後點獻祭，素材類型與所選工具一致。不需要新 Dropdown，符合「自由選擇任一類型」（切換工具即切換素材類型）。
+
+## Tasks
+
+- [ ] Task 1: `gear_manager.py` — 新增 `sacrifice_material()` 公開函式，加入 `tests/test_gear_manager.py` 三個測試（正常扣除、素材不足拒絕、risky_failed_levels 正確累加）；更新 `docs/managers/gear-manager.md` 操作介面區段
+  - Files: `src/managers/gear_manager.py`, `tests/test_gear_manager.py`, `docs/managers/gear-manager.md`
+  - Acceptance: 函式存在；扣除素材；increment risky_failed_levels；ValueError on insufficient；AP 不變；三個測試通過
+
+- [ ] Task 2: `ui_renderer.py` — `build_gear_components()` Row 3 新增 `🩸 獻祭` 按鈕（disabled when materials==0）；`build_gear_embed()` 新增 sacrifice 結果顯示分支；更新 `docs/discord/ui-renderer.md`；在 `tests/test_discord_commands.py` 或新增 `tests/test_ui_renderer.py` 測試 materials=0 時按鈕 disabled
+  - Files: `src/cogs/ui_renderer.py`, `docs/discord/ui-renderer.md`
+  - Depends on: Task 1（result dict 結構）
+  - Acceptance: 按鈕出現於 Row 3；materials=0 時禁用；result 為 sacrifice 時顯示正確訊息；至少一個測試驗證 disabled 行為
+
+- [ ] Task 3: `actions.py` — 新增 `sacrifice_material:{gear_type}` 到 `_OWN_BUTTON_PREFIXES`；`on_button_click` 處理 sacrifice 按鈕（查 DB 取 holdings → send_modal）；新增 `on_modal_submit` listener 處理 `modal_sacrifice:{gear_type}`（呼叫 gear_manager.sacrifice_material → _render_gear with result，非整數輸入 / 素材不足均以 error result 回應）；在 `tests/test_discord_commands.py` 補充 modal submit 邏輯測試
+  - Files: `src/cogs/actions.py`
+  - Depends on: Task 1, Task 2
+  - Acceptance: 點按鈕彈 Modal；提交 Modal 扣素材並刷新 gear embed；無 AP 消耗；無 announcement；非整數 / 素材不足以 error 顯示；至少一個測試驗證 modal submit 路徑
