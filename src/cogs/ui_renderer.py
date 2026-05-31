@@ -386,7 +386,7 @@ def _build_affix_section(affixes: list, max_slots: int) -> str:
     if max_slots == 0:
         return ""
     affix_by_slot = {a["slot_index"]: a for a in affixes}
-    lines = [f"─────────────────────────────", f"詞條槽（{len(affixes)}/{max_slots}）"]
+    lines = ["─────────────────────────────", f"詞條槽（{len(affixes)}/{max_slots}）"]
     for i in range(max_slots):
         if i in affix_by_slot:
             a = affix_by_slot[i]
@@ -498,7 +498,7 @@ def build_gear_embed(
 _UPGRADE_MODE_DEFS = (
     ("標準", "normal", "正常強化：消耗全額素材，成功升級，失敗保底+1"),
     ("墊檔", "buffer", "消耗一半素材，直接獲得一個保底計數，不進行強化"),
-    ("鐵齒", "risky", "僅消耗 1 個素材，失敗則工具等級與 pity 均歸零"),
+    ("鐵齒", "risky", "僅消耗 1 個素材，成功 +1~+3（50/35/15%），失敗則工具等級與 pity 均歸零"),
 )
 
 

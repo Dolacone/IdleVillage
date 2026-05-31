@@ -3,6 +3,8 @@
 ## 2026-05-31
 
 - Added "🩸 獻祭素材" button to the gear upgrade sub-menu. Players select a gear type (which determines the material type consumed), then enter a quantity via a Discord Modal. Each material sacrificed increases `risky_failed_levels` by 1 (+0.01% permanent success rate bonus). No AP is consumed, no public announcement is made — only the player's gear embed updates to reflect the result. Insufficient materials or invalid input shows an error message in the embed.
+- Risky mode upgrade success now rolls +1/+2/+3 at 50/35/15% (previously always +1). The random gain is unconditional — pity state does not affect the probability. Research institute level cap is still precondition-only and does not truncate multi-level results.
+- Gear upgrade success notifications now show the actual new level reached (e.g. Lv5 → Lv8 on a +3 roll), instead of always showing the attempted target (Lv5 → Lv6).
 
 ## 2026-05-23
 

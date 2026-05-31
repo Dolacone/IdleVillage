@@ -187,7 +187,7 @@ async def attempt_upgrade(db, user_id: str, gear_type: str, now: datetime, mode:
       normal — spend target_level materials, roll; success: gear+1 pity=0, failure: pity+1
       buffer — spend ceil(target_level/2) materials, no roll; pity+1 immediately
       risky  — spend 1 material, roll;
-                success: gear +1, pity=0
+                success: gear +1/+2/+3, pity=0
                 failure: gear=0, pity=0, risky_failed_levels += current_level
 
     Returns a result dict with success, new_level, level_gain, pity_before, pity_after, rate, mode.
@@ -241,7 +241,10 @@ async def attempt_upgrade(db, user_id: str, gear_type: str, now: datetime, mode:
     material_refunded = False
 
     if success:
-        level_gain = 1
+        if mode == "risky":
+            level_gain = random.choices([1, 2, 3], weights=[50, 35, 15])[0]
+        else:
+            level_gain = 1
         new_level = gear_level + level_gain
         await player_manager.set_gear_level(db, user_id, gear_type, new_level, now)
         await player_manager.set_pity(db, user_id, gear_type, 0, now)

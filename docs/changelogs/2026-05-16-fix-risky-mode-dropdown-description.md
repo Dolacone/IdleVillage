@@ -25,7 +25,7 @@ scope: "修正鐵齒模式 Dropdown 描述字串，使其與實際遊戲邏輯�
 ## MVP Scope / Not Doing
 
 **Scope：**
-- 修正 `ui_renderer.py:409` 的鐵齒 Dropdown 描述字串
+- 修正 `ui_renderer.py` 的鐵齒 Dropdown 描述字串
 - 同步更新 `docs/discord/ui-renderer.md` 中的鐵齒描述
 
 **Not Doing：**
@@ -39,4 +39,4 @@ scope: "修正鐵齒模式 Dropdown 描述字串，使其與實際遊戲邏輯�
 
 ## Tasks
 
-- [x] Task 1: 修正 `src/cogs/ui_renderer.py:409` 鐵齒模式描述字串，並同步更新 `docs/discord/ui-renderer.md:161`
+- [x] Task 1: 修正 `src/cogs/ui_renderer.py` 鐵齒模式描述字串，並同步更新 `docs/discord/ui-renderer.md`

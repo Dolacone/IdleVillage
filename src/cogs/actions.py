@@ -265,7 +265,7 @@ class ActionsCog(commands.Cog):
                         "user_display_name": inter.user.display_name,
                         "gear_type": gear_type,
                         "current_level": result.get("current_level", 0),
-                        "target_level": result.get("target_level", result.get("current_level", 0) + 1),
+                        "target_level": result.get("new_level", result.get("current_level", 0) + 1),
                         "failure_count": result.get("pity_before", 0),
                         "mode": result.get("mode", "normal"),
                     }

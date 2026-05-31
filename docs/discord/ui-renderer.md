@@ -164,9 +164,9 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 - 已達上限：`已達等級上限 Lv{cap}`
 
 強化模式 Dropdown（custom_id: `upgrade_mode_select:{gear_type}`）每個選項附帶描述：
-- 標準：`正常消耗，失敗 pity+1`
-- 墊檔：`半價素材，必定 pity+1，無需擲骰`
-- 鐵齒：`僅消耗 1 個素材，失敗則工具等級與 pity 均歸零`
+- 標準：`正常強化：消耗全額素材，成功升級，失敗保底+1`
+- 墊檔：`消耗一半素材，直接獲得一個保底計數，不進行強化`
+- 鐵齒：`僅消耗 1 個素材，成功 +1~+3（50/35/15%），失敗則工具等級與 pity 均歸零`
 
 - **Button**：`🎲 強化`（Green，禁用條件：素材不足 / AP 不足 / 已達上限）
 - **Button**：`🩸 獻祭`（Red，禁用條件：所選工具類型素材 == 0）；custom_id: `sacrifice_material:{gear_type}`；與 🎲 強化、← 返回 **同一 ActionRow**，不佔新列
@@ -226,6 +226,7 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
   採集工具, 建設工具, 狩獵工具, 研究工具.
 - 2026.05.15: Risky mode now shows `鐵齒等級: {n} (+{pct}%)` line. Risky dropdown description updated to reflect multi-level success.
 - 2026.05.16: Success rate line format updated to `成功率：{base}%（+保底{pity_total}% +鐵齒{risky}%）= {final}%`. Two detail lines added below (保底率、鐵齒率) for normal/risky modes. Bottom `鐵齒等級` line removed.
+- 2026-05-31: Risky mode upgrade dropdown description updated to include multi-level success info: `成功 +1~+3（50/35/15%）`.
 - 2026.05.15: Added mode selection dropdown (`upgrade_mode_select:{gear_type}`) to the gear upgrade sub-menu. Mode descriptions shown inline. Buffer mode displays 0% success rate.
 - 2026-05-15: Added `build_manager_embed()` and `build_manager_components()` for the unified manager interface.
 - 2026.05.06.00: Gear upgrade success-rate display must match gear-manager precision semantics. Lv6 with no pity displays 40%, not 39%.
