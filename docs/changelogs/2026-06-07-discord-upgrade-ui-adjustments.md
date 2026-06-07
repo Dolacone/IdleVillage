@@ -1,6 +1,6 @@
 ---
 title: "Discord 強化介面 UI 調整"
-status: Ready-to-review
+status: Issues-confirmed
 created: 2026-06-07
 doc_type: change
 last_reviewed: 2026-06-07
@@ -81,3 +81,4 @@ Not doing：
 - [x] Task 3: 移除「清除槽 N」按鈕群，改為單一「🗑️ 清除詞條」按鈕 + StringSelect 流程，更新測試
 
 ## Review Issues
+- [ ] [Major] `clear_affix_select:{gear_type}` dropdown handler references `user_id` without defining it in `on_dropdown`, so selecting an affix from the new StringSelect raises an unbound variable error before `affix_manager.clear_affix()` can run. Existing tests cover the old `clear_affix:{gear_type}:{slot}` button path and route registration, but not the new dropdown clear flow.
