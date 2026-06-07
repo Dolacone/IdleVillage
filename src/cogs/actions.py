@@ -186,6 +186,28 @@ class ActionsCog(commands.Cog):
         else:
             await inter.edit_original_response(embed=embed, components=components)
 
+    async def _execute_clear_affix(self, inter, gear_type: str, slot_index: int) -> None:
+        user_id = str(inter.user.id)
+        now = datetime.now(timezone.utc)
+        affix_event = None
+        async with get_connection() as db:
+            gear_level = await player_manager.get_gear_level(db, user_id, gear_type)
+            try:
+                result = await affix_manager.clear_affix(db, user_id, gear_type, slot_index, gear_level, now)
+                await db.commit()
+                affix_event = {
+                    "type": "affix_cleared",
+                    "user_display_name": inter.user.display_name,
+                    "gear_type": gear_type,
+                    "affix_type": result["affix_type"],
+                    "value": result["value"],
+                }
+            except ValueError:
+                pass
+        if affix_event:
+            await notification.dispatch_events(self.bot, [affix_event])
+        await self._render_gear(inter, gear_type)
+
     @commands.slash_command(name="idlevillage", description="開啟 Idle Village 個人介面")
     async def idlevillage(self, inter: disnake.ApplicationCommandInteraction) -> None:
         if not self._check_guild(inter):
@@ -321,25 +343,7 @@ class ActionsCog(commands.Cog):
             except ValueError:
                 return
             await inter.response.defer()
-            now = datetime.now(timezone.utc)
-            affix_event = None
-            async with get_connection() as db:
-                gear_level = await player_manager.get_gear_level(db, user_id, gear_type)
-                try:
-                    result = await affix_manager.clear_affix(db, user_id, gear_type, slot_index, gear_level, now)
-                    await db.commit()
-                    affix_event = {
-                        "type": "affix_cleared",
-                        "user_display_name": inter.user.display_name,
-                        "gear_type": gear_type,
-                        "affix_type": result["affix_type"],
-                        "value": result["value"],
-                    }
-                except ValueError:
-                    pass
-            if affix_event:
-                await notification.dispatch_events(self.bot, [affix_event])
-            await self._render_gear(inter, gear_type)
+            await self._execute_clear_affix(inter, gear_type, slot_index)
 
         elif cid.startswith("open_clear_affix:"):
             gear_type = cid.split(":", 1)[1]
@@ -438,25 +442,7 @@ class ActionsCog(commands.Cog):
                 slot_index = int(value)
             except ValueError:
                 return
-            now = datetime.now(timezone.utc)
-            affix_event = None
-            async with get_connection() as db:
-                gear_level = await player_manager.get_gear_level(db, user_id, gear_type)
-                try:
-                    result = await affix_manager.clear_affix(db, user_id, gear_type, slot_index, gear_level, now)
-                    await db.commit()
-                    affix_event = {
-                        "type": "affix_cleared",
-                        "user_display_name": inter.user.display_name,
-                        "gear_type": gear_type,
-                        "affix_type": result["affix_type"],
-                        "value": result["value"],
-                    }
-                except ValueError:
-                    pass
-            if affix_event:
-                await notification.dispatch_events(self.bot, [affix_event])
-            await self._render_gear(inter, gear_type)
+            await self._execute_clear_affix(inter, gear_type, slot_index)
 
 
 def setup(bot: commands.Bot) -> None:
