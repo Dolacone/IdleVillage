@@ -21,9 +21,9 @@ from database.schema import get_connection
 from managers import affix_manager, gear_manager, player_manager
 
 _OWN_BUTTONS = frozenset({"burst_execute", "open_gear_upgrade", "back_to_main"})
-_OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:", "extract_affix:", "clear_affix:", "sacrifice_material:")
+_OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:", "extract_affix:", "clear_affix:", "sacrifice_material:", "open_clear_affix:")
 _OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "offering_resource_select", "gear_type_select"})
-_OWN_DROPDOWN_PREFIXES = ("upgrade_mode_select:",)
+_OWN_DROPDOWN_PREFIXES = ("upgrade_mode_select:", "clear_affix_select:")
 _OWN_MODAL_PREFIXES = ("modal_sacrifice:",)
 _VALID_GEAR_TYPES = frozenset({"gathering", "building", "combat", "research"})
 _VALID_ACTIONS = frozenset({"gathering", "building", "combat", "research", "offering"})
@@ -144,7 +144,7 @@ class ActionsCog(commands.Cog):
         await inter.edit_original_response(embed=embed, components=components)
 
     async def _render_gear(
-        self, inter, gear_type: str, *, mode: str = "normal", result: dict | None = None, respond=None
+        self, inter, gear_type: str, *, mode: str = "normal", result: dict | None = None, respond=None, show_clear_select: bool = False
     ) -> None:
         user_id = str(inter.user.id)
         now = datetime.now(timezone.utc)
@@ -179,6 +179,7 @@ class ActionsCog(commands.Cog):
         components = build_gear_components(
             gear_type, mode, upgrade_info["can_attempt"], player_gear, upgrade_info["gear_cap"],
             affixes=affixes, max_slots=max_slots, materials=upgrade_info["materials"],
+            show_clear_select=show_clear_select,
         )
         if respond is not None:
             await respond(embed=embed, components=components)
@@ -340,6 +341,13 @@ class ActionsCog(commands.Cog):
                 await notification.dispatch_events(self.bot, [affix_event])
             await self._render_gear(inter, gear_type)
 
+        elif cid.startswith("open_clear_affix:"):
+            gear_type = cid.split(":", 1)[1]
+            if gear_type not in _VALID_GEAR_TYPES:
+                return
+            await inter.response.defer()
+            await self._render_gear(inter, gear_type, show_clear_select=True)
+
         elif cid.startswith("sacrifice_material:"):
             parts = cid.split(":")
             gear_type = parts[1] if len(parts) > 1 else ""
@@ -421,6 +429,33 @@ class ActionsCog(commands.Cog):
             gear_type = cid.split(":", 1)[1]
             if value in _VALID_UPGRADE_MODES and gear_type in _VALID_GEAR_TYPES:
                 await self._render_gear(inter, gear_type, mode=value)
+        elif cid.startswith("clear_affix_select:"):
+            gear_type = cid.split(":", 1)[1]
+            if gear_type not in _VALID_GEAR_TYPES:
+                return
+            try:
+                slot_index = int(value)
+            except ValueError:
+                return
+            now = datetime.now(timezone.utc)
+            affix_event = None
+            async with get_connection() as db:
+                gear_level = await player_manager.get_gear_level(db, user_id, gear_type)
+                try:
+                    result = await affix_manager.clear_affix(db, user_id, gear_type, slot_index, gear_level, now)
+                    await db.commit()
+                    affix_event = {
+                        "type": "affix_cleared",
+                        "user_display_name": inter.user.display_name,
+                        "gear_type": gear_type,
+                        "affix_type": result["affix_type"],
+                        "value": result["value"],
+                    }
+                except ValueError:
+                    pass
+            if affix_event:
+                await notification.dispatch_events(self.bot, [affix_event])
+            await self._render_gear(inter, gear_type)
 
 
 def setup(bot: commands.Bot) -> None:

@@ -756,18 +756,41 @@ class TestAffixComponents(unittest.TestCase):
         buttons = {c.custom_id: c for row in rows for c in row.children}
         self.assertFalse(buttons["extract_affix:gathering"].disabled)
 
-    def test_clear_button_hidden_for_empty_slot(self):
+    def test_clear_button_disabled_when_no_affixes(self):
         from cogs.ui_renderer import build_gear_components
         rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, affixes=[], max_slots=1)
-        custom_ids = [c.custom_id for row in rows for c in row.children]
-        self.assertFalse(any("clear_affix" in cid for cid in custom_ids))
+        buttons = {c.custom_id: c for row in rows for c in row.children if hasattr(c, "custom_id")}
+        self.assertIn("open_clear_affix:gathering", buttons)
+        self.assertTrue(buttons["open_clear_affix:gathering"].disabled)
 
-    def test_clear_button_present_for_occupied_slot(self):
+    def test_clear_button_enabled_when_affixes_present(self):
         from cogs.ui_renderer import build_gear_components
         affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
         rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1)
-        custom_ids = [c.custom_id for row in rows for c in row.children]
-        self.assertIn("clear_affix:gathering:0", custom_ids)
+        buttons = {c.custom_id: c for row in rows for c in row.children if hasattr(c, "custom_id")}
+        self.assertIn("open_clear_affix:gathering", buttons)
+        self.assertFalse(buttons["open_clear_affix:gathering"].disabled)
+
+    def test_no_old_clear_slot_buttons(self):
+        from cogs.ui_renderer import build_gear_components
+        affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
+        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1)
+        custom_ids = [c.custom_id for row in rows for c in row.children if hasattr(c, "custom_id")]
+        self.assertFalse(any(cid.startswith("clear_affix:gathering:") for cid in custom_ids))
+
+    def test_clear_select_dropdown_shown_when_flag_set(self):
+        from cogs.ui_renderer import build_gear_components
+        affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
+        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1, show_clear_select=True)
+        custom_ids = [c.custom_id for row in rows for c in row.children if hasattr(c, "custom_id")]
+        self.assertIn("clear_affix_select:gathering", custom_ids)
+
+    def test_clear_select_dropdown_hidden_without_flag(self):
+        from cogs.ui_renderer import build_gear_components
+        affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
+        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1)
+        custom_ids = [c.custom_id for row in rows for c in row.children if hasattr(c, "custom_id")]
+        self.assertNotIn("clear_affix_select:gathering", custom_ids)
 
     def test_gear_action_button_labels(self):
         from cogs.ui_renderer import build_gear_components
@@ -795,6 +818,14 @@ class TestAffixRouteRegistration(unittest.TestCase):
     def test_clear_affix_is_own_button(self):
         from cogs.actions import _is_own_button
         self.assertTrue(_is_own_button("clear_affix:gathering:0"))
+
+    def test_open_clear_affix_is_own_button(self):
+        from cogs.actions import _is_own_button
+        self.assertTrue(_is_own_button("open_clear_affix:gathering"))
+
+    def test_clear_affix_select_is_own_dropdown(self):
+        from cogs.actions import _is_own_dropdown
+        self.assertTrue(_is_own_dropdown("clear_affix_select:gathering"))
 
     def test_invalid_gear_type_not_routed_extract(self):
         from cogs.actions import _is_own_button
