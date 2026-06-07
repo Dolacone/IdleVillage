@@ -1,7 +1,7 @@
 ---
 title: "Module: ui-renderer"
 doc_type: module
-last_reviewed: 2026-05-31
+last_reviewed: 2026-06-07
 source_paths:
   - src/cogs/ui_renderer.py
 ---
@@ -109,7 +109,7 @@ Discord 上限為 5 個 action row。選擇建設或奉獻時達到 4 rows。
 ### 強化工具
 
 - **Button**：`🔨 強化工具`（Blue）
-  - 禁用條件：AP < 1 或所有工具已達上限
+  - 禁用條件：所有工具已達上限（AP 不足時仍可開啟介面）
 
 ### 行動選擇組
 - **Dropdown 1**：選擇行動
@@ -168,9 +168,18 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 - 墊檔：`消耗一半素材，直接獲得一個保底計數，不進行強化`
 - 鐵齒：`僅消耗 1 個素材，成功 +1~+3（50/35/15%），失敗則工具等級與 pity 均歸零`
 
-- **Button**：`🎲 強化`（Green，禁用條件：素材不足 / AP 不足 / 已達上限）
-- **Button**：`🩸 獻祭`（Red，禁用條件：所選工具類型素材 == 0）；custom_id: `sacrifice_material:{gear_type}`；與 🎲 強化、← 返回 **同一 ActionRow**，不佔新列
+- **Button**：`🎲 強化工具`（Green，禁用條件：素材不足 / AP 不足 / 已達上限）
+- **Button**：`🩸 獻祭素材`（Red，禁用條件：所選工具類型素材 == 0）；custom_id: `sacrifice_material:{gear_type}`；與 🎲 強化工具、← 返回 **同一 ActionRow**，不佔新列
 - **Button**：`← 返回`（Gray）
+
+### 詞條操作（`max_slots > 0` 時出現，佔一個 ActionRow）
+
+- **Button**：`✨ 抽取詞條`（Blue，禁用條件：詞條槽已滿）；custom_id: `extract_affix:{gear_type}`
+- **Button**：`🗑️ 清除詞條`（Red，禁用條件：無詞條）；custom_id: `open_clear_affix:{gear_type}`
+
+點擊「🗑️ 清除詞條」後，介面重繪並在下一個 ActionRow 加入詞條選擇 Dropdown：
+
+- **Dropdown**（custom_id: `clear_affix_select:{gear_type}`）：選項為現有詞條，格式 `槽 {n}: {詞條類型}`，描述 `{±value}%`；選擇後執行清除並返回正常介面。
 
 ## 管理員介面 Embed（/idlevillage-manage）
 
@@ -215,6 +224,7 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
 
 ## Changelog
 
+- 2026-06-07: Removed AP requirement to open gear upgrade interface; unified gear action button labels to `{icon}+四字` format (`🎲 強化工具`, `🩸 獻祭素材`, `✨ 抽取詞條`, `🗑️ 清除詞條`); replaced per-slot clear buttons with single `🗑️ 清除詞條` button + `clear_affix_select:{gear_type}` StringSelect dropdown flow.
 - 2026-05-31: Added 🩸 獻祭 button (Red/Danger) to the gear upgrade action row alongside 🎲 強化 and ← 返回; disabled when the selected gear type's material count is 0. Sacrifice result appended to embed description when `result["type"] == "sacrifice"`, showing consumed count and incremental risky bonus. Error result branch also added.
 - 2026.05.02.00: Stage line format changed to `📋 關卡 {n}: {type_zh}`; deadline prefixed with `期限:`; section headers localised to `公用資源` / `公用設施` / `村民行動` / `個人資訊`; building list moved out of code block with per-row emoji; gear line label changed to `裝備`, category text labels and `Lv` prefix removed; materials line category text labels removed; burst button renamed `⚡ 消耗AP立刻完成三次行動` and moved to Row 1 alongside `🔨 強化裝備`; Refresh button removed.
 - 2026.05.02.02: Action dropdown options now include descriptions showing secondary cost and output per action type. Gear type dropdown options now include descriptions showing the level transition and cumulative stat gain (`Lv{n} → Lv{n+1}: {type}產出 +{n×pct}% → +{(n+1)×pct}%`), or `已達等級上限 Lv{cap}` when at cap.

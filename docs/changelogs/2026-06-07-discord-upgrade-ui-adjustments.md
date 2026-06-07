@@ -1,6 +1,6 @@
 ---
 title: "Discord 強化介面 UI 調整"
-status: Reviewed
+status: Done
 created: 2026-06-07
 doc_type: change
 last_reviewed: 2026-06-07

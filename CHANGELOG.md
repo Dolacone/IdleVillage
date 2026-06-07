@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-07
+
+- Gear upgrade interface can now be opened even when AP is 0; the 🎲 強化工具 button inside remains disabled when AP is insufficient.
+- Unified gear action button labels to `{icon}+四字` format: `🎲 強化工具`, `🩸 獻祭素材`, `✨ 抽取詞條`, `🗑️ 清除詞條`.
+- Replaced per-slot "清除槽 N" buttons with a single `🗑️ 清除詞條` button. Clicking it re-renders the interface with a dropdown listing current affixes; selecting one executes the clear.
+
 ## 2026-05-31
 
 - Added "🩸 獻祭素材" button to the gear upgrade sub-menu. Players select a gear type (which determines the material type consumed), then enter a quantity via a Discord Modal. Each material sacrificed increases `risky_failed_levels` by 1 (+0.01% permanent success rate bonus). No AP is consumed, no public announcement is made — only the player's gear embed updates to reflect the result. Insufficient materials or invalid input shows an error message in the embed.

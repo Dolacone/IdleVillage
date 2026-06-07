@@ -28,6 +28,8 @@ scope: "Service overview: features, architecture, top-level folders, and link to
 - `src/cogs/`: Discord 互動指令與介面.
 - `src/database/`: 基於 Markdown 定義的資料庫動態管理.
 - `tests/`: 自動化測試根目錄 (不打包進 Docker).
+- `experiment/`: AI skill 工作流程的實驗記錄（idea / plan / implement / review / refactor），不影響運行時行為。
+- `.claude/`: Claude Code 工具設定（hooks、slash commands），供 AI 代理人使用，不影響遊戲運行。
 
 ## 4. 快速啟動 (Quick Start)
 1. 複製 `.env.example` 並填寫 `DISCORD_TOKEN`.
