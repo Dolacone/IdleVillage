@@ -1,10 +1,13 @@
 ---
 title: "Discord 強化介面 UI 調整"
-status: Draft
+status: Ready-to-review
 created: 2026-06-07
 doc_type: change
 last_reviewed: 2026-06-07
-source_paths: []
+source_paths:
+  - src/cogs/ui_renderer.py
+  - src/cogs/actions.py
+  - tests/test_discord_commands.py
 scope: "調整強化工具介面的開啟條件、詞條清除流程與按鈕標籤格式。"
 ---
 
