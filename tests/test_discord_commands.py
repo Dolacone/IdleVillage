@@ -975,6 +975,56 @@ class TestAffixHandlerNotification(unittest.IsolatedAsyncioTestCase):
 
         mock_dispatch.assert_not_awaited()
 
+    def _make_dropdown_inter(self, cid, value):
+        inter = MagicMock()
+        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+        inter.user.id = 12345
+        inter.user.display_name = "TestUser"
+        inter.component.custom_id = cid
+        inter.values = [value]
+        inter.response.defer = AsyncMock()
+        inter.edit_original_response = AsyncMock()
+        return inter
+
+    async def test_clear_affix_select_dispatches_affix_cleared_event(self):
+        from cogs.actions import ActionsCog
+
+        inter = self._make_dropdown_inter("clear_affix_select:gathering", "0")
+        with (
+            patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
+            patch("cogs.actions.player_manager.get_gear_level", new=AsyncMock(return_value=10)),
+            patch(
+                "cogs.actions.affix_manager.clear_affix",
+                new=AsyncMock(return_value={"affix_type": "efficiency", "value": 3}),
+            ),
+            patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as mock_dispatch,
+            patch.object(ActionsCog, "_render_gear", new=AsyncMock()),
+        ):
+            cog = ActionsCog(bot=MagicMock())
+            await cog.on_dropdown(inter)
+
+        mock_dispatch.assert_awaited_once()
+        event = mock_dispatch.call_args[0][1][0]
+        self.assertEqual(event["type"], "affix_cleared")
+        self.assertEqual(event["gear_type"], "gathering")
+        self.assertEqual(event["affix_type"], "efficiency")
+
+    async def test_clear_affix_select_no_dispatch_on_failure(self):
+        from cogs.actions import ActionsCog
+
+        inter = self._make_dropdown_inter("clear_affix_select:gathering", "0")
+        with (
+            patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
+            patch("cogs.actions.player_manager.get_gear_level", new=AsyncMock(return_value=10)),
+            patch("cogs.actions.affix_manager.clear_affix", new=AsyncMock(side_effect=ValueError("empty"))),
+            patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as mock_dispatch,
+            patch.object(ActionsCog, "_render_gear", new=AsyncMock()),
+        ):
+            cog = ActionsCog(bot=MagicMock())
+            await cog.on_dropdown(inter)
+
+        mock_dispatch.assert_not_awaited()
+
 
 class TestSacrificeModalSubmit(unittest.IsolatedAsyncioTestCase):
     """on_modal_submit handles modal_sacrifice:{gear_type} correctly."""

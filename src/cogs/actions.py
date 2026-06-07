@@ -413,6 +413,7 @@ class ActionsCog(commands.Cog):
             return
 
         value = inter.values[0]
+        user_id = str(inter.user.id)
         await inter.response.defer()
 
         if cid == "action_select":
