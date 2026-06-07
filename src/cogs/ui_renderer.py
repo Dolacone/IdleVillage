@@ -297,7 +297,7 @@ def build_main_components(
                 label="🔨 強化工具",
                 style=disnake.ButtonStyle.primary,
                 custom_id="open_gear_upgrade",
-                disabled=(ap < 1 or all_gear_at_cap),
+                disabled=all_gear_at_cap,
             ),
         ),
         disnake.ui.ActionRow(
@@ -558,13 +558,13 @@ def build_gear_components(
         ),
         disnake.ui.ActionRow(
             disnake.ui.Button(
-                label="🎲 強化",
+                label="🎲 強化工具",
                 style=disnake.ButtonStyle.success,
                 custom_id=f"attempt_upgrade:{gear_type}:{mode}",
                 disabled=not can_attempt,
             ),
             disnake.ui.Button(
-                label="🩸 獻祭",
+                label="🩸 獻祭素材",
                 style=disnake.ButtonStyle.danger,
                 custom_id=f"sacrifice_material:{gear_type}",
                 disabled=(materials == 0),

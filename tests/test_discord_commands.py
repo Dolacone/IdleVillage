@@ -432,6 +432,23 @@ class TestRendererMainComponents(unittest.TestCase):
             "Gear upgrade button should be disabled when all gear is at research-lab cap",
         )
 
+    def test_gear_upgrade_enabled_when_no_ap_but_not_at_cap(self):
+        from cogs.ui_renderer import build_main_components
+
+        buildings = {"research_lab": {"level": 3, "xp_progress": 0}}
+        rows = build_main_components(self._make_player(ap=0, gear_level=1), buildings)
+        gear_button = next(
+            component
+            for row in rows
+            for component in row.children
+            if getattr(component, "custom_id", None) == "open_gear_upgrade"
+        )
+
+        self.assertFalse(
+            gear_button.disabled,
+            "Gear upgrade button should be enabled when AP=0 but gear is not at cap",
+        )
+
     def test_burst_and_gear_buttons_are_first_row_without_refresh(self):
         from cogs.ui_renderer import build_main_components
 
@@ -751,6 +768,17 @@ class TestAffixComponents(unittest.TestCase):
         rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1)
         custom_ids = [c.custom_id for row in rows for c in row.children]
         self.assertIn("clear_affix:gathering:0", custom_ids)
+
+    def test_gear_action_button_labels(self):
+        from cogs.ui_renderer import build_gear_components
+        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10)
+        labels = {
+            c.custom_id: c.label
+            for row in rows for c in row.children
+            if hasattr(c, "custom_id") and hasattr(c, "label") and c.label
+        }
+        self.assertEqual(labels.get("attempt_upgrade:gathering:normal"), "🎲 強化工具")
+        self.assertEqual(labels.get("sacrifice_material:gathering"), "🩸 獻祭素材")
 
 
 class TestAffixRouteRegistration(unittest.TestCase):
