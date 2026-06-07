@@ -571,7 +571,7 @@ def build_gear_components(
             ),
             disnake.ui.Button(
                 label="🔮 詞條管理",
-                style=disnake.ButtonStyle.secondary,
+                style=disnake.ButtonStyle.primary,
                 custom_id=f"open_affix_mgmt:{gear_type}",
                 disabled=(max_slots == 0),
             ),
