@@ -512,7 +512,6 @@ def build_gear_components(
     affixes: list | None = None,
     max_slots: int = 0,
     materials: int = 0,
-    show_clear_select: bool = False,
 ) -> list:
     bonus_pct = math.floor(get_env_float("GEAR_BONUS_PER_LEVEL") * 100)
 
@@ -571,6 +570,12 @@ def build_gear_components(
                 disabled=(materials == 0),
             ),
             disnake.ui.Button(
+                label="🔮 詞條管理",
+                style=disnake.ButtonStyle.secondary,
+                custom_id=f"open_affix_mgmt:{gear_type}",
+                disabled=(max_slots == 0),
+            ),
+            disnake.ui.Button(
                 label="← 返回",
                 style=disnake.ButtonStyle.secondary,
                 custom_id="back_to_main",
@@ -578,43 +583,115 @@ def build_gear_components(
         ),
     ]
 
-    if max_slots > 0:
-        affixes_list = affixes or []
-        is_full = len(affixes_list) >= max_slots
+    return rows
+
+
+def build_affix_embed(
+    gear_type: str,
+    player_gear: dict,
+    affixes: list,
+    max_slots: int,
+    selected_slot: int | None = None,
+) -> disnake.Embed:
+    label = GEAR_LABELS.get(gear_type, gear_type)
+    lines = [f"🔮 詞條管理 — {ACTION_EMOJIS.get(gear_type, '')} {label}"]
+    affix_section = _build_affix_section(affixes, max_slots)
+    if affix_section:
+        lines.append(affix_section)
+    if selected_slot is not None:
+        affix_by_slot = {a["slot_index"]: a for a in affixes}
+        a = affix_by_slot.get(selected_slot)
+        if a:
+            sign = "-" if a["affix_type"] in REDUCE_AFFIX_TYPES else "+"
+            type_label = AFFIX_TYPE_LABELS.get(a["affix_type"], a["affix_type"])
+            lines.append(f"\n即將清除：槽 {selected_slot} — {type_label} {sign}{a['value']}%")
+    embed = disnake.Embed(description="\n".join(lines), color=disnake.Color.purple())
+    return embed
+
+
+def build_affix_components(
+    gear_type: str,
+    player_gear: dict,
+    gear_cap: int,
+    affixes: list,
+    max_slots: int,
+    selected_slot: int | None = None,
+) -> list:
+    bonus_pct = math.floor(get_env_float("GEAR_BONUS_PER_LEVEL") * 100)
+
+    def gear_description(g: str) -> str:
+        current = player_gear.get(g, 0)
+        if current >= gear_cap:
+            return f"已達等級上限 Lv{gear_cap}"
+        current_total = current * bonus_pct
+        next_total = (current + 1) * bonus_pct
+        return (
+            f"Lv{current} → Lv{current + 1}: "
+            f"{ACTION_LABELS[g]}產出 +{current_total}% → +{next_total}%"
+        )
+
+    gear_options = [
+        disnake.SelectOption(
+            label=f"{ACTION_EMOJIS[g]} {GEAR_LABELS[g]}",
+            value=g,
+            description=gear_description(g),
+            default=(gear_type == g),
+        )
+        for g in ("gathering", "building", "combat", "research")
+    ]
+
+    is_full = len(affixes) >= max_slots
+    rows = [
+        disnake.ui.ActionRow(
+            disnake.ui.StringSelect(
+                custom_id="affix_gear_select",
+                placeholder="選擇工具類型...",
+                options=gear_options,
+            )
+        ),
+    ]
+
+    if affixes:
+        affix_options = [
+            disnake.SelectOption(
+                label=f"槽 {a['slot_index']}: {AFFIX_TYPE_LABELS.get(a['affix_type'], a['affix_type'])}",
+                value=str(a["slot_index"]),
+                description=f"{'-' if a['affix_type'] in REDUCE_AFFIX_TYPES else '+'}{a['value']}%",
+                default=(a["slot_index"] == selected_slot),
+            )
+            for a in affixes
+        ]
         rows.append(
             disnake.ui.ActionRow(
-                disnake.ui.Button(
-                    label="✨ 抽取詞條",
-                    style=disnake.ButtonStyle.primary,
-                    custom_id=f"extract_affix:{gear_type}",
-                    disabled=is_full,
-                ),
-                disnake.ui.Button(
-                    label="🗑️ 清除詞條",
-                    style=disnake.ButtonStyle.danger,
-                    custom_id=f"open_clear_affix:{gear_type}",
-                    disabled=not affixes_list,
-                ),
+                disnake.ui.StringSelect(
+                    custom_id=f"affix_slot_select:{gear_type}",
+                    placeholder="選擇要清除的詞條...",
+                    options=affix_options,
+                )
             )
         )
-        if show_clear_select and affixes_list:
-            affix_options = [
-                disnake.SelectOption(
-                    label=f"槽 {a['slot_index']}: {AFFIX_TYPE_LABELS.get(a['affix_type'], a['affix_type'])}",
-                    value=str(a["slot_index"]),
-                    description=f"{'-' if a['affix_type'] in REDUCE_AFFIX_TYPES else '+'}{a['value']}%",
-                )
-                for a in affixes_list
-            ]
-            rows.append(
-                disnake.ui.ActionRow(
-                    disnake.ui.StringSelect(
-                        custom_id=f"clear_affix_select:{gear_type}",
-                        placeholder="選擇要清除的詞條...",
-                        options=affix_options,
-                    )
-                )
-            )
+
+    rows.append(
+        disnake.ui.ActionRow(
+            disnake.ui.Button(
+                label="🗑️ 清除詞條",
+                style=disnake.ButtonStyle.danger,
+                custom_id=f"affix_clear:{gear_type}:{selected_slot}",
+                disabled=(selected_slot is None),
+            ),
+            disnake.ui.Button(
+                label="✨ 抽取詞條",
+                style=disnake.ButtonStyle.primary,
+                custom_id=f"affix_extract:{gear_type}",
+                disabled=is_full,
+            ),
+            disnake.ui.Button(
+                label="← 返回",
+                style=disnake.ButtonStyle.secondary,
+                custom_id=f"back_to_gear:{gear_type}",
+            ),
+        )
+    )
 
     return rows
 

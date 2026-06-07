@@ -722,7 +722,7 @@ class TestAffixEmbedSection(unittest.TestCase):
 
 
 class TestAffixComponents(unittest.TestCase):
-    """Affix extract/clear buttons in gear components."""
+    """Affix management interface components (build_affix_components) and gear upgrade button changes."""
 
     def setUp(self):
         for k, v in ALL_TEST_ENV.items():
@@ -731,66 +731,25 @@ class TestAffixComponents(unittest.TestCase):
     def _player_gear(self, level=5):
         return {"gathering": level, "building": 0, "combat": 0, "research": 0}
 
-    def test_no_slots_no_affix_row(self):
+    def test_gear_mgmt_button_disabled_when_no_slots(self):
         from cogs.ui_renderer import build_gear_components
         rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, max_slots=0)
-        custom_ids = [c.custom_id for row in rows for c in row.children]
-        self.assertFalse(any("extract_affix" in cid for cid in custom_ids))
-
-    def test_extract_button_present_when_slots_unlocked(self):
-        from cogs.ui_renderer import build_gear_components
-        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, affixes=[], max_slots=1)
-        custom_ids = [c.custom_id for row in rows for c in row.children]
-        self.assertIn("extract_affix:gathering", custom_ids)
-
-    def test_extract_disabled_when_full(self):
-        from cogs.ui_renderer import build_gear_components
-        affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
-        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1)
-        buttons = {c.custom_id: c for row in rows for c in row.children}
-        self.assertTrue(buttons["extract_affix:gathering"].disabled)
-
-    def test_extract_enabled_when_slot_available(self):
-        from cogs.ui_renderer import build_gear_components
-        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, affixes=[], max_slots=2)
-        buttons = {c.custom_id: c for row in rows for c in row.children}
-        self.assertFalse(buttons["extract_affix:gathering"].disabled)
-
-    def test_clear_button_disabled_when_no_affixes(self):
-        from cogs.ui_renderer import build_gear_components
-        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, affixes=[], max_slots=1)
         buttons = {c.custom_id: c for row in rows for c in row.children if hasattr(c, "custom_id")}
-        self.assertIn("open_clear_affix:gathering", buttons)
-        self.assertTrue(buttons["open_clear_affix:gathering"].disabled)
+        self.assertIn("open_affix_mgmt:gathering", buttons)
+        self.assertTrue(buttons["open_affix_mgmt:gathering"].disabled)
 
-    def test_clear_button_enabled_when_affixes_present(self):
+    def test_gear_mgmt_button_enabled_when_slots_unlocked(self):
         from cogs.ui_renderer import build_gear_components
-        affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
-        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1)
+        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, max_slots=1)
         buttons = {c.custom_id: c for row in rows for c in row.children if hasattr(c, "custom_id")}
-        self.assertIn("open_clear_affix:gathering", buttons)
-        self.assertFalse(buttons["open_clear_affix:gathering"].disabled)
+        self.assertIn("open_affix_mgmt:gathering", buttons)
+        self.assertFalse(buttons["open_affix_mgmt:gathering"].disabled)
 
-    def test_no_old_clear_slot_buttons(self):
+    def test_no_extract_or_clear_buttons_in_gear_components(self):
         from cogs.ui_renderer import build_gear_components
-        affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
-        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1)
+        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, max_slots=2)
         custom_ids = [c.custom_id for row in rows for c in row.children if hasattr(c, "custom_id")]
-        self.assertFalse(any(cid.startswith("clear_affix:gathering:") for cid in custom_ids))
-
-    def test_clear_select_dropdown_shown_when_flag_set(self):
-        from cogs.ui_renderer import build_gear_components
-        affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
-        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1, show_clear_select=True)
-        custom_ids = [c.custom_id for row in rows for c in row.children if hasattr(c, "custom_id")]
-        self.assertIn("clear_affix_select:gathering", custom_ids)
-
-    def test_clear_select_dropdown_hidden_without_flag(self):
-        from cogs.ui_renderer import build_gear_components
-        affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
-        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1)
-        custom_ids = [c.custom_id for row in rows for c in row.children if hasattr(c, "custom_id")]
-        self.assertNotIn("clear_affix_select:gathering", custom_ids)
+        self.assertFalse(any("extract_affix" in cid or "clear_affix" in cid for cid in custom_ids))
 
     def test_gear_action_button_labels(self):
         from cogs.ui_renderer import build_gear_components
@@ -802,35 +761,97 @@ class TestAffixComponents(unittest.TestCase):
         }
         self.assertEqual(labels.get("attempt_upgrade:gathering:normal"), "🎲 強化工具")
         self.assertEqual(labels.get("sacrifice_material:gathering"), "🩸 獻祭素材")
+        self.assertEqual(labels.get("open_affix_mgmt:gathering"), "🔮 詞條管理")
+
+    def test_affix_components_gear_type_dropdown(self):
+        from cogs.ui_renderer import build_affix_components
+        rows = build_affix_components("gathering", self._player_gear(), gear_cap=10, affixes=[], max_slots=1)
+        custom_ids = [c.custom_id for row in rows for c in row.children if hasattr(c, "custom_id")]
+        self.assertIn("affix_gear_select", custom_ids)
+
+    def test_affix_components_no_slot_dropdown_when_empty(self):
+        from cogs.ui_renderer import build_affix_components
+        rows = build_affix_components("gathering", self._player_gear(), gear_cap=10, affixes=[], max_slots=1)
+        custom_ids = [c.custom_id for row in rows for c in row.children if hasattr(c, "custom_id")]
+        self.assertFalse(any("affix_slot_select" in cid for cid in custom_ids))
+
+    def test_affix_components_slot_dropdown_shown_when_affixes_exist(self):
+        from cogs.ui_renderer import build_affix_components
+        affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
+        rows = build_affix_components("gathering", self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1)
+        custom_ids = [c.custom_id for row in rows for c in row.children if hasattr(c, "custom_id")]
+        self.assertIn("affix_slot_select:gathering", custom_ids)
+
+    def test_affix_components_clear_disabled_without_selection(self):
+        from cogs.ui_renderer import build_affix_components
+        affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
+        rows = build_affix_components("gathering", self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1)
+        buttons = {c.custom_id: c for row in rows for c in row.children if hasattr(c, "custom_id")}
+        self.assertIn("affix_clear:gathering:None", buttons)
+        self.assertTrue(buttons["affix_clear:gathering:None"].disabled)
+
+    def test_affix_components_clear_enabled_with_selection(self):
+        from cogs.ui_renderer import build_affix_components
+        affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
+        rows = build_affix_components("gathering", self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1, selected_slot=0)
+        buttons = {c.custom_id: c for row in rows for c in row.children if hasattr(c, "custom_id")}
+        self.assertIn("affix_clear:gathering:0", buttons)
+        self.assertFalse(buttons["affix_clear:gathering:0"].disabled)
+
+    def test_affix_components_extract_disabled_when_full(self):
+        from cogs.ui_renderer import build_affix_components
+        affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
+        rows = build_affix_components("gathering", self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1)
+        buttons = {c.custom_id: c for row in rows for c in row.children if hasattr(c, "custom_id")}
+        self.assertTrue(buttons["affix_extract:gathering"].disabled)
+
+    def test_affix_components_extract_enabled_when_slot_available(self):
+        from cogs.ui_renderer import build_affix_components
+        rows = build_affix_components("gathering", self._player_gear(), gear_cap=10, affixes=[], max_slots=2)
+        buttons = {c.custom_id: c for row in rows for c in row.children if hasattr(c, "custom_id")}
+        self.assertFalse(buttons["affix_extract:gathering"].disabled)
+
+    def test_affix_components_back_button_routes_to_gear(self):
+        from cogs.ui_renderer import build_affix_components
+        rows = build_affix_components("gathering", self._player_gear(), gear_cap=10, affixes=[], max_slots=1)
+        custom_ids = [c.custom_id for row in rows for c in row.children if hasattr(c, "custom_id")]
+        self.assertIn("back_to_gear:gathering", custom_ids)
 
 
 class TestAffixRouteRegistration(unittest.TestCase):
-    """extract_affix and clear_affix are registered interaction routes."""
+    """Affix interface interaction routes are registered."""
 
     def setUp(self):
         for k, v in ALL_TEST_ENV.items():
             os.environ[k] = v
 
-    def test_extract_affix_is_own_button(self):
-        from cogs.actions import _is_own_button
-        self.assertTrue(_is_own_button("extract_affix:gathering"))
-
     def test_clear_affix_is_own_button(self):
         from cogs.actions import _is_own_button
         self.assertTrue(_is_own_button("clear_affix:gathering:0"))
 
-    def test_open_clear_affix_is_own_button(self):
+    def test_open_affix_mgmt_is_own_button(self):
         from cogs.actions import _is_own_button
-        self.assertTrue(_is_own_button("open_clear_affix:gathering"))
+        self.assertTrue(_is_own_button("open_affix_mgmt:gathering"))
 
-    def test_clear_affix_select_is_own_dropdown(self):
+    def test_affix_extract_is_own_button(self):
+        from cogs.actions import _is_own_button
+        self.assertTrue(_is_own_button("affix_extract:gathering"))
+
+    def test_affix_clear_is_own_button(self):
+        from cogs.actions import _is_own_button
+        self.assertTrue(_is_own_button("affix_clear:gathering:0"))
+
+    def test_back_to_gear_is_own_button(self):
+        from cogs.actions import _is_own_button
+        self.assertTrue(_is_own_button("back_to_gear:gathering"))
+
+    def test_affix_gear_select_is_own_dropdown(self):
         from cogs.actions import _is_own_dropdown
-        self.assertTrue(_is_own_dropdown("clear_affix_select:gathering"))
+        self.assertTrue(_is_own_dropdown("affix_gear_select"))
 
-    def test_invalid_gear_type_not_routed_extract(self):
-        from cogs.actions import _is_own_button
-        # _is_own_button only checks prefix, gear_type validation is in handler
-        self.assertTrue(_is_own_button("extract_affix:invalid"))
+    def test_affix_slot_select_is_own_dropdown(self):
+        from cogs.actions import _is_own_dropdown
+        self.assertTrue(_is_own_dropdown("affix_slot_select:gathering"))
 
 
 class TestAdminCheck(unittest.TestCase):
@@ -893,10 +914,10 @@ class TestAffixHandlerNotification(unittest.IsolatedAsyncioTestCase):
         cm.__aexit__ = AsyncMock(return_value=False)
         return cm
 
-    async def test_extract_affix_dispatches_affix_extracted_event(self):
+    async def test_affix_extract_dispatches_affix_extracted_event(self):
         from cogs.actions import ActionsCog
 
-        inter = self._make_inter("extract_affix:gathering")
+        inter = self._make_inter("affix_extract:gathering")
         with (
             patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
             patch("cogs.actions.player_manager.get_gear_level", new=AsyncMock(return_value=10)),
@@ -905,7 +926,7 @@ class TestAffixHandlerNotification(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value={"slot_index": 0, "affix_type": "efficiency", "value": 3}),
             ),
             patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as mock_dispatch,
-            patch.object(ActionsCog, "_render_gear", new=AsyncMock()),
+            patch.object(ActionsCog, "_render_affix", new=AsyncMock()),
         ):
             cog = ActionsCog(bot=MagicMock())
             await cog.on_button_click(inter)
@@ -918,16 +939,16 @@ class TestAffixHandlerNotification(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(event["affix_type"], "efficiency")
         self.assertEqual(event["value"], 3)
 
-    async def test_extract_affix_no_dispatch_on_failure(self):
+    async def test_affix_extract_no_dispatch_on_failure(self):
         from cogs.actions import ActionsCog
 
-        inter = self._make_inter("extract_affix:gathering")
+        inter = self._make_inter("affix_extract:gathering")
         with (
             patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
             patch("cogs.actions.player_manager.get_gear_level", new=AsyncMock(return_value=10)),
             patch("cogs.actions.affix_manager.extract_affix", new=AsyncMock(side_effect=ValueError("full"))),
             patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as mock_dispatch,
-            patch.object(ActionsCog, "_render_gear", new=AsyncMock()),
+            patch.object(ActionsCog, "_render_affix", new=AsyncMock()),
         ):
             cog = ActionsCog(bot=MagicMock())
             await cog.on_button_click(inter)
@@ -986,10 +1007,10 @@ class TestAffixHandlerNotification(unittest.IsolatedAsyncioTestCase):
         inter.edit_original_response = AsyncMock()
         return inter
 
-    async def test_clear_affix_select_dispatches_affix_cleared_event(self):
+    async def test_affix_clear_button_dispatches_affix_cleared_event(self):
         from cogs.actions import ActionsCog
 
-        inter = self._make_dropdown_inter("clear_affix_select:gathering", "0")
+        inter = self._make_inter("affix_clear:gathering:0")
         with (
             patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
             patch("cogs.actions.player_manager.get_gear_level", new=AsyncMock(return_value=10)),
@@ -998,10 +1019,10 @@ class TestAffixHandlerNotification(unittest.IsolatedAsyncioTestCase):
                 new=AsyncMock(return_value={"affix_type": "efficiency", "value": 3}),
             ),
             patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as mock_dispatch,
-            patch.object(ActionsCog, "_render_gear", new=AsyncMock()),
+            patch.object(ActionsCog, "_render_affix", new=AsyncMock()),
         ):
             cog = ActionsCog(bot=MagicMock())
-            await cog.on_dropdown(inter)
+            await cog.on_button_click(inter)
 
         mock_dispatch.assert_awaited_once()
         event = mock_dispatch.call_args[0][1][0]
@@ -1009,19 +1030,19 @@ class TestAffixHandlerNotification(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(event["gear_type"], "gathering")
         self.assertEqual(event["affix_type"], "efficiency")
 
-    async def test_clear_affix_select_no_dispatch_on_failure(self):
+    async def test_affix_clear_button_no_dispatch_on_failure(self):
         from cogs.actions import ActionsCog
 
-        inter = self._make_dropdown_inter("clear_affix_select:gathering", "0")
+        inter = self._make_inter("affix_clear:gathering:0")
         with (
             patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
             patch("cogs.actions.player_manager.get_gear_level", new=AsyncMock(return_value=10)),
             patch("cogs.actions.affix_manager.clear_affix", new=AsyncMock(side_effect=ValueError("empty"))),
             patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as mock_dispatch,
-            patch.object(ActionsCog, "_render_gear", new=AsyncMock()),
+            patch.object(ActionsCog, "_render_affix", new=AsyncMock()),
         ):
             cog = ActionsCog(bot=MagicMock())
-            await cog.on_dropdown(inter)
+            await cog.on_button_click(inter)
 
         mock_dispatch.assert_not_awaited()
 
