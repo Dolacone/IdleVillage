@@ -1,7 +1,7 @@
 ---
 title: "Module: ui-renderer"
 doc_type: module
-last_reviewed: 2026-06-07
+last_reviewed: 2026-06-16
 source_paths:
   - src/cogs/ui_renderer.py
 ---
@@ -80,7 +80,8 @@ source_paths:
 🏅 工具：🌾 {n} | 🔨 {n} | ⚔️ {n} | 🔬 {n}
 🎒 素材：🌾 {n} | 🔨 {n} | ⚔️ {n} | 🔬 {n}
 🏃 行動：{emoji}{action_name}（下次結算：<t:{next_cycle}:R>）
-⚡ AP：{ap} / 24
+⚡ AP：{ap} / {ap_cap}
+⚡ AP：{ap} / {ap_cap}（下次：<t:{next_ap_unix}:R>）（AP < cap 時顯示）
 ```
 
 效率欄位：`{n}` 為該行動類別的有效產出，`{p}` 為總加成百分比（floor）。

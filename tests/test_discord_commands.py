@@ -397,6 +397,66 @@ class TestRendererMainEmbed(unittest.TestCase):
         self.assertIn(efficiency_line, embed.description)
         self.assertLess(embed.description.index("📊 效率"), embed.description.index("🏅 工具"))
 
+    def _make_player_with_ap_time(self, ap, ap_full_time_iso):
+        p = self._make_player(ap=ap)
+        p["ap_full_time"] = ap_full_time_iso
+        return p
+
+    def test_ap_next_recovery_shown_when_not_full(self):
+        """AP < cap: shows （下次：<t:…:R>） suffix."""
+        from cogs.ui_renderer import build_main_embed
+        from core.config import get_env_int
+        ap_cap = get_env_int("AP_CAP")
+        recovery_mins = get_env_int("AP_RECOVERY_MINUTES")
+        # ap_full_time placed exactly (ap_cap - ap) intervals ahead
+        ap = 5
+        base_unix = 1_800_000_000
+        ap_full_time_unix = base_unix + (ap_cap - ap) * recovery_mins * 60
+        ap_full_time_iso = datetime.fromtimestamp(ap_full_time_unix, tz=timezone.utc).isoformat()
+        player = self._make_player_with_ap_time(ap, ap_full_time_iso)
+        embed = build_main_embed(self._make_stage_data(), {}, {}, [], player)
+        expected_next = ap_full_time_unix - (ap_cap - ap - 1) * recovery_mins * 60
+        self.assertIn(f"⚡ AP：{ap} / {ap_cap}（下次：<t:{expected_next}:R>）", embed.description)
+
+    def test_ap_no_next_recovery_when_full(self):
+        """AP == cap: AP line has no timestamp suffix."""
+        from cogs.ui_renderer import build_main_embed
+        from core.config import get_env_int
+        ap_cap = get_env_int("AP_CAP")
+        ap_full_time_iso = datetime.fromtimestamp(1_700_000_000, tz=timezone.utc).isoformat()
+        player = self._make_player_with_ap_time(ap_cap, ap_full_time_iso)
+        embed = build_main_embed(self._make_stage_data(), {}, {}, [], player)
+        self.assertIn(f"⚡ AP：{ap_cap} / {ap_cap}", embed.description)
+        self.assertNotIn("<t:", embed.description.split("⚡ AP")[1].split("\n")[0])
+
+    def test_ap_next_recovery_exact_value_ap_zero(self):
+        """AP = 0: next_ap_unix = ap_full_time - (cap - 1) × recovery_mins × 60."""
+        from cogs.ui_renderer import build_main_embed
+        from core.config import get_env_int
+        ap_cap = get_env_int("AP_CAP")
+        recovery_mins = get_env_int("AP_RECOVERY_MINUTES")
+        ap_full_time_unix = 1_800_000_000
+        ap_full_time_iso = datetime.fromtimestamp(ap_full_time_unix, tz=timezone.utc).isoformat()
+        player = self._make_player_with_ap_time(0, ap_full_time_iso)
+        embed = build_main_embed(self._make_stage_data(), {}, {}, [], player)
+        expected_next = ap_full_time_unix - (ap_cap - 1) * recovery_mins * 60
+        self.assertIn(f"<t:{expected_next}:R>", embed.description)
+
+    def test_ap_next_recovery_exact_value_non_integer_boundary(self):
+        """Non-integer-minute ap_full_time: next_ap_unix still computed correctly."""
+        from cogs.ui_renderer import build_main_embed
+        from core.config import get_env_int
+        ap_cap = get_env_int("AP_CAP")
+        recovery_mins = get_env_int("AP_RECOVERY_MINUTES")
+        ap = ap_cap - 2
+        # Add 37 extra seconds to make it a non-integer boundary
+        ap_full_time_unix = 1_800_000_000 + recovery_mins * 60 + 37
+        ap_full_time_iso = datetime.fromtimestamp(ap_full_time_unix, tz=timezone.utc).isoformat()
+        player = self._make_player_with_ap_time(ap, ap_full_time_iso)
+        embed = build_main_embed(self._make_stage_data(), {}, {}, [], player)
+        expected_next = ap_full_time_unix - (ap_cap - ap - 1) * recovery_mins * 60
+        self.assertIn(f"<t:{expected_next}:R>", embed.description)
+
 
 class TestRendererMainComponents(unittest.TestCase):
     """build_main_components follows documented button enablement rules."""
