@@ -1,6 +1,6 @@
 ---
 title: "在個人資訊 AP 欄顯示下次回復時間"
-status: Refactored
+status: Done
 created: 2026-06-16
 doc_type: change
 last_reviewed: 2026-06-16

@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-16
+
+- Personal info AP line now shows when the next AP will recover: `⚡ AP：{n} / 24（下次：<t:unix:R>）`. The timestamp uses Discord relative format. Hidden when AP is already at cap.
+
 ## 2026-06-07
 
 - Gear upgrade interface can now be opened even when AP is 0; the 🎲 強化工具 button inside remains disabled when AP is insufficient.
