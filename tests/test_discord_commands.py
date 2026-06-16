@@ -448,7 +448,7 @@ class TestRendererMainEmbed(unittest.TestCase):
         from core.config import get_env_int
         ap_cap = get_env_int("AP_CAP")
         recovery_mins = get_env_int("AP_RECOVERY_MINUTES")
-        ap = ap_cap - 1
+        ap = ap_cap - 2
         # Add 37 extra seconds to make it a non-integer boundary
         ap_full_time_unix = 1_800_000_000 + recovery_mins * 60 + 37
         ap_full_time_iso = datetime.fromtimestamp(ap_full_time_unix, tz=timezone.utc).isoformat()
