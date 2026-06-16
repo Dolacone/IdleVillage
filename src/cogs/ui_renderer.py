@@ -249,6 +249,13 @@ def build_main_embed(
 
     ap = player_row.get("_ap", 0)
     ap_cap = get_env_int("AP_CAP")
+    recovery_mins = get_env_int("AP_RECOVERY_MINUTES")
+    ap_full_time_unix = _unix_from_iso(player_row.get("ap_full_time") or "")
+    if ap < ap_cap and ap_full_time_unix:
+        next_ap_unix = ap_full_time_unix - (ap_cap - ap - 1) * recovery_mins * 60
+        ap_line = f"⚡ AP：{ap} / {ap_cap}（下次：<t:{next_ap_unix}:R>）"
+    else:
+        ap_line = f"⚡ AP：{ap} / {ap_cap}"
 
     player_section = (
         f"\n**個人資訊**\n"
@@ -256,7 +263,7 @@ def build_main_embed(
         f"🏅 工具：{' | '.join(gear_parts)}\n"
         f"🎒 素材：{' | '.join(mat_parts)}\n"
         f"{action_line}\n"
-        f"⚡ AP：{ap} / {ap_cap}"
+        f"{ap_line}"
     )
 
     return disnake.Embed(description=village_text + player_section, color=disnake.Color.blue())
