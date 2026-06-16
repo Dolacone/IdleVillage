@@ -1,6 +1,6 @@
 ---
 title: "在個人資訊 AP 欄顯示下次回復時間"
-status: Draft
+status: Ready-to-implement
 created: 2026-06-16
 doc_type: change
 last_reviewed: 2026-06-16
@@ -47,4 +47,8 @@ A: 不需要，只顯示下一點 AP 的增加時間即可。
 - [ ] Task 1: 在 `ui_renderer.py` 的 `build_main_embed()` 中，讀取 `ap_full_time` 並計算 `next_ap_unix`，在 AP < AP_CAP 時追加 `（下次：<t:{next_ap_unix}:R>）`
   - 接受標準：AP < cap 時顯示相對時間戳；AP == cap 時不顯示括號部分
 - [ ] Task 2: 新增或更新對應測試
-  - 接受標準：測試覆蓋 AP < cap 與 AP == cap 兩種情況
+  - 接受標準：測試覆蓋 AP < cap 與 AP == cap 兩種情況；包含 `next_ap_unix` 精確數值驗證（AP = 0、AP = cap - 1、`ap_full_time` 非整分鐘邊界）
+
+## Plan Review Issues
+
+- [x] Task 2 測試範圍偏鬆：只列 AP < cap 與 AP == cap 兩種 case，未要求驗證 `next_ap_unix` 數值精確性（如 AP = 0、AP = cap - 1、以及 `ap_full_time` 非整分鐘邊界）。建議補充 `next_ap_unix` 的精確公式驗證 case，防止公式偏差卻仍通過測試。
