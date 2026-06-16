@@ -1,6 +1,6 @@
 ---
 title: "在個人資訊 AP 欄顯示下次回復時間"
-status: Ready-to-review
+status: Reviewed
 created: 2026-06-16
 doc_type: change
 last_reviewed: 2026-06-16
@@ -54,3 +54,7 @@ A: 不需要，只顯示下一點 AP 的增加時間即可。
 ## Plan Review Issues
 
 - [x] Task 2 測試範圍偏鬆：只列 AP < cap 與 AP == cap 兩種 case，未要求驗證 `next_ap_unix` 數值精確性（如 AP = 0、AP = cap - 1、以及 `ap_full_time` 非整分鐘邊界）。建議補充 `next_ap_unix` 的精確公式驗證 case，防止公式偏差卻仍通過測試。
+
+## Review Issues
+
+- [Minor] `tests/test_discord_commands.py:445-460` `test_ap_next_recovery_exact_value_non_integer_boundary` 使用 `ap = ap_cap - 1`，導致乘數 `(ap_cap - ap - 1) = 0`，`expected_next` 實際等於 `ap_full_time_unix`，與 37 秒偏移無關。測試名稱宣稱驗證非整分鐘邊界，但真正驗證的是 ap = cap - 1 的場景；應改用 ap_cap - 2 之類的值使乘數 > 0，才能確認偏移秒數被正確保留而非截斷。
