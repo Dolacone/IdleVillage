@@ -1,6 +1,6 @@
 ---
 title: "/idlevillage-ranking slash command"
-status: Ready-to-review
+status: Reviewed
 created: 2026-06-23
 doc_type: change
 last_reviewed: 2026-06-23
@@ -86,6 +86,9 @@ scope: "Tracks the implementation of a new /idlevillage-ranking slash command th
 - 玩家 gear level = 0 時不參與排行（過濾 level == 0）
 
 ## Review Issues
+
+- [Minor] `tests/test_discord_commands.py:1346`: overflow test asserts `len(text) <= 1950`, but the actual maximum after truncation is 1915 chars (`text[:1900]` + 15-char suffix). The upper bound 1950 is too loose — it would pass even if the truncation appended a longer suffix that exceeded the 1915 expected ceiling. A tighter assertion such as `assertLessEqual(len(text), 1915)` would make the test fail on truncation regressions.
+
 
 ## Plan Review Issues
 
