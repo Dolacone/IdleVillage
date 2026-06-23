@@ -62,7 +62,7 @@ scope: "Tracks the implementation of a new /idlevillage-ranking slash command th
   - 格式：`{emoji}{GEAR_LABELS[type]}:\n- Lv{n}: {name}\n...`；某類型無玩家時顯示 `- （尚無玩家）`
   - 驗收：輸出符合規格；測試覆蓋：標準前三名、同等級多名、某類型無玩家
 
-- [ ] Task 3: 在 `src/cogs/actions.py` 新增 `/idlevillage-ranking` slash command
+- [x] Task 3: 在 `src/cogs/actions.py` 新增 `/idlevillage-ranking` slash command
   - guild 檢查、呼叫 `get_gear_rankings()` 與 `slice_top_levels()`，解析 name_map，呼叫 `build_ranking_text()`
   - 若輸出超過 1900 字元，截斷並附加 `\n（排行過長，部分內容已省略）`
   - 以 Ephemeral content 回傳（不用 embed）

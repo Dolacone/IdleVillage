@@ -1278,6 +1278,75 @@ class TestGearUpgradeNotificationTargetLevel(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(event["target_level"], 7)
 
 
+class TestRankingCommand(unittest.IsolatedAsyncioTestCase):
+    """/idlevillage-ranking slash command integration."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def _make_inter(self):
+        inter = MagicMock()
+        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+        inter.guild = MagicMock()
+        inter.guild.get_member = MagicMock(return_value=None)
+        inter.response.send_message = AsyncMock()
+        return inter
+
+    def _make_db_cm(self, rankings=None):
+        db_mock = AsyncMock()
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=db_mock)
+        cm.__aexit__ = AsyncMock(return_value=False)
+        if rankings is not None:
+            from unittest.mock import patch
+            pass
+        return cm, db_mock
+
+    async def test_ranking_sends_ephemeral_message(self):
+        from cogs.actions import ActionsCog
+        inter = self._make_inter()
+        rankings = {"gathering": [("111111111111111111", 5)], "building": [], "combat": [], "research": []}
+        cm, _ = self._make_db_cm()
+        with (
+            patch("cogs.actions.get_connection", return_value=cm),
+            patch("cogs.actions.player_manager.get_gear_rankings", new=AsyncMock(return_value=rankings)),
+        ):
+            cog = ActionsCog(bot=MagicMock())
+            await ActionsCog.idlevillage_ranking.callback(cog, inter)
+        inter.response.send_message.assert_awaited_once()
+        _, kwargs = inter.response.send_message.call_args
+        self.assertTrue(kwargs.get("ephemeral"))
+
+    async def test_ranking_wrong_guild_rejected(self):
+        from cogs.actions import ActionsCog
+        inter = self._make_inter()
+        inter.guild_id = 999999999
+        cog = ActionsCog(bot=MagicMock())
+        await ActionsCog.idlevillage_ranking.callback(cog, inter)
+        inter.response.send_message.assert_awaited_once()
+        call_args = inter.response.send_message.call_args
+        self.assertIn("僅限指定伺服器", call_args[0][0])
+
+    async def test_ranking_overflow_truncated(self):
+        from cogs.actions import ActionsCog
+        inter = self._make_inter()
+        long_entries = [(str(100000000000000000 + i), 99) for i in range(200)]
+        name_map_data = {str(100000000000000000 + i): f"Player{'x' * 30}{i}" for i in range(200)}
+        inter.guild.get_member = MagicMock(side_effect=lambda uid: MagicMock(display_name=name_map_data.get(str(uid), str(uid))))
+        rankings = {"gathering": long_entries, "building": [], "combat": [], "research": []}
+        cm, _ = self._make_db_cm()
+        with (
+            patch("cogs.actions.get_connection", return_value=cm),
+            patch("cogs.actions.player_manager.get_gear_rankings", new=AsyncMock(return_value=rankings)),
+        ):
+            cog = ActionsCog(bot=MagicMock())
+            await ActionsCog.idlevillage_ranking.callback(cog, inter)
+        text = inter.response.send_message.call_args[0][0]
+        self.assertLessEqual(len(text), 1950)
+        self.assertIn("省略", text)
+
+
 class TestBuildRankingText(unittest.TestCase):
     """build_ranking_text formats sliced rankings as plain text."""
 

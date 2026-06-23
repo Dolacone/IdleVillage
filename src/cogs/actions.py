@@ -13,6 +13,7 @@ from cogs.ui_renderer import (
     build_gear_embed,
     build_main_components,
     build_main_embed,
+    build_ranking_text,
 )
 from core import notification
 from core.config import get_discord_guild_id, get_env_int
@@ -233,6 +234,31 @@ class ActionsCog(commands.Cog):
                 pass
         if affix_event:
             await notification.dispatch_events(self.bot, [affix_event])
+
+    @commands.slash_command(name="idlevillage-ranking", description="查看各工具等級排行榜")
+    async def idlevillage_ranking(self, inter: disnake.ApplicationCommandInteraction) -> None:
+        if not self._check_guild(inter):
+            return await inter.response.send_message(
+                "此指令僅限指定伺服器使用。", ephemeral=True
+            )
+        async with get_connection() as db:
+            rankings = await player_manager.get_gear_rankings(db)
+        sliced = {
+            gear_type: player_manager.slice_top_levels(entries)
+            for gear_type, entries in rankings.items()
+        }
+        all_user_ids = {uid for entries in sliced.values() for uid, _ in entries}
+        name_map = {}
+        for uid in all_user_ids:
+            try:
+                member = inter.guild.get_member(int(uid))
+            except (ValueError, TypeError):
+                member = None
+            name_map[uid] = member.display_name if member else uid
+        text = build_ranking_text(sliced, name_map)
+        if len(text) > 1900:
+            text = text[:1900] + "\n（排行過長，部分內容已省略）"
+        await inter.response.send_message(text, ephemeral=True)
 
     @commands.slash_command(name="idlevillage", description="開啟 Idle Village 個人介面")
     async def idlevillage(self, inter: disnake.ApplicationCommandInteraction) -> None:
