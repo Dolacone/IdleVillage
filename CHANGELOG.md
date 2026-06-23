@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-23
+
+- Added `/idlevillage-ranking` slash command. Displays each tool type's top-3 distinct gear levels and all players at those levels. Players at gear level 0 are excluded. Same-level players are all listed; levels are sorted descending with a stable secondary sort by user ID. Output uses Ephemeral content (plain text, not embed). Truncates at 1900 characters with a notice if the output is unusually long.
+
 ## 2026-06-16
 
 - Personal info AP line now shows when the next AP will recover: `⚡ AP：{n} / 24（下次：<t:unix:R>）`. The timestamp uses Discord relative format. Hidden when AP is already at cap.
