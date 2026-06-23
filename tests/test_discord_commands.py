@@ -1406,7 +1406,7 @@ class TestBuildRankingText(unittest.TestCase):
 
 
 class TestSliceTopLevels(unittest.TestCase):
-    """slice_top_levels returns entries for the top top_n distinct levels."""
+    """slice_top_levels returns top top_n players, extended if boundary level is tied."""
 
     def setUp(self):
         for k, v in ALL_TEST_ENV.items():
@@ -1419,24 +1419,29 @@ class TestSliceTopLevels(unittest.TestCase):
     def test_empty_list(self):
         self.assertEqual(self._slice([]), [])
 
-    def test_fewer_than_top_n_distinct_levels(self):
+    def test_fewer_than_top_n_entries(self):
         entries = [("a", 5), ("b", 3)]
         self.assertEqual(self._slice(entries), [("a", 5), ("b", 3)])
 
-    def test_exactly_top_n_distinct_levels_all_returned(self):
+    def test_exactly_top_n_entries_no_tie(self):
         entries = [("a", 5), ("b", 4), ("c", 3)]
         self.assertEqual(self._slice(entries), [("a", 5), ("b", 4), ("c", 3)])
 
-    def test_fourth_distinct_level_excluded(self):
+    def test_fourth_entry_excluded_when_different_level(self):
         entries = [("a", 5), ("b", 4), ("c", 3), ("d", 2)]
         self.assertEqual(self._slice(entries), [("a", 5), ("b", 4), ("c", 3)])
 
-    def test_same_level_all_included(self):
-        entries = [("a", 5), ("b", 5), ("c", 5), ("d", 4), ("e", 3), ("f", 2)]
-        result = self._slice(entries)
-        self.assertEqual(result, [("a", 5), ("b", 5), ("c", 5), ("d", 4), ("e", 3)])
+    def test_tie_at_boundary_extends_result(self):
+        # 3rd and 4th share same level → 4th is included
+        entries = [("a", 5), ("b", 4), ("c", 3), ("d", 3)]
+        self.assertEqual(self._slice(entries), [("a", 5), ("b", 4), ("c", 3), ("d", 3)])
 
-    def test_top_n_1(self):
+    def test_no_tie_extension_when_boundary_unique(self):
+        # multiple ties at top, but boundary (3rd entry) level is not shared by 4th
+        entries = [("a", 5), ("b", 5), ("c", 5), ("d", 4), ("e", 3)]
+        self.assertEqual(self._slice(entries), [("a", 5), ("b", 5), ("c", 5)])
+
+    def test_top_n_1_tie_extends(self):
         entries = [("a", 5), ("b", 5), ("c", 4), ("d", 3)]
         result = self._slice(entries, top_n=1)
         self.assertEqual(result, [("a", 5), ("b", 5)])

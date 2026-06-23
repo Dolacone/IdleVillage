@@ -251,10 +251,10 @@ class ActionsCog(commands.Cog):
         name_map = {}
         for uid in all_user_ids:
             try:
-                member = inter.guild.get_member(int(uid))
-            except (ValueError, TypeError):
-                member = None
-            name_map[uid] = member.display_name if member else uid
+                member = await inter.guild.fetch_member(int(uid))
+                name_map[uid] = member.display_name
+            except Exception:
+                name_map[uid] = uid
         text = build_ranking_text(sliced, name_map)
         if len(text) > 1900:
             text = text[:1900] + "\n（排行過長，部分內容已省略）"

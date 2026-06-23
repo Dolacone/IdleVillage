@@ -225,17 +225,19 @@ async def get_gear_rankings(db) -> dict:
 
 
 def slice_top_levels(entries: list, top_n: int = 3) -> list:
-    """Return entries for the top top_n distinct levels.
+    """Return the top top_n entries, extended if the boundary level is tied.
 
-    All entries sharing a level within the top top_n distinct levels are included.
-    Entries from the (top_n+1)-th distinct level onward are excluded.
+    Takes the first top_n entries, then includes any additional entries that
+    share the same level as the top_n-th entry (tie at boundary).
     """
-    seen_levels: list = []
-    result = []
-    for user_id, level in entries:
-        if level not in seen_levels:
-            if len(seen_levels) >= top_n:
+    if not entries or top_n <= 0:
+        return []
+    result = list(entries[:top_n])
+    if len(result) == top_n:
+        boundary_level = result[-1][1]
+        for user_id, level in entries[top_n:]:
+            if level == boundary_level:
+                result.append((user_id, level))
+            else:
                 break
-            seen_levels.append(level)
-        result.append((user_id, level))
     return result
