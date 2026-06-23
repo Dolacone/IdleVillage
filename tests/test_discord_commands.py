@@ -1278,6 +1278,64 @@ class TestGearUpgradeNotificationTargetLevel(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(event["target_level"], 7)
 
 
+class TestBuildRankingText(unittest.TestCase):
+    """build_ranking_text formats sliced rankings as plain text."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def _build(self, sliced, name_map=None):
+        from cogs.ui_renderer import build_ranking_text
+        return build_ranking_text(sliced, name_map or {})
+
+    def test_standard_top_three(self):
+        sliced = {
+            "gathering": [("u1", 5), ("u2", 4), ("u3", 3)],
+            "building": [], "combat": [], "research": [],
+        }
+        text = self._build(sliced, {"u1": "Alice", "u2": "Bob", "u3": "Carol"})
+        self.assertIn("🌾採集工具:\n- Lv5: Alice\n- Lv4: Bob\n- Lv3: Carol", text)
+
+    def test_no_players_shows_placeholder(self):
+        sliced = {"gathering": [], "building": [], "combat": [], "research": []}
+        text = self._build(sliced)
+        self.assertIn("🌾採集工具:\n- （尚無玩家）", text)
+        self.assertIn("🔨建設工具:\n- （尚無玩家）", text)
+
+    def test_same_level_multiple_players(self):
+        sliced = {
+            "gathering": [("a", 5), ("b", 5), ("c", 4)],
+            "building": [], "combat": [], "research": [],
+        }
+        text = self._build(sliced, {"a": "A", "b": "B", "c": "C"})
+        self.assertIn("- Lv5: A", text)
+        self.assertIn("- Lv5: B", text)
+        self.assertIn("- Lv4: C", text)
+
+    def test_gear_order_gathering_building_combat_research(self):
+        sliced = {"gathering": [], "building": [], "combat": [], "research": []}
+        text = self._build(sliced)
+        idx_g = text.index("採集工具")
+        idx_b = text.index("建設工具")
+        idx_c = text.index("狩獵工具")
+        idx_r = text.index("研究工具")
+        self.assertLess(idx_g, idx_b)
+        self.assertLess(idx_b, idx_c)
+        self.assertLess(idx_c, idx_r)
+
+    def test_combat_type_uses_gear_label_not_action_label(self):
+        sliced = {"gathering": [], "building": [], "combat": [("u1", 3)], "research": []}
+        text = self._build(sliced, {"u1": "X"})
+        self.assertIn("狩獵工具", text)
+        self.assertNotIn("戰鬥:", text)
+
+    def test_missing_user_id_falls_back_to_raw_id(self):
+        sliced = {"gathering": [("unknown_id", 3)], "building": [], "combat": [], "research": []}
+        text = self._build(sliced, {})
+        self.assertIn("- Lv3: unknown_id", text)
+
+
 class TestSliceTopLevels(unittest.TestCase):
     """slice_top_levels returns entries for the top top_n distinct levels."""
 

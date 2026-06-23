@@ -810,3 +810,30 @@ def build_admin_components(resource_type: str) -> list:
             ),
         ),
     ]
+
+
+_RANKING_GEAR_ORDER = ("gathering", "building", "combat", "research")
+
+
+def build_ranking_text(sliced_rankings: dict, name_map: dict) -> str:
+    """Format per-tool-type rankings as a plain text string.
+
+    sliced_rankings: {gear_type: [(user_id, level), ...]} already sliced to top levels.
+    name_map: {user_id: display_name}
+    Returns a multi-line string ready to send as Discord message content.
+    """
+    sections = []
+    for gear_type in _RANKING_GEAR_ORDER:
+        emoji = ACTION_EMOJIS[gear_type]
+        label = GEAR_LABELS[gear_type]
+        entries = sliced_rankings.get(gear_type, [])
+        header = f"{emoji}{label}:"
+        if not entries:
+            sections.append(f"{header}\n- （尚無玩家）")
+        else:
+            lines = [header]
+            for user_id, level in entries:
+                name = name_map.get(user_id, user_id)
+                lines.append(f"- Lv{level}: {name}")
+            sections.append("\n".join(lines))
+    return "\n".join(sections)

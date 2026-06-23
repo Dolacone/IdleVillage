@@ -56,7 +56,7 @@ scope: "Tracks the implementation of a new /idlevillage-ranking slash command th
   - `slice_top_levels`: 接受 `list[tuple[str, int]]`，依等級數截斷，回傳前 top_n 個不同等級的所有 entry（同等級全部列入，不設條目上限）
   - 驗收：正確排序、level==0 過濾、同等級全列（不截斷）、第 top_n+1 個不同等級的 entry 不出現；測試覆蓋：以上所有情況
 
-- [ ] Task 2: 在 `src/cogs/ui_renderer.py` 新增 `build_ranking_text(sliced_rankings, name_map)`
+- [x] Task 2: 在 `src/cogs/ui_renderer.py` 新增 `build_ranking_text(sliced_rankings, name_map)`
   - 接受 `dict[str, list[tuple[str, int]]]` 與 `dict[str, str]` name_map，回傳格式化字串
   - 工具類型順序：gathering → building → combat → research；emoji 使用 `ACTION_EMOJIS`；工具名稱使用 `GEAR_LABELS`（例：`GEAR_LABELS["combat"]` = 「狩獵工具」，非 `ACTION_LABELS`）
   - 格式：`{emoji}{GEAR_LABELS[type]}:\n- Lv{n}: {name}\n...`；某類型無玩家時顯示 `- （尚無玩家）`
