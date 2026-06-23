@@ -42,20 +42,36 @@ scope: "Tracks the implementation of a new /idlevillage-ranking slash command th
 
 ## Architecture Decisions
 
-- 新增一個 `ranking_cog.py` 或直接在現有 cog 中加 command
-  - 考量：四個現有 cog 皆有其職責範圍；ranking 屬於 general 資訊查詢，可加入 `actions.py`（個人介面所在）或建立新 cog
-  - 決定：加在 `actions.py`，因為現有個人介面也在此，且 ranking 是玩家可見的公開資訊
-- Player name 解析：使用 `inter.guild.get_member(int(user_id))` 從快取取得，fallback 為 `user_id` 字串
-- 排行邏輯：純 Python 排序，不在 DB 層做，保持 query 簡單
+- Slash command 放在 `actions.py`：ranking 屬於玩家公開資訊查詢，與現有個人介面一致，不需新 cog 檔案
+- `get_gear_rankings(db)` 加在 `player_manager.py`：回傳原始 `dict[str, list[tuple[str, int]]]`（level DESC, user_id ASC 穩定排序），level == 0 過濾；`slice_top_levels(entries, top_n=3)` 同在 `player_manager.py`，裁切前 top_n 個不同等級的所有玩家，每類型最多顯示 20 筆（防 Discord 長度溢出），裁切邏輯屬 data-shaping 而非 UI，符合放在 manager 的職責
+- Player name 解析在 cog 層（`actions.py`）：`guild.get_member(int(user_id))` 取 display_name，缺失時 fallback `user_id`，產生 `dict[str, str]` name_map 傳給 renderer
+- `build_ranking_text(sliced_rankings, name_map)` 加在 `ui_renderer.py`：接收已裁切資料與 name_map（純 dict），renderer 只做字串格式化，符合「無外部查詢」契約
+
+依賴關係：Task 1 → Task 2 → Task 3 → Task 4（循序）
 
 ## Tasks
 
-- [ ] Task 1: 新增 `get_rankings()` query function 至 database layer，回傳各 gear type 的 (user_id, level) 列表（依 level 降序）
-  - 驗收：函式存在且回傳正確排序資料；測試覆蓋：有玩家、無玩家、同等級
-- [ ] Task 2: 新增 `build_ranking_text()` 至 ui_renderer，接收排行資料與 guild 物件，回傳格式化字串
-  - 驗收：輸出格式符合規格；測試覆蓋：前三名、同等級超過三名、無玩家
-- [ ] Task 3: 在 `actions.py` 新增 `/idlevillage-ranking` slash command，呼叫 Task 1/2 並回傳 Ephemeral
-  - 驗收：指令可正常執行；guild 檢查存在；測試覆蓋：正常執行路徑
+- [ ] Task 1: 在 `src/managers/player_manager.py` 新增 `get_gear_rankings(db)` 與 `slice_top_levels(entries, top_n=3)`
+  - `get_gear_rankings`: 查詢所有 players 四個 gear_* 欄位，回傳 `dict[str, list[tuple[str, int]]]`，每類型依 level DESC, user_id ASC 排序，過濾 level == 0
+  - `slice_top_levels`: 接受 `list[tuple[str, int]]`，回傳前 top_n 個不同等級的所有 entry，最多 20 筆
+  - 驗收：正確排序、level==0 過濾、同等級全列、超過 20 筆截斷；測試覆蓋：以上所有情況
+
+- [ ] Task 2: 在 `src/cogs/ui_renderer.py` 新增 `build_ranking_text(sliced_rankings, name_map)`
+  - 接受 `dict[str, list[tuple[str, int]]]` 與 `dict[str, str]` name_map，回傳格式化字串
+  - 工具類型順序：gathering → building → combat → research；emoji 使用 `ACTION_EMOJIS`
+  - 格式：`{emoji}{工具名稱}:\n- Lv{n}: {name}\n...`；某類型無玩家時顯示 `- （尚無玩家）`
+  - 驗收：輸出符合規格；測試覆蓋：標準前三名、同等級多名、某類型無玩家
+
+- [ ] Task 3: 在 `src/cogs/actions.py` 新增 `/idlevillage-ranking` slash command
+  - guild 檢查、呼叫 `get_gear_rankings()` 與 `slice_top_levels()`，解析 name_map，呼叫 `build_ranking_text()`，以 Ephemeral 回傳
+  - 驗收：guild 檢查存在；tests 覆蓋正常執行路徑
+
+- [ ] Task 4: 更新 SSOT 文件
+  - `docs/discord/command-handler.md`：新增 `/idlevillage-ranking` 至 Slash Commands 表
+  - `docs/managers/player-manager.md`：新增 `get_gear_rankings()` 與 `slice_top_levels()` 至操作介面
+  - `docs/discord/ui-renderer.md`：新增 `build_ranking_text()` 格式規範
+  - 更新 change document `source_paths`
+  - 驗收：三份文件均已更新
 
 ## Key Assumptions
 
@@ -64,3 +80,14 @@ scope: "Tracks the implementation of a new /idlevillage-ranking slash command th
 - 玩家 gear level = 0 時不參與排行（過濾 level == 0）
 
 ## Review Issues
+
+## Plan Review Issues
+
+- [x] `build_ranking_text(rankings, guild)` 讓 `ui_renderer.py` 接收 Discord guild 物件並呼叫 `guild.get_member()`，違反現有 renderer 契約（純渲染、無外部狀態查詢、資料以 plain dict/list 傳入）。應在 command/cog 層完成 user_id -> display_name 解析，或改為傳入純資料/解析 callback，renderer 只負責格式化。
+- [x] 「前三名等級、同等級全列」是排名裁切規則，不只是字串呈現；放在 `ui_renderer.py` 會把業務選擇邏輯混入 renderer。應明確規劃由 `player_manager.get_gear_rankings()` 或 command/cog 層產生已裁切的 ranking groups，再交給 renderer 顯示。
+- [x] 同等級玩家的排序未定義；若 DB 只依 level 降序，同 level 輸出順序可能不穩定，測試與使用者看到的排行可能抖動。需指定穩定次排序（例如 user_id 或已解析 display_name）。
+- [x] 同等級全部列入可能讓單一等級人數過多，超過 Discord message/embed description 長度限制；計畫缺少截斷、分頁或最大顯示數策略。
+- [x] 計畫缺少 SSOT 文件更新任務；新增 slash command、player-manager API、renderer 輸出格式時，至少應更新 `docs/discord/command-handler.md`、`docs/managers/player-manager.md`、`docs/discord/ui-renderer.md`，並補齊 change document 的 `source_paths`。
+- [ ] 截斷邊界未定義：「同等級全部列入」與「每類型最多 20 筆」規則衝突；若第三名等級有 25 人，計畫會在第 20 筆截斷，但未規劃截斷提示（例如「另 N 名」），使用者會誤以為名單完整。需明確截斷語意：以條目數截斷，或以等級數截斷，並規劃溢出文案。
+- [ ] 空狀態輸出不一致：MVP Scope 寫「無玩家時顯示空訊息」，Recommended Direction / Task 2 寫每類型顯示 `- （尚無玩家）`。兩者是不同輸出格式，需統一為同一個規格。
+- [ ] 工具名稱來源未指定：Task 2 未說明各工具類型的顯示名稱要取自 `ACTION_LABELS` 還是 `GEAR_LABELS`；兩者對 `combat` 的值分別是「戰鬥」與「狩獵工具」，排行標題應使用工具名稱，計畫需明確指定來源以避免輸出行動名稱。
