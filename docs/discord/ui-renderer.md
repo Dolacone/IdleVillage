@@ -1,7 +1,7 @@
 ---
 title: "Module: ui-renderer"
 doc_type: module
-last_reviewed: 2026-06-16
+last_reviewed: 2026-06-23
 source_paths:
   - src/cogs/ui_renderer.py
 ---
@@ -241,3 +241,4 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
 - 2026.05.15: Added mode selection dropdown (`upgrade_mode_select:{gear_type}`) to the gear upgrade sub-menu. Mode descriptions shown inline. Buffer mode displays 0% success rate.
 - 2026-05-15: Added `build_manager_embed()` and `build_manager_components()` for the unified manager interface.
 - 2026.05.06.00: Gear upgrade success-rate display must match gear-manager precision semantics. Lv6 with no pity displays 40%, not 39%.
+- 2026-06-23: Added `build_ranking_text(sliced_rankings, name_map)` — formats per-tool-type ranking as plain text. Gear type order: gathering → building → combat → research; uses `ACTION_EMOJIS` for emoji and `GEAR_LABELS` for tool names. Each section: `{emoji}{GEAR_LABELS[type]}:\n- Lv{n}: {name}\n...`; `- （尚無玩家）` when no entries.

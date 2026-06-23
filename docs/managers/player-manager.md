@@ -1,7 +1,7 @@
 ---
 title: "Module: player-manager"
 doc_type: module
-last_reviewed: 2026-05-15
+last_reviewed: 2026-06-23
 source_paths:
   - src/managers/player_manager.py
 ---
@@ -83,6 +83,8 @@ source_paths:
 - `setPity(playerId, type, count)` — 設定保底計數
 - `setMaterial(playerId, type, amount)` — 直接設定素材數量（絕對值，供管理員使用）
 - `setRiskyFailedLevels(playerId, value)` — 直接設定鐵齒失敗累積值（絕對值，供管理員使用）
+- `get_gear_rankings(db)` — 回傳 `dict[str, list[tuple[str, int]]]`，key 為 gear type，value 為 (user_id, level) 依 level DESC, user_id ASC 排序的列表；level == 0 的玩家排除
+- `slice_top_levels(entries, top_n=3)` — 接受 `list[tuple[str, int]]`，回傳前 top_n 個不同等級的所有 entry（同等級全部列入，不設條目上限）
 
 ## Changelog
 

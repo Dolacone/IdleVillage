@@ -1278,5 +1278,243 @@ class TestGearUpgradeNotificationTargetLevel(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(event["target_level"], 7)
 
 
+class TestRankingCommand(unittest.IsolatedAsyncioTestCase):
+    """/idlevillage-ranking slash command integration."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def _make_inter(self):
+        inter = MagicMock()
+        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+        inter.guild = MagicMock()
+        inter.guild.get_member = MagicMock(return_value=None)
+        inter.response.send_message = AsyncMock()
+        return inter
+
+    def _make_db_cm(self, rankings=None):
+        db_mock = AsyncMock()
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=db_mock)
+        cm.__aexit__ = AsyncMock(return_value=False)
+        if rankings is not None:
+            from unittest.mock import patch
+            pass
+        return cm, db_mock
+
+    async def test_ranking_sends_ephemeral_message(self):
+        from cogs.actions import ActionsCog
+        inter = self._make_inter()
+        rankings = {"gathering": [("111111111111111111", 5)], "building": [], "combat": [], "research": []}
+        cm, _ = self._make_db_cm()
+        with (
+            patch("cogs.actions.get_connection", return_value=cm),
+            patch("cogs.actions.player_manager.get_gear_rankings", new=AsyncMock(return_value=rankings)),
+        ):
+            cog = ActionsCog(bot=MagicMock())
+            await ActionsCog.idlevillage_ranking.callback(cog, inter)
+        inter.response.send_message.assert_awaited_once()
+        _, kwargs = inter.response.send_message.call_args
+        self.assertTrue(kwargs.get("ephemeral"))
+
+    async def test_ranking_wrong_guild_rejected(self):
+        from cogs.actions import ActionsCog
+        inter = self._make_inter()
+        inter.guild_id = 999999999
+        cog = ActionsCog(bot=MagicMock())
+        await ActionsCog.idlevillage_ranking.callback(cog, inter)
+        inter.response.send_message.assert_awaited_once()
+        call_args = inter.response.send_message.call_args
+        self.assertIn("僅限指定伺服器", call_args[0][0])
+
+    async def test_ranking_overflow_truncated(self):
+        from cogs.actions import ActionsCog
+        inter = self._make_inter()
+        long_entries = [(str(100000000000000000 + i), 99) for i in range(200)]
+        name_map_data = {str(100000000000000000 + i): f"Player{'x' * 30}{i}" for i in range(200)}
+        inter.guild.get_member = MagicMock(side_effect=lambda uid: MagicMock(display_name=name_map_data.get(str(uid), str(uid))))
+        rankings = {"gathering": long_entries, "building": [], "combat": [], "research": []}
+        cm, _ = self._make_db_cm()
+        with (
+            patch("cogs.actions.get_connection", return_value=cm),
+            patch("cogs.actions.player_manager.get_gear_rankings", new=AsyncMock(return_value=rankings)),
+        ):
+            cog = ActionsCog(bot=MagicMock())
+            await ActionsCog.idlevillage_ranking.callback(cog, inter)
+        text = inter.response.send_message.call_args[0][0]
+        self.assertLessEqual(len(text), 1915)
+        self.assertIn("省略", text)
+
+
+class TestBuildRankingText(unittest.TestCase):
+    """build_ranking_text formats sliced rankings as plain text."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def _build(self, sliced, name_map=None):
+        from cogs.ui_renderer import build_ranking_text
+        return build_ranking_text(sliced, name_map or {})
+
+    def test_standard_top_three(self):
+        sliced = {
+            "gathering": [("u1", 5), ("u2", 4), ("u3", 3)],
+            "building": [], "combat": [], "research": [],
+        }
+        text = self._build(sliced, {"u1": "Alice", "u2": "Bob", "u3": "Carol"})
+        self.assertIn("🌾採集工具:\n- Lv5: Alice\n- Lv4: Bob\n- Lv3: Carol", text)
+
+    def test_no_players_shows_placeholder(self):
+        sliced = {"gathering": [], "building": [], "combat": [], "research": []}
+        text = self._build(sliced)
+        self.assertIn("🌾採集工具:\n- （尚無玩家）", text)
+        self.assertIn("🔨建設工具:\n- （尚無玩家）", text)
+
+    def test_same_level_multiple_players(self):
+        sliced = {
+            "gathering": [("a", 5), ("b", 5), ("c", 4)],
+            "building": [], "combat": [], "research": [],
+        }
+        text = self._build(sliced, {"a": "A", "b": "B", "c": "C"})
+        self.assertIn("- Lv5: A", text)
+        self.assertIn("- Lv5: B", text)
+        self.assertIn("- Lv4: C", text)
+
+    def test_gear_order_gathering_building_combat_research(self):
+        sliced = {"gathering": [], "building": [], "combat": [], "research": []}
+        text = self._build(sliced)
+        idx_g = text.index("採集工具")
+        idx_b = text.index("建設工具")
+        idx_c = text.index("狩獵工具")
+        idx_r = text.index("研究工具")
+        self.assertLess(idx_g, idx_b)
+        self.assertLess(idx_b, idx_c)
+        self.assertLess(idx_c, idx_r)
+
+    def test_combat_type_uses_gear_label_not_action_label(self):
+        sliced = {"gathering": [], "building": [], "combat": [("u1", 3)], "research": []}
+        text = self._build(sliced, {"u1": "X"})
+        self.assertIn("狩獵工具", text)
+        self.assertNotIn("戰鬥:", text)
+
+    def test_missing_user_id_falls_back_to_raw_id(self):
+        sliced = {"gathering": [("unknown_id", 3)], "building": [], "combat": [], "research": []}
+        text = self._build(sliced, {})
+        self.assertIn("- Lv3: unknown_id", text)
+
+
+class TestSliceTopLevels(unittest.TestCase):
+    """slice_top_levels returns top top_n players, extended if boundary level is tied."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def _slice(self, entries, top_n=3):
+        from managers.player_manager import slice_top_levels
+        return slice_top_levels(entries, top_n)
+
+    def test_empty_list(self):
+        self.assertEqual(self._slice([]), [])
+
+    def test_fewer_than_top_n_entries(self):
+        entries = [("a", 5), ("b", 3)]
+        self.assertEqual(self._slice(entries), [("a", 5), ("b", 3)])
+
+    def test_exactly_top_n_entries_no_tie(self):
+        entries = [("a", 5), ("b", 4), ("c", 3)]
+        self.assertEqual(self._slice(entries), [("a", 5), ("b", 4), ("c", 3)])
+
+    def test_fourth_entry_excluded_when_different_level(self):
+        entries = [("a", 5), ("b", 4), ("c", 3), ("d", 2)]
+        self.assertEqual(self._slice(entries), [("a", 5), ("b", 4), ("c", 3)])
+
+    def test_tie_at_boundary_extends_result(self):
+        # 3rd and 4th share same level → 4th is included
+        entries = [("a", 5), ("b", 4), ("c", 3), ("d", 3)]
+        self.assertEqual(self._slice(entries), [("a", 5), ("b", 4), ("c", 3), ("d", 3)])
+
+    def test_no_tie_extension_when_boundary_unique(self):
+        # multiple ties at top, but boundary (3rd entry) level is not shared by 4th
+        entries = [("a", 5), ("b", 5), ("c", 5), ("d", 4), ("e", 3)]
+        self.assertEqual(self._slice(entries), [("a", 5), ("b", 5), ("c", 5)])
+
+    def test_top_n_1_tie_extends(self):
+        entries = [("a", 5), ("b", 5), ("c", 4), ("d", 3)]
+        result = self._slice(entries, top_n=1)
+        self.assertEqual(result, [("a", 5), ("b", 5)])
+
+    def test_all_same_level(self):
+        entries = [("a", 3), ("b", 3), ("c", 3)]
+        self.assertEqual(self._slice(entries), [("a", 3), ("b", 3), ("c", 3)])
+
+
+class TestGetGearRankings(DatabaseTestCase):
+    """get_gear_rankings queries all players and returns sorted per-type rankings."""
+
+    async def _insert_player(self, db, user_id, gear_gathering=0, gear_building=0, gear_combat=0, gear_research=0):
+        from core.utils import dt_str
+        from datetime import datetime, timezone
+        now = dt_str(datetime.now(timezone.utc))
+        await db.execute(
+            """INSERT OR IGNORE INTO players
+               (user_id, created_at, updated_at, ap_full_time,
+                gear_gathering, gear_building, gear_combat, gear_research)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, now, now, now, gear_gathering, gear_building, gear_combat, gear_research),
+        )
+
+    async def test_no_players_returns_empty_lists(self):
+        from managers.player_manager import get_gear_rankings
+        from database.schema import get_connection
+        async with get_connection() as db:
+            rankings = await get_gear_rankings(db)
+        for gear_type in ("gathering", "building", "combat", "research"):
+            self.assertEqual(rankings[gear_type], [])
+
+    async def test_level_zero_filtered(self):
+        from managers.player_manager import get_gear_rankings
+        from database.schema import get_connection
+        async with get_connection() as db:
+            await self._insert_player(db, "u1", gear_gathering=0)
+            await db.commit()
+            rankings = await get_gear_rankings(db)
+        self.assertEqual(rankings["gathering"], [])
+
+    async def test_single_player_appears(self):
+        from managers.player_manager import get_gear_rankings
+        from database.schema import get_connection
+        async with get_connection() as db:
+            await self._insert_player(db, "u1", gear_gathering=5)
+            await db.commit()
+            rankings = await get_gear_rankings(db)
+        self.assertEqual(rankings["gathering"], [("u1", 5)])
+
+    async def test_sorted_level_desc_user_id_asc(self):
+        from managers.player_manager import get_gear_rankings
+        from database.schema import get_connection
+        async with get_connection() as db:
+            await self._insert_player(db, "z_user", gear_gathering=3)
+            await self._insert_player(db, "a_user", gear_gathering=5)
+            await self._insert_player(db, "m_user", gear_gathering=3)
+            await db.commit()
+            rankings = await get_gear_rankings(db)
+        self.assertEqual(rankings["gathering"], [("a_user", 5), ("m_user", 3), ("z_user", 3)])
+
+    async def test_all_gear_types_present(self):
+        from managers.player_manager import get_gear_rankings
+        from database.schema import get_connection
+        async with get_connection() as db:
+            await self._insert_player(db, "u1", gear_gathering=1, gear_building=2, gear_combat=3, gear_research=4)
+            await db.commit()
+            rankings = await get_gear_rankings(db)
+        self.assertEqual(rankings["gathering"], [("u1", 1)])
+        self.assertEqual(rankings["building"], [("u1", 2)])
+        self.assertEqual(rankings["combat"], [("u1", 3)])
+        self.assertEqual(rankings["research"], [("u1", 4)])
+
+
 if __name__ == "__main__":
     unittest.main()
