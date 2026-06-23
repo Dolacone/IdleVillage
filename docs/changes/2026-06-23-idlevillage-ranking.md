@@ -1,6 +1,6 @@
 ---
 title: "/idlevillage-ranking slash command"
-status: Reviewed
+status: Refactored
 created: 2026-06-23
 doc_type: change
 last_reviewed: 2026-06-23

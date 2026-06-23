@@ -1343,7 +1343,7 @@ class TestRankingCommand(unittest.IsolatedAsyncioTestCase):
             cog = ActionsCog(bot=MagicMock())
             await ActionsCog.idlevillage_ranking.callback(cog, inter)
         text = inter.response.send_message.call_args[0][0]
-        self.assertLessEqual(len(text), 1950)
+        self.assertLessEqual(len(text), 1915)
         self.assertIn("省略", text)
 
 
