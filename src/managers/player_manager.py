@@ -190,3 +190,52 @@ async def set_risky_failed_levels(
         "UPDATE players SET risky_failed_levels=?, updated_at=? WHERE user_id=?",
         (value, dt_str(ts), user_id),
     )
+
+
+# ---------------------------------------------------------------------------
+# Ranking helpers
+# ---------------------------------------------------------------------------
+
+async def get_gear_rankings(db) -> dict:
+    """Return all players' gear levels keyed by gear type.
+
+    Returns {gear_type: [(user_id, level), ...]} sorted level DESC, user_id ASC.
+    Players with level == 0 are excluded.
+    """
+    async with db.execute(
+        "SELECT user_id, gear_gathering, gear_building, gear_combat, gear_research FROM players"
+    ) as cur:
+        rows = await cur.fetchall()
+
+    result = {}
+    for gear_type, col_index in (
+        ("gathering", 1),
+        ("building", 2),
+        ("combat", 3),
+        ("research", 4),
+    ):
+        entries = [
+            (row[0], row[col_index])
+            for row in rows
+            if row[col_index] > 0
+        ]
+        entries.sort(key=lambda x: (-x[1], x[0]))
+        result[gear_type] = entries
+    return result
+
+
+def slice_top_levels(entries: list, top_n: int = 3) -> list:
+    """Return entries for the top top_n distinct levels.
+
+    All entries sharing a level within the top top_n distinct levels are included.
+    Entries from the (top_n+1)-th distinct level onward are excluded.
+    """
+    seen_levels: list = []
+    result = []
+    for user_id, level in entries:
+        if level not in seen_levels:
+            if len(seen_levels) >= top_n:
+                break
+            seen_levels.append(level)
+        result.append((user_id, level))
+    return result

@@ -51,7 +51,7 @@ scope: "Tracks the implementation of a new /idlevillage-ranking slash command th
 
 ## Tasks
 
-- [ ] Task 1: 在 `src/managers/player_manager.py` 新增 `get_gear_rankings(db)` 與 `slice_top_levels(entries, top_n=3)`
+- [x] Task 1: 在 `src/managers/player_manager.py` 新增 `get_gear_rankings(db)` 與 `slice_top_levels(entries, top_n=3)`
   - `get_gear_rankings`: 查詢所有 players 四個 gear_* 欄位，回傳 `dict[str, list[tuple[str, int]]]`，每類型依 level DESC, user_id ASC 排序，過濾 level == 0
   - `slice_top_levels`: 接受 `list[tuple[str, int]]`，依等級數截斷，回傳前 top_n 個不同等級的所有 entry（同等級全部列入，不設條目上限）
   - 驗收：正確排序、level==0 過濾、同等級全列（不截斷）、第 top_n+1 個不同等級的 entry 不出現；測試覆蓋：以上所有情況

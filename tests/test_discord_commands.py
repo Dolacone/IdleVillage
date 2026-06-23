@@ -1278,5 +1278,111 @@ class TestGearUpgradeNotificationTargetLevel(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(event["target_level"], 7)
 
 
+class TestSliceTopLevels(unittest.TestCase):
+    """slice_top_levels returns entries for the top top_n distinct levels."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def _slice(self, entries, top_n=3):
+        from managers.player_manager import slice_top_levels
+        return slice_top_levels(entries, top_n)
+
+    def test_empty_list(self):
+        self.assertEqual(self._slice([]), [])
+
+    def test_fewer_than_top_n_distinct_levels(self):
+        entries = [("a", 5), ("b", 3)]
+        self.assertEqual(self._slice(entries), [("a", 5), ("b", 3)])
+
+    def test_exactly_top_n_distinct_levels_all_returned(self):
+        entries = [("a", 5), ("b", 4), ("c", 3)]
+        self.assertEqual(self._slice(entries), [("a", 5), ("b", 4), ("c", 3)])
+
+    def test_fourth_distinct_level_excluded(self):
+        entries = [("a", 5), ("b", 4), ("c", 3), ("d", 2)]
+        self.assertEqual(self._slice(entries), [("a", 5), ("b", 4), ("c", 3)])
+
+    def test_same_level_all_included(self):
+        entries = [("a", 5), ("b", 5), ("c", 5), ("d", 4), ("e", 3), ("f", 2)]
+        result = self._slice(entries)
+        self.assertEqual(result, [("a", 5), ("b", 5), ("c", 5), ("d", 4), ("e", 3)])
+
+    def test_top_n_1(self):
+        entries = [("a", 5), ("b", 5), ("c", 4), ("d", 3)]
+        result = self._slice(entries, top_n=1)
+        self.assertEqual(result, [("a", 5), ("b", 5)])
+
+    def test_all_same_level(self):
+        entries = [("a", 3), ("b", 3), ("c", 3)]
+        self.assertEqual(self._slice(entries), [("a", 3), ("b", 3), ("c", 3)])
+
+
+class TestGetGearRankings(DatabaseTestCase):
+    """get_gear_rankings queries all players and returns sorted per-type rankings."""
+
+    async def _insert_player(self, db, user_id, gear_gathering=0, gear_building=0, gear_combat=0, gear_research=0):
+        from core.utils import dt_str
+        from datetime import datetime, timezone
+        now = dt_str(datetime.now(timezone.utc))
+        await db.execute(
+            """INSERT OR IGNORE INTO players
+               (user_id, created_at, updated_at, ap_full_time,
+                gear_gathering, gear_building, gear_combat, gear_research)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, now, now, now, gear_gathering, gear_building, gear_combat, gear_research),
+        )
+
+    async def test_no_players_returns_empty_lists(self):
+        from managers.player_manager import get_gear_rankings
+        from database.schema import get_connection
+        async with get_connection() as db:
+            rankings = await get_gear_rankings(db)
+        for gear_type in ("gathering", "building", "combat", "research"):
+            self.assertEqual(rankings[gear_type], [])
+
+    async def test_level_zero_filtered(self):
+        from managers.player_manager import get_gear_rankings
+        from database.schema import get_connection
+        async with get_connection() as db:
+            await self._insert_player(db, "u1", gear_gathering=0)
+            await db.commit()
+            rankings = await get_gear_rankings(db)
+        self.assertEqual(rankings["gathering"], [])
+
+    async def test_single_player_appears(self):
+        from managers.player_manager import get_gear_rankings
+        from database.schema import get_connection
+        async with get_connection() as db:
+            await self._insert_player(db, "u1", gear_gathering=5)
+            await db.commit()
+            rankings = await get_gear_rankings(db)
+        self.assertEqual(rankings["gathering"], [("u1", 5)])
+
+    async def test_sorted_level_desc_user_id_asc(self):
+        from managers.player_manager import get_gear_rankings
+        from database.schema import get_connection
+        async with get_connection() as db:
+            await self._insert_player(db, "z_user", gear_gathering=3)
+            await self._insert_player(db, "a_user", gear_gathering=5)
+            await self._insert_player(db, "m_user", gear_gathering=3)
+            await db.commit()
+            rankings = await get_gear_rankings(db)
+        self.assertEqual(rankings["gathering"], [("a_user", 5), ("m_user", 3), ("z_user", 3)])
+
+    async def test_all_gear_types_present(self):
+        from managers.player_manager import get_gear_rankings
+        from database.schema import get_connection
+        async with get_connection() as db:
+            await self._insert_player(db, "u1", gear_gathering=1, gear_building=2, gear_combat=3, gear_research=4)
+            await db.commit()
+            rankings = await get_gear_rankings(db)
+        self.assertEqual(rankings["gathering"], [("u1", 1)])
+        self.assertEqual(rankings["building"], [("u1", 2)])
+        self.assertEqual(rankings["combat"], [("u1", 3)])
+        self.assertEqual(rankings["research"], [("u1", 4)])
+
+
 if __name__ == "__main__":
     unittest.main()
