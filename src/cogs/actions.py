@@ -241,6 +241,7 @@ class ActionsCog(commands.Cog):
             return await inter.response.send_message(
                 "此指令僅限指定伺服器使用。", ephemeral=True
             )
+        await inter.response.defer(ephemeral=True)
         async with get_connection() as db:
             rankings = await player_manager.get_gear_rankings(db)
         sliced = {
@@ -258,7 +259,7 @@ class ActionsCog(commands.Cog):
         text = build_ranking_text(sliced, name_map)
         if len(text) > 1900:
             text = text[:1900] + "\n（排行過長，部分內容已省略）"
-        await inter.response.send_message(text, ephemeral=True)
+        await inter.edit_original_response(content=text)
 
     @commands.slash_command(name="idlevillage", description="開啟 Idle Village 個人介面")
     async def idlevillage(self, inter: disnake.ApplicationCommandInteraction) -> None:

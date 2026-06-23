@@ -1289,8 +1289,10 @@ class TestRankingCommand(unittest.IsolatedAsyncioTestCase):
         inter = MagicMock()
         inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
         inter.guild = MagicMock()
-        inter.guild.get_member = MagicMock(return_value=None)
+        inter.guild.fetch_member = AsyncMock(return_value=None)
         inter.response.send_message = AsyncMock()
+        inter.response.defer = AsyncMock()
+        inter.edit_original_response = AsyncMock()
         return inter
 
     def _make_db_cm(self, rankings=None):
@@ -1314,9 +1316,8 @@ class TestRankingCommand(unittest.IsolatedAsyncioTestCase):
         ):
             cog = ActionsCog(bot=MagicMock())
             await ActionsCog.idlevillage_ranking.callback(cog, inter)
-        inter.response.send_message.assert_awaited_once()
-        _, kwargs = inter.response.send_message.call_args
-        self.assertTrue(kwargs.get("ephemeral"))
+        inter.response.defer.assert_awaited_once()
+        inter.edit_original_response.assert_awaited_once()
 
     async def test_ranking_wrong_guild_rejected(self):
         from cogs.actions import ActionsCog
@@ -1342,7 +1343,7 @@ class TestRankingCommand(unittest.IsolatedAsyncioTestCase):
         ):
             cog = ActionsCog(bot=MagicMock())
             await ActionsCog.idlevillage_ranking.callback(cog, inter)
-        text = inter.response.send_message.call_args[0][0]
+        text = inter.edit_original_response.call_args[1]["content"]
         self.assertLessEqual(len(text), 1915)
         self.assertIn("省略", text)
 
