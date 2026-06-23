@@ -1,10 +1,14 @@
 ---
 title: "/idlevillage-ranking slash command"
-status: Ready-to-implement
+status: Ready-to-review
 created: 2026-06-23
 doc_type: change
 last_reviewed: 2026-06-23
-source_paths: []
+source_paths:
+  - src/managers/player_manager.py
+  - src/cogs/ui_renderer.py
+  - src/cogs/actions.py
+  - tests/test_discord_commands.py
 scope: "Tracks the implementation of a new /idlevillage-ranking slash command that displays per-tool-type top-3 rankings."
 ---
 
@@ -68,7 +72,7 @@ scope: "Tracks the implementation of a new /idlevillage-ranking slash command th
   - 以 Ephemeral content 回傳（不用 embed）
   - 驗收：guild 檢查存在；長度超限時有截斷文案；tests 覆蓋正常路徑與超長路徑
 
-- [ ] Task 4: 更新 SSOT 文件
+- [x] Task 4: 更新 SSOT 文件
   - `docs/discord/command-handler.md`：新增 `/idlevillage-ranking` 至 Slash Commands 表
   - `docs/managers/player-manager.md`：新增 `get_gear_rankings()` 與 `slice_top_levels()` 至操作介面
   - `docs/discord/ui-renderer.md`：新增 `build_ranking_text()` 格式規範

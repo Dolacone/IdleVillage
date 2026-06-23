@@ -1,7 +1,7 @@
 ---
 title: "Module: command-handler"
 doc_type: module
-last_reviewed: 2026-05-23
+last_reviewed: 2026-06-23
 source_paths:
   - src/cogs/actions.py
   - src/cogs/general.py
@@ -17,6 +17,7 @@ source_paths:
 | 指令 | 對象 | 行為 |
 | :--- | :--- | :--- |
 | `/idlevillage` | 所有玩家 | 先補算到期完整週期，再渲染個人主介面（Ephemeral），呼叫 ui-renderer |
+| `/idlevillage-ranking` | 所有玩家 | 查詢各工具類型前三等級排行，以 Ephemeral content 回傳；超過 1900 字元時截斷並附上省略說明 |
 | `/idlevillage-announcement` | 管理員 | 將當前頻道寫入 `announcement_channel_id`，並發布或刷新村莊公告（Public） |
 | `/idlevillage-manage` | 管理員 | 檢查 Dashboard 訊息是否存在（不存在則在當前頻道發送新的），再開啟資源管理介面（Ephemeral） |
 | `/idlevillage-manager` | 管理員 | 顯示玩家選擇器（User Select Dropdown，Ephemeral）；選定玩家後顯示完整數據面板，含各欄位編輯按鈕（Ephemeral） |
