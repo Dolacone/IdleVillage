@@ -1,6 +1,6 @@
 ---
 title: "強化工具與詞條管理 Dropdown 初始無預設選項"
-status: Ready-to-implement
+status: Ready-to-review
 created: 2026-06-27
 doc_type: change
 last_reviewed: 2026-06-27
@@ -68,7 +68,7 @@ gear_type=None 時，`build_affix_components` 的 back 按鈕使用 `back_to_gea
 
 - [x] Task 1: `build_gear_embed` 和 `build_gear_components` 接受 `gear_type: str | None` 與 `mode: str | None`，並在 None 時回傳 blank 狀態
 - [x] Task 2: `build_affix_embed` 和 `build_affix_components` 接受 `gear_type: str | None`，並在 None 時回傳 blank 狀態
-- [ ] Task 3: `actions.py` 修改：
+- [x] Task 3: `actions.py` 修改：
   - `_render_gear(gear_type: str | None, mode: str | None = None)`：當 `gear_type is None` 時只查 player gear 等級與 gear_cap，不呼叫 `get_upgrade_info`，直接傳 blank embed + components；當 `gear_type is not None` 時，在進入 `get_upgrade_info` 前做 `effective_mode = mode or "normal"` 轉換，避免 `None` 傳入引發 ValueError
   - `open_gear_upgrade` handler：改為 `await self._render_gear(inter, None)`
   - `open_affix_mgmt:{gear_type}` handler：改為 `await self._render_affix(inter, None)`（不傳 gear_type）
