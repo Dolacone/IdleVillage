@@ -1,6 +1,6 @@
 ---
 title: "強化工具與詞條管理 Dropdown 初始無預設選項"
-status: Ready-to-review
+status: Reviewed
 created: 2026-06-27
 doc_type: change
 last_reviewed: 2026-06-27
@@ -76,6 +76,9 @@ gear_type=None 時，`build_affix_components` 的 back 按鈕使用 `back_to_gea
   - `_render_affix(gear_type: str | None)`：當 `gear_type is None` 時只查 player gear 等級與 gear_cap，不呼叫 `get_upgrade_info`
 
 ## Review Issues
+
+- [x] `ui_renderer.py:550-553`, `actions.py:162-175`, `actions.py:177`, `actions.py:314`, `actions.py:428`, `actions.py:470-476`, `ui_renderer.py:655`: 所有 checklist 項目均正確實作，測試 118 passed。
+- [ ] [Minor] `actions.py:165-169` 和 `actions.py:187-190`：`player_gear` dict 建構邏輯在 `_render_gear` 的兩個分支中重複，可提取為 helper，但不影響正確性。
 
 ## Plan Review Issues
 
