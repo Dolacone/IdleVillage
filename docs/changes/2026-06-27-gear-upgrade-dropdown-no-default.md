@@ -1,6 +1,6 @@
 ---
 title: "強化工具與詞條管理 Dropdown 初始無預設選項"
-status: Draft
+status: Ready-to-implement
 created: 2026-06-27
 doc_type: change
 last_reviewed: 2026-06-27
@@ -47,12 +47,14 @@ Not doing：
 
 ### 按鈕 custom_id sentinel
 
-當 gear_type=None 時，custom_id 使用 `"none"` 作為 sentinel：
-- `upgrade_mode_select:none` → handler 驗證 `gear_type in _VALID_GEAR_TYPES` 失敗 → 忽略
-- `attempt_upgrade:none:normal` → 同上
-- `sacrifice_material:none` → 同上
-- `open_affix_mgmt:none` → 同上
-- `back_to_gear:none` → handler 改為轉跳至 blank gear 狀態（不再直接 return）
+當 gear_type=None 時，Python f-string 格式化 `None` 會產生字串 `"None"`（大寫 N），所以 custom_id 實際為：
+- `upgrade_mode_select:None` → handler 驗證 `gear_type in _VALID_GEAR_TYPES` 失敗 → 忽略
+- `attempt_upgrade:None:normal` → 同上
+- `sacrifice_material:None` → 同上
+- `open_affix_mgmt:None` → 同上
+- `back_to_gear:None` → handler 改為轉跳至 blank gear 狀態（不再直接 return）
+
+為避免混淆，在 `build_gear_components` 和 `build_affix_components` 中使用 `_gt = gear_type or "none"` 顯式轉為小寫 `"none"` sentinel，不依賴 f-string 的 None 轉換。
 
 ### mode=None 的 attempt 按鈕 disabled 條件
 
@@ -66,6 +68,18 @@ gear_type=None 時，`build_affix_components` 的 back 按鈕使用 `back_to_gea
 
 - [ ] Task 1: `build_gear_embed` 和 `build_gear_components` 接受 `gear_type: str | None` 與 `mode: str | None`，並在 None 時回傳 blank 狀態
 - [ ] Task 2: `build_affix_embed` 和 `build_affix_components` 接受 `gear_type: str | None`，並在 None 時回傳 blank 狀態
-- [ ] Task 3: `_render_gear` / `_render_affix` 接受 None，`open_gear_upgrade` 改傳 None，`open_affix_mgmt` 改傳 None，`back_to_gear` handler 修正
+- [ ] Task 3: `actions.py` 修改：
+  - `_render_gear(gear_type: str | None, mode: str | None = None)`：當 `gear_type is None` 時只查 player gear 等級與 gear_cap，不呼叫 `get_upgrade_info`，直接傳 blank embed + components；當 `gear_type is not None` 時，在進入 `get_upgrade_info` 前做 `effective_mode = mode or "normal"` 轉換，避免 `None` 傳入引發 ValueError
+  - `open_gear_upgrade` handler：改為 `await self._render_gear(inter, None)`
+  - `open_affix_mgmt:{gear_type}` handler：改為 `await self._render_affix(inter, None)`（不傳 gear_type）
+  - `back_to_gear:{gear_type}` handler：當 gear_type 不在 `_VALID_GEAR_TYPES` 時，改呼叫 `await self._render_gear(inter, None)` 再 return（移除原本的直接 return）
+  - `_render_affix(gear_type: str | None)`：當 `gear_type is None` 時只查 player gear 等級與 gear_cap，不呼叫 `get_upgrade_info`
 
 ## Review Issues
+
+## Plan Review Issues
+
+- [x] Issue 1 (Critical): `_render_gear` 在接受 `gear_type=None` 後必須分叉 DB 查詢路徑，跳過 `gear_manager.get_upgrade_info`（`actions.py:155`）；Task 3 未描述這個分叉邏輯，實作者會直接傳 `None` 進 `get_upgrade_info`，引發 runtime crash。需在 Task 3 明確指定：當 `gear_type is None` 時，只查 player gear 總覽與 gear_cap，不呼叫 `get_upgrade_info`。
+- [x] Issue 2 (Major): `mode=None` 傳入 `get_upgrade_info` 會觸發 `ValueError`（`gear_manager.py:137`：`if mode not in UPGRADE_MODES: raise ValueError`）。Architecture Decisions 提到 `effective_mode = mode or "normal"` 的轉換，但沒有任何 Task 指定這個轉換的位置（應在進入 `get_upgrade_info` 之前）。需在 Task 3 明確列出此轉換點。
+- [x] Issue 3 (Major): `back_to_gear` handler 修正（當 `gear_type` 無效時改呼叫 `_render_gear(inter, None)` 而非 `return`）在 Task 3 描述中僅以「`back_to_gear` handler 修正」帶過，沒有明確說明行為變更。需在 Task 3 子任務中說明：移除 `return`，改呼叫 `_render_gear(inter, None)`。
+- [x] Issue 4 (Minor): 計畫中描述 sentinel 為小寫 `"none"`（例如 `upgrade_mode_select:none`），但 Python f-string 格式化 `None` 產生的是 `"None"`（大寫 N，即 `upgrade_mode_select:None`）。雖然兩者行為均安全（皆不在 `_VALID_GEAR_TYPES`），文件描述應更正為 `"None"` 以避免實作者誤解。
