@@ -1,7 +1,7 @@
 ---
 title: "Module: ui-renderer"
 doc_type: module
-last_reviewed: 2026-06-23
+last_reviewed: 2026-06-27
 source_paths:
   - src/cogs/ui_renderer.py
 ---
@@ -169,11 +169,16 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 - 墊檔：`消耗一半素材，直接獲得一個保底計數，不進行強化`
 - 鐵齒：`僅消耗 1 個素材，成功 +1~+3（50/35/15%），失敗則工具等級與 pity 均歸零`
 
+初始狀態：介面開啟時，工具類型 Dropdown 與強化模式 Dropdown 均不預設選中任何選項；
+兩個按鈕（🎲 強化工具、🩸 獻祭素材）及詞條管理入口在工具類型未選定前均 disabled。
+
 - **Button**：`🎲 強化工具`（Green，禁用條件：素材不足 / AP 不足 / 已達上限）
 - **Button**：`🩸 獻祭素材`（Red，禁用條件：所選工具類型素材 == 0）；custom_id: `sacrifice_material:{gear_type}`；與 🎲 強化工具、← 返回 **同一 ActionRow**，不佔新列
 - **Button**：`← 返回`（Gray）
 
 ### 詞條操作（`max_slots > 0` 時出現，佔一個 ActionRow）
+
+> 詞條管理入口（`open_affix_mgmt:{gear_type}`）開啟時，工具類型 Dropdown（`affix_gear_select`）不預設選中任何選項；未選定工具類型前，詞條操作按鈕均 disabled。
 
 - **Button**：`✨ 抽取詞條`（Blue，禁用條件：詞條槽已滿）；custom_id: `extract_affix:{gear_type}`
 - **Button**：`🗑️ 清除詞條`（Red，禁用條件：無詞條）；custom_id: `open_clear_affix:{gear_type}`

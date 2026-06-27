@@ -21,7 +21,7 @@ from core.formula import ACTION_MATERIAL_COL
 from core.settlement import change_action, settle_burst, settle_complete_cycles
 from core.utils import dt_str
 from database.schema import get_connection
-from managers import affix_manager, gear_manager, player_manager
+from managers import affix_manager, building_manager, gear_manager, player_manager
 
 _OWN_BUTTONS = frozenset({"burst_execute", "open_gear_upgrade", "back_to_main"})
 _OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:", "clear_affix:", "sacrifice_material:", "open_affix_mgmt:", "affix_extract:", "affix_clear:", "back_to_gear:")
@@ -44,6 +44,11 @@ def _is_own_dropdown(cid: str) -> bool:
 
 def _is_own_modal(cid: str) -> bool:
     return any(cid.startswith(p) for p in _OWN_MODAL_PREFIXES)
+
+def _make_player_gear(row):
+    if row:
+        return {"gathering": row[0], "building": row[1], "combat": row[2], "research": row[3]}
+    return {"gathering": 0, "building": 0, "combat": 0, "research": 0}
 
 
 class ActionsCog(commands.Cog):
@@ -147,15 +152,11 @@ class ActionsCog(commands.Cog):
         await inter.edit_original_response(embed=embed, components=components)
 
     async def _render_gear(
-        self, inter, gear_type: str, *, mode: str = "normal", result: dict | None = None, respond=None
+        self, inter, gear_type: str | None, *, mode: str | None = None, result: dict | None = None, respond=None
     ) -> None:
         user_id = str(inter.user.id)
         now = datetime.now(timezone.utc)
         async with get_connection() as db:
-            upgrade_info = await gear_manager.get_upgrade_info(db, user_id, gear_type, now, mode=mode)
-            gear_level = upgrade_info["gear_level"]
-            max_slots = affix_manager.slot_count(gear_level)
-            affixes = await affix_manager.get_affixes(db, user_id, gear_type)
             async with db.execute(
                 """SELECT gear_gathering, gear_building, gear_combat, gear_research
                    FROM players WHERE user_id=?""",
@@ -163,20 +164,24 @@ class ActionsCog(commands.Cog):
             ) as cur:
                 row = await cur.fetchone()
 
-        if row:
-            player_gear = {
-                "gathering": row[0],
-                "building": row[1],
-                "combat": row[2],
-                "research": row[3],
-            }
-        else:
-            player_gear = {
-                "gathering": 0,
-                "building": 0,
-                "combat": 0,
-                "research": 0,
-            }
+            if gear_type is None:
+                gear_cap = await building_manager.get_level(db, "research_lab")
+                player_gear = _make_player_gear(row)
+                embed = build_gear_embed({}, None, result)
+                components = build_gear_components(None, None, False, player_gear, gear_cap, materials=0)
+                if respond is not None:
+                    await respond(embed=embed, components=components)
+                else:
+                    await inter.edit_original_response(embed=embed, components=components)
+                return
+
+            effective_mode = mode or "normal"
+            upgrade_info = await gear_manager.get_upgrade_info(db, user_id, gear_type, now, mode=effective_mode)
+            gear_level = upgrade_info["gear_level"]
+            max_slots = affix_manager.slot_count(gear_level)
+            affixes = await affix_manager.get_affixes(db, user_id, gear_type)
+
+        player_gear = _make_player_gear(row)
 
         embed = build_gear_embed(upgrade_info, gear_type, result, affixes=affixes, max_slots=max_slots)
         components = build_gear_components(
@@ -188,14 +193,10 @@ class ActionsCog(commands.Cog):
         else:
             await inter.edit_original_response(embed=embed, components=components)
 
-    async def _render_affix(self, inter, gear_type: str, *, selected_slot: int | None = None) -> None:
+    async def _render_affix(self, inter, gear_type: str | None, *, selected_slot: int | None = None) -> None:
         user_id = str(inter.user.id)
         now = datetime.now(timezone.utc)
         async with get_connection() as db:
-            upgrade_info = await gear_manager.get_upgrade_info(db, user_id, gear_type, now)
-            gear_level = upgrade_info["gear_level"]
-            max_slots = affix_manager.slot_count(gear_level)
-            affixes = await affix_manager.get_affixes(db, user_id, gear_type)
             async with db.execute(
                 """SELECT gear_gathering, gear_building, gear_combat, gear_research
                    FROM players WHERE user_id=?""",
@@ -203,11 +204,20 @@ class ActionsCog(commands.Cog):
             ) as cur:
                 row = await cur.fetchone()
 
-        player_gear = (
-            {"gathering": row[0], "building": row[1], "combat": row[2], "research": row[3]}
-            if row
-            else {"gathering": 0, "building": 0, "combat": 0, "research": 0}
-        )
+            if gear_type is None:
+                gear_cap = await building_manager.get_level(db, "research_lab")
+                player_gear = _make_player_gear(row)
+                embed = build_affix_embed(None, player_gear, [], 0)
+                components = build_affix_components(None, player_gear, gear_cap, [], 0)
+                await inter.edit_original_response(embed=embed, components=components)
+                return
+
+            upgrade_info = await gear_manager.get_upgrade_info(db, user_id, gear_type, now)
+            gear_level = upgrade_info["gear_level"]
+            max_slots = affix_manager.slot_count(gear_level)
+            affixes = await affix_manager.get_affixes(db, user_id, gear_type)
+
+        player_gear = _make_player_gear(row)
         embed = build_affix_embed(gear_type, player_gear, affixes, max_slots, selected_slot=selected_slot)
         components = build_affix_components(
             gear_type, player_gear, upgrade_info["gear_cap"], affixes, max_slots, selected_slot=selected_slot
@@ -290,7 +300,7 @@ class ActionsCog(commands.Cog):
 
         elif cid == "open_gear_upgrade":
             await inter.response.defer()
-            await self._render_gear(inter, "gathering")
+            await self._render_gear(inter, None)
 
         elif cid == "back_to_main":
             await inter.response.defer()
@@ -404,7 +414,7 @@ class ActionsCog(commands.Cog):
             if gear_type not in _VALID_GEAR_TYPES:
                 return
             await inter.response.defer()
-            await self._render_affix(inter, gear_type)
+            await self._render_affix(inter, None)
 
         elif cid.startswith("affix_extract:"):
             gear_type = cid.split(":", 1)[1]
@@ -448,9 +458,10 @@ class ActionsCog(commands.Cog):
 
         elif cid.startswith("back_to_gear:"):
             gear_type = cid.split(":", 1)[1]
-            if gear_type not in _VALID_GEAR_TYPES:
-                return
             await inter.response.defer()
+            if gear_type not in _VALID_GEAR_TYPES:
+                await self._render_gear(inter, None)
+                return
             await self._render_gear(inter, gear_type)
 
         elif cid.startswith("sacrifice_material:"):

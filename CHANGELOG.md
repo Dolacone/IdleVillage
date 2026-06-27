@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-06-27
+
+- Gear upgrade interface: both dropdowns (tool type and upgrade mode) now start with no pre-selected item when first opened, showing only placeholder text. Matches the action select dropdown behavior.
+- Affix management interface: the tool type dropdown also starts with no pre-selected item when first opened.
+- Clicking "← 返回" from blank affix state now navigates back to blank gear upgrade state (instead of doing nothing).
+
 ## 2026-06-23
 
 - Added `/idlevillage-ranking` slash command. Displays each tool type's top-3 distinct gear levels and all players at those levels. Players at gear level 0 are excluded. Same-level players are all listed; levels are sorted descending with a stable secondary sort by user ID. Output uses Ephemeral content (plain text, not embed). Truncates at 1900 characters with a notice if the output is unusually long.
