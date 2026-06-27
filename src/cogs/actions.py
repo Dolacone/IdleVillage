@@ -45,6 +45,11 @@ def _is_own_dropdown(cid: str) -> bool:
 def _is_own_modal(cid: str) -> bool:
     return any(cid.startswith(p) for p in _OWN_MODAL_PREFIXES)
 
+def _make_player_gear(row):
+    if row:
+        return {"gathering": row[0], "building": row[1], "combat": row[2], "research": row[3]}
+    return {"gathering": 0, "building": 0, "combat": 0, "research": 0}
+
 
 class ActionsCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
@@ -161,11 +166,7 @@ class ActionsCog(commands.Cog):
 
             if gear_type is None:
                 gear_cap = await building_manager.get_level(db, "research_lab")
-                player_gear = (
-                    {"gathering": row[0], "building": row[1], "combat": row[2], "research": row[3]}
-                    if row
-                    else {"gathering": 0, "building": 0, "combat": 0, "research": 0}
-                )
+                player_gear = _make_player_gear(row)
                 embed = build_gear_embed({}, None, result)
                 components = build_gear_components(None, None, False, player_gear, gear_cap, materials=0)
                 if respond is not None:
@@ -180,11 +181,7 @@ class ActionsCog(commands.Cog):
             max_slots = affix_manager.slot_count(gear_level)
             affixes = await affix_manager.get_affixes(db, user_id, gear_type)
 
-        player_gear = (
-            {"gathering": row[0], "building": row[1], "combat": row[2], "research": row[3]}
-            if row
-            else {"gathering": 0, "building": 0, "combat": 0, "research": 0}
-        )
+        player_gear = _make_player_gear(row)
 
         embed = build_gear_embed(upgrade_info, gear_type, result, affixes=affixes, max_slots=max_slots)
         components = build_gear_components(
@@ -209,11 +206,7 @@ class ActionsCog(commands.Cog):
 
             if gear_type is None:
                 gear_cap = await building_manager.get_level(db, "research_lab")
-                player_gear = (
-                    {"gathering": row[0], "building": row[1], "combat": row[2], "research": row[3]}
-                    if row
-                    else {"gathering": 0, "building": 0, "combat": 0, "research": 0}
-                )
+                player_gear = _make_player_gear(row)
                 embed = build_affix_embed(None, player_gear, [], 0)
                 components = build_affix_components(None, player_gear, gear_cap, [], 0)
                 await inter.edit_original_response(embed=embed, components=components)
@@ -224,11 +217,7 @@ class ActionsCog(commands.Cog):
             max_slots = affix_manager.slot_count(gear_level)
             affixes = await affix_manager.get_affixes(db, user_id, gear_type)
 
-        player_gear = (
-            {"gathering": row[0], "building": row[1], "combat": row[2], "research": row[3]}
-            if row
-            else {"gathering": 0, "building": 0, "combat": 0, "research": 0}
-        )
+        player_gear = _make_player_gear(row)
         embed = build_affix_embed(gear_type, player_gear, affixes, max_slots, selected_slot=selected_slot)
         components = build_affix_components(
             gear_type, player_gear, upgrade_info["gear_cap"], affixes, max_slots, selected_slot=selected_slot
