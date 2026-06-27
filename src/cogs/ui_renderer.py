@@ -599,12 +599,14 @@ def build_gear_components(
 
 
 def build_affix_embed(
-    gear_type: str,
+    gear_type: str | None,
     player_gear: dict,
     affixes: list,
     max_slots: int,
     selected_slot: int | None = None,
 ) -> disnake.Embed:
+    if gear_type is None:
+        return disnake.Embed(description="🔮 詞條管理\n請選擇工具類型", color=disnake.Color.purple())
     label = GEAR_LABELS.get(gear_type, gear_type)
     lines = [f"🔮 詞條管理 — {ACTION_EMOJIS.get(gear_type, '')} {label}"]
     affix_section = _build_affix_section(affixes, max_slots)
@@ -622,7 +624,7 @@ def build_affix_embed(
 
 
 def build_affix_components(
-    gear_type: str,
+    gear_type: str | None,
     player_gear: dict,
     gear_cap: int,
     affixes: list,
@@ -653,6 +655,8 @@ def build_affix_components(
     ]
 
     is_full = len(affixes) >= max_slots
+    _gt = gear_type or "none"
+
     rows = [
         disnake.ui.ActionRow(
             disnake.ui.StringSelect(
@@ -676,7 +680,7 @@ def build_affix_components(
         rows.append(
             disnake.ui.ActionRow(
                 disnake.ui.StringSelect(
-                    custom_id=f"affix_slot_select:{gear_type}",
+                    custom_id=f"affix_slot_select:{_gt}",
                     placeholder="選擇要清除的詞條...",
                     options=affix_options,
                 )
@@ -688,19 +692,19 @@ def build_affix_components(
             disnake.ui.Button(
                 label="🗑️ 清除詞條",
                 style=disnake.ButtonStyle.danger,
-                custom_id=f"affix_clear:{gear_type}:{selected_slot}",
+                custom_id=f"affix_clear:{_gt}:{selected_slot}",
                 disabled=(selected_slot is None),
             ),
             disnake.ui.Button(
                 label="✨ 抽取詞條",
                 style=disnake.ButtonStyle.primary,
-                custom_id=f"affix_extract:{gear_type}",
+                custom_id=f"affix_extract:{_gt}",
                 disabled=is_full,
             ),
             disnake.ui.Button(
                 label="← 返回",
                 style=disnake.ButtonStyle.secondary,
-                custom_id=f"back_to_gear:{gear_type}",
+                custom_id=f"back_to_gear:{_gt}",
             ),
         )
     )
