@@ -1,6 +1,6 @@
 ---
 title: "強化工具與詞條管理 Dropdown 初始無預設選項"
-status: Refactored
+status: Done
 created: 2026-06-27
 doc_type: change
 last_reviewed: 2026-06-27
