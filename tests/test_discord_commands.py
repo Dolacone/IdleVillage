@@ -694,6 +694,48 @@ class TestGearEmbedRiskyLine(unittest.TestCase):
         self.assertIn("鐵齒率：0 x 0.01% = 0%", embed.description)
 
 
+class TestGearComponentsBlankState(unittest.TestCase):
+    """build_gear_embed and build_gear_components with gear_type=None show no pre-selected defaults."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def _player_gear(self):
+        return {"gathering": 1, "building": 0, "combat": 0, "research": 0}
+
+    def test_blank_embed_returned_when_gear_type_is_none(self):
+        from cogs.ui_renderer import build_gear_embed
+        embed = build_gear_embed({}, None)
+        self.assertIn("🔨 工具強化", embed.description)
+
+    def test_gear_dropdown_has_no_default_when_gear_type_is_none(self):
+        from cogs.ui_renderer import build_gear_components
+        rows = build_gear_components(None, None, False, self._player_gear(), gear_cap=5)
+        gear_select = rows[0].children[0]
+        self.assertFalse(any(opt.default for opt in gear_select.options))
+
+    def test_mode_dropdown_has_no_default_when_mode_is_none(self):
+        from cogs.ui_renderer import build_gear_components
+        rows = build_gear_components(None, None, False, self._player_gear(), gear_cap=5)
+        mode_select = rows[1].children[0]
+        self.assertFalse(any(opt.default for opt in mode_select.options))
+
+    def test_attempt_button_disabled_when_mode_is_none(self):
+        from cogs.ui_renderer import build_gear_components
+        rows = build_gear_components("gathering", None, True, self._player_gear(), gear_cap=5)
+        buttons = {c.custom_id: c for row in rows for c in row.children if hasattr(c, "custom_id")}
+        attempt_btn = next((c for cid, c in buttons.items() if cid.startswith("attempt_upgrade:")), None)
+        self.assertIsNotNone(attempt_btn)
+        self.assertTrue(attempt_btn.disabled)
+
+    def test_mode_dropdown_custom_id_uses_sentinel_when_gear_type_is_none(self):
+        from cogs.ui_renderer import build_gear_components
+        rows = build_gear_components(None, None, False, self._player_gear(), gear_cap=5)
+        mode_select = rows[1].children[0]
+        self.assertEqual(mode_select.custom_id, "upgrade_mode_select:none")
+
+
 class TestRiskyDropdownDescription(unittest.TestCase):
     """Risky dropdown description reflects updated mechanics."""
 

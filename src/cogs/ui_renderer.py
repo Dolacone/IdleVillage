@@ -407,12 +407,14 @@ def _build_affix_section(affixes: list, max_slots: int) -> str:
 
 def build_gear_embed(
     upgrade_info: dict,
-    gear_type: str,
+    gear_type: str | None,
     result: dict | None = None,
     *,
     affixes: list | None = None,
     max_slots: int = 0,
 ) -> disnake.Embed:
+    if gear_type is None:
+        return disnake.Embed(description="🔨 工具強化\n請選擇工具類型與強化模式", color=disnake.Color.blue())
     label = GEAR_LABELS.get(gear_type, gear_type)
     emoji = ACTION_EMOJIS.get(gear_type, "")
     mat_label = f"{emoji} {ACTION_LABELS.get(gear_type, gear_type)} 素材"
@@ -510,8 +512,8 @@ _UPGRADE_MODE_DEFS = (
 
 
 def build_gear_components(
-    gear_type: str,
-    mode: str,
+    gear_type: str | None,
+    mode: str | None,
     can_attempt: bool,
     player_gear: dict,
     gear_cap: int,
@@ -548,6 +550,9 @@ def build_gear_components(
         for label, value, desc in _UPGRADE_MODE_DEFS
     ]
 
+    _gt = gear_type or "none"
+    _m = mode or "normal"
+
     rows = [
         disnake.ui.ActionRow(
             disnake.ui.StringSelect(
@@ -558,7 +563,7 @@ def build_gear_components(
         ),
         disnake.ui.ActionRow(
             disnake.ui.StringSelect(
-                custom_id=f"upgrade_mode_select:{gear_type}",
+                custom_id=f"upgrade_mode_select:{_gt}",
                 placeholder="選擇強化模式...",
                 options=mode_options,
             )
@@ -567,19 +572,19 @@ def build_gear_components(
             disnake.ui.Button(
                 label="🎲 強化工具",
                 style=disnake.ButtonStyle.success,
-                custom_id=f"attempt_upgrade:{gear_type}:{mode}",
-                disabled=not can_attempt,
+                custom_id=f"attempt_upgrade:{_gt}:{_m}",
+                disabled=not can_attempt or mode is None,
             ),
             disnake.ui.Button(
                 label="🩸 獻祭素材",
                 style=disnake.ButtonStyle.danger,
-                custom_id=f"sacrifice_material:{gear_type}",
+                custom_id=f"sacrifice_material:{_gt}",
                 disabled=(materials == 0),
             ),
             disnake.ui.Button(
                 label="🔮 詞條管理",
                 style=disnake.ButtonStyle.primary,
-                custom_id=f"open_affix_mgmt:{gear_type}",
+                custom_id=f"open_affix_mgmt:{_gt}",
                 disabled=(max_slots == 0),
             ),
             disnake.ui.Button(
