@@ -1,6 +1,6 @@
 ---
 title: "新指令：村莊試煉"
-status: Reviewed
+status: Refactored
 created: 2026-07-14
 doc_type: change
 last_reviewed: 2026-07-14
