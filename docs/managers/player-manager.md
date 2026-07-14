@@ -1,7 +1,7 @@
 ---
 title: "Module: player-manager"
 doc_type: module
-last_reviewed: 2026-06-23
+last_reviewed: 2026-07-14
 source_paths:
   - src/managers/player_manager.py
 ---
@@ -28,6 +28,7 @@ source_paths:
 | `materials_building` | int | 0 | 建設素材（建設用） |
 | `materials_combat` | int | 0 | 戰鬥素材（狩獵工具用） |
 | `materials_research` | int | 0 | 研究素材（研究用） |
+| `materials_universal` | int | 0 | 萬能素材，可作為任意類型素材使用；目前無任何獲取管道（僅為佔位），只能由管理員透過 `setMaterial` 設定 |
 | `gear_gathering` | int | 0 | 採集工具等級 |
 | `gear_building` | int | 0 | 建設工具等級 |
 | `gear_combat` | int | 0 | 狩獵工具等級 |
@@ -69,6 +70,12 @@ source_paths:
 - 素材個人持有，不進入村莊資源池。
 - 唯一用途：工具強化（呼叫 gear-manager）。
 
+## 萬能素材
+
+- `materials_universal` 可作為任意類型素材使用，但**僅限**工具強化（gear-manager `attempt_upgrade`，標準/墊檔/鐵齒三種模式）的素材消耗補足差額，詳見 `managers/gear-manager.md`。
+- 獻祭素材（`sacrifice_material`）與詞條抽取/清除（`affix-manager`）不吃萬能素材，僅使用該類型自身素材。
+- 目前無任何掉落或產出管道可取得萬能素材，僅能由管理員透過 `/idlevillage-manager` 呼叫 `setUniversalMaterial` 設定，作為佔位驗證用途。
+
 ## 操作介面（供其他模組呼叫）
 
 - `setAction(playerId, action, target?)` — 設定行動與目標
@@ -77,6 +84,10 @@ source_paths:
 - `spendAP(playerId, amount)` — 扣除 AP 並更新 `ap_full_time`
 - `addMaterial(playerId, type, amount)` — 增加素材
 - `spendMaterial(playerId, type, amount)` — 扣除素材（不足則拒絕）
+- `getUniversalMaterial(playerId)` — 取得萬能素材持有量
+- `addUniversalMaterial(playerId, amount)` — 增加萬能素材
+- `spendUniversalMaterial(playerId, amount)` — 扣除萬能素材（不足則拒絕）
+- `setUniversalMaterial(playerId, amount)` — 直接設定萬能素材數量（絕對值，供管理員使用）
 - `getGearLevel(playerId, type)` — 取得裝備等級
 - `setGearLevel(playerId, type, level)` — 設定裝備等級
 - `getPity(playerId, type)` — 取得保底計數
@@ -88,6 +99,7 @@ source_paths:
 
 ## Changelog
 
+- 2026-07-14: Added `materials_universal` field and `getUniversalMaterial()`/`addUniversalMaterial()`/`spendUniversalMaterial()`/`setUniversalMaterial()`. Universal material substitutes for any gear-type material, but only as a gear-upgrade shortfall fallback (see gear-manager.md); currently has no acquisition path other than admin `setUniversalMaterial`.
 - 2026.05.15: Added `risky_failed_levels` field, `setMaterial()`, and `setRiskyFailedLevels()` for admin management support.
 - 2026.05.08.00: Documented stage-matching material drop boost.
 - 2026.05.06.01: Official user-facing gear naming changed to tools:
