@@ -149,11 +149,12 @@ async def get_upgrade_info(db, user_id: str, gear_type: str, now: datetime, mode
     rate = min(1.0, base_rate + bonuses["upgrade_success"] / 100.0)
 
     materials = await _get_materials(db, user_id, gear_type)
+    universal_materials = await player_manager.get_universal_material(db, user_id)
 
     can_attempt = (
         gear_level < gear_cap
         and ap >= 1
-        and materials >= material_cost
+        and (materials + universal_materials) >= material_cost
     )
     result = {
         "gear_level": gear_level,
@@ -165,6 +166,7 @@ async def get_upgrade_info(db, user_id: str, gear_type: str, now: datetime, mode
         "can_attempt": can_attempt,
         "gear_cap": gear_cap,
         "materials": materials,
+        "universal_materials": universal_materials,
         "mode": mode,
     }
     if mode in ("normal", "risky"):
@@ -181,7 +183,11 @@ async def attempt_upgrade(db, user_id: str, gear_type: str, now: datetime, mode:
       - valid mode ("normal" / "buffer" / "risky")
       - gear_level < research_lab level (gear cap)
       - player has >= 1 AP
-      - player has >= material_cost materials for the chosen mode
+      - player's (gear_type materials + universal materials) >= material_cost for the chosen mode
+
+    Own-type material is spent first (up to material_cost); any shortfall is drawn from
+    universal material. If upgrade_material_refund triggers, only the own-type-sourced
+    portion is refunded (never the universal-sourced portion).
 
     Modes:
       normal — spend target_level materials, roll; success: gear+1 pity=0, failure: pity+1
@@ -210,11 +216,20 @@ async def attempt_upgrade(db, user_id: str, gear_type: str, now: datetime, mode:
     material_cost = _material_cost(target_level, mode, upgrade_cost_reduce_pct=bonuses["upgrade_cost_reduce"])
 
     materials = await _get_materials(db, user_id, gear_type)
-    if materials < material_cost:
-        raise ValueError(f"Insufficient materials: need {material_cost}, have {materials}")
+    universal_materials = await player_manager.get_universal_material(db, user_id)
+    if materials + universal_materials < material_cost:
+        raise ValueError(
+            f"Insufficient materials: need {material_cost}, have {materials} "
+            f"(+{universal_materials} universal)"
+        )
 
     await player_manager.spend_ap(db, user_id, 1, now)
-    await player_manager.spend_material(db, user_id, gear_type, material_cost, now)
+    from_type = min(material_cost, materials)
+    if from_type > 0:
+        await player_manager.spend_material(db, user_id, gear_type, from_type, now)
+    shortfall = material_cost - from_type
+    if shortfall > 0:
+        await player_manager.spend_universal_material(db, user_id, shortfall, now)
 
     pity = await player_manager.get_pity(db, user_id, gear_type)
     risky_failed_levels = await _get_risky_failed_levels(db, user_id)
@@ -253,7 +268,8 @@ async def attempt_upgrade(db, user_id: str, gear_type: str, now: datetime, mode:
             await player_manager.refund_ap(db, user_id, 1, now)
             ap_refunded = True
         if bonuses["upgrade_material_refund"] > 0 and random.random() < bonuses["upgrade_material_refund"] / 100.0:
-            await player_manager.add_material(db, user_id, gear_type, material_cost, now)
+            if from_type > 0:
+                await player_manager.add_material(db, user_id, gear_type, from_type, now)
             material_refunded = True
     elif mode == "risky":
         await _add_risky_failed_levels(db, user_id, gear_level, now)
