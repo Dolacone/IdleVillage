@@ -1,6 +1,6 @@
 ---
 title: "新指令：村莊試煉"
-status: Ready-to-implement
+status: Ready-to-review
 created: 2026-07-14
 doc_type: change
 last_reviewed: 2026-07-14
@@ -15,6 +15,8 @@ source_paths:
   - src/core/notification.py
   - src/cogs/actions.py
   - src/cogs/general.py
+  - src/cogs/trial_cog.py
+  - src/main.py
 scope: "Tracks the village trial (試煉) feature from design through review: a global, resource-funded, timed community goal that rewards participants with universal material by contribution."
 ---
 
@@ -134,7 +136,7 @@ scope: "Tracks the village trial (試煉) feature from design through review: a 
   - Depends on: Task 1, Task 3
   - Acceptance: `actions.py._fetch_all_data` 與 `general.py._fetch_village_data` 皆查詢 `trial_state`（與 `actions.py` 額外查詢當前玩家的 `trial_contributions`），並傳入 `build_main_embed`/`build_village_embed`；既有指令測試不受影響且全數通過
 
-- [ ] Task 8: 新指令 `/idlevillage-trial`
+- [x] Task 8: 新指令 `/idlevillage-trial`
   - Files: `src/cogs/trial_cog.py`（新檔）, `src/main.py`（將 `"cogs.trial_cog"` 加入既有 `initial_extensions` 列表，非新增獨立的 `bot.load_extension()` 呼叫；非核心邏輯變更，仍在 2 檔限制內）
   - Tests: 新增 `tests/test_trial_cog.py`，涵蓋：(a) 非指定 Guild 時拒絕執行；(b) `target` 非 `TRIAL_TARGET_STEP` 整數倍時回覆 Ephemeral 錯誤且不呼叫 `start_trial`；(c) 已有進行中試煉、冷卻未過、資源不足三種前置條件失敗時分別回覆對應錯誤訊息；(d) 成功開啟時呼叫 `trial_manager.start_trial`、回覆 Ephemeral 確認、並 dispatch 一則 `trial_start` Public 通知
   - Depends on: Task 2, Task 6

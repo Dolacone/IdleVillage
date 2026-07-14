@@ -54,7 +54,7 @@ class StartupShellBehavior(unittest.TestCase):
         self.assertTrue(fake_bot.startup_loop_was_open)
         self.assertEqual(
             loaded_extensions,
-            ["cogs.general", "cogs.events", "cogs.actions", "cogs.player_manager_cog"],
+            ["cogs.general", "cogs.events", "cogs.actions", "cogs.player_manager_cog", "cogs.trial_cog"],
         )
         self.assertEqual(fake_bot.token, ALL_TEST_ENV["DISCORD_TOKEN"])
 
