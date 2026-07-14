@@ -78,7 +78,7 @@ async def _run_one_cycle(
     building_pre_events: list[dict] = []  # buffered until after stage events
 
     player = await _read_player(db, user_id)
-    if player is None or player["action"] is None:
+    if player is None or player["action"] is None or player["action"] not in VALID_ACTIONS:
         return events
 
     action: str = player["action"]
@@ -306,8 +306,9 @@ async def change_action(
             player = await _read_player(db, user_id)
             last_update_time_str = player["last_update_time"]
 
-        # Step 2: Partial cycle for old action (skipped if first-time or no old action)
-        if old_action is not None and last_update_time_str is not None:
+        # Step 2: Partial cycle for old action (skipped if first-time, no old action,
+        # or old_action is no longer a recognized action, e.g. residual pre-removal state)
+        if old_action is not None and old_action in VALID_ACTIONS and last_update_time_str is not None:
             last_update = parse_dt(last_update_time_str)
             if old_affix_bonuses is None:
                 old_affix_bonuses = await affix_manager.get_affix_bonuses(db, user_id, old_action)

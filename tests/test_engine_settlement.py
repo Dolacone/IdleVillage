@@ -1069,5 +1069,39 @@ class AffixIntegrationTest(SettlementTestBase):
         self.assertEqual(row[0], expected_food)
 
 
+
+# ---------------------------------------------------------------------------
+# Residual pre-removal action='offering' state (post offering-system removal)
+# ---------------------------------------------------------------------------
+
+class ResidualOfferingActionTest(SettlementTestBase):
+    """A player who still has the removed 'offering' action stored from before
+    the offering system was removed must not crash settlement or be stuck."""
+
+    async def test_settle_complete_cycles_does_not_raise(self):
+        cycle_end = _now() - timedelta(minutes=1)
+        await self._insert_player(
+            action="offering",
+            action_target="food",
+            completion_time=cycle_end,
+            last_update_time=cycle_end - timedelta(minutes=10),
+        )
+        events = await settle_complete_cycles(self.TEST_USER, _now())
+        self.assertEqual(events, [])
+
+    async def test_change_action_recovers_from_residual_offering(self):
+        """Player can still switch to a valid action despite residual action='offering'."""
+        cycle_end = _now() - timedelta(minutes=1)
+        await self._insert_player(
+            action="offering",
+            action_target="food",
+            completion_time=cycle_end,
+            last_update_time=cycle_end - timedelta(minutes=10),
+        )
+        await change_action(self.TEST_USER, "gathering", None, _now())
+        player = await self._get_player()
+        self.assertEqual(player["action"], "gathering")
+
+
 if __name__ == "__main__":
     unittest.main()
