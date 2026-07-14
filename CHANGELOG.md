@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-14
+
+- Removed the "奉獻" (Offering) action system entirely: `village_state.offering_accumulator` column, `OFFERING_THRESHOLD_PER_PLAYER` env var, offering settlement logic, offering-threshold public notification, and the action dropdown option / resource-select dropdown / Dashboard progress line in the UI. Players are back to the original 4 actions (採集/建設/戰鬥/研究).
+
 ## 2026-06-27
 
 - Gear upgrade interface: both dropdowns (tool type and upgrade mode) now start with no pre-selected item when first opened, showing only placeholder text. Matches the action select dropdown behavior.

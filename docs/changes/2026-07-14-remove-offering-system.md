@@ -1,6 +1,6 @@
 ---
 title: "移除奉獻系統"
-status: Refactored
+status: Done
 created: 2026-07-14
 doc_type: change
 last_reviewed: 2026-07-14
@@ -92,5 +92,5 @@ scope: "Tracks removal of the offering (奉獻) player action system from design
 
 - [x] [Major] `src/core/formula.py:64,71` (`compute_output`) indexes `ACTION_GEAR_COL[action]` / `ACTION_FACILITY_BUILDING[action]` with plain dict lookups, and both entries for `"offering"` were removed. If a player still has `action='offering'` in the DB at deploy time (the risk explicitly accepted in Key Assumptions / Architecture Decision #3), `settle_complete_cycles` (`src/core/settlement.py:100`, calling `compute_output` after the offering branch was deleted) and `change_action`'s partial-cycle path (`src/core/settlement.py:327`, now unconditionally calling `compute_output(db, user_id, old_action, ...)` for any `old_action` including `"offering"`) will raise an unhandled `KeyError` instead of the "natural override on next action change" behavior the change document promises (`docs/changes/2026-07-14-remove-offering-system.md` Key Assumptions: "部署後由該玩家下次設定新行動時自然覆蓋"). This contradicts the documented assumption: the player cannot change action either, since `change_action` itself crashes before reaching the "write new action" step — there is no code path that lets an affected player recover without a manual DB fix.
   - Fix: `_run_one_cycle` now treats any `player["action"]` not in `VALID_ACTIONS` (e.g. residual `"offering"`) the same as `None` — skip immediately with no side effects. `change_action`'s Step 2 partial-cycle path now also requires `old_action in VALID_ACTIONS` before computing output, so a residual `"offering"` player falls through to Step 3 and can successfully set a new valid action. Added `ResidualOfferingActionTest` in `tests/test_engine_settlement.py` covering both `settle_complete_cycles` (no crash, no events) and `change_action` (successfully recovers to a valid action).
-- [ ] [Minor] Root `CHANGELOG.md` was not updated with an entry for this removal, even though the original addition (2026-05-23 offering action) has a CHANGELOG entry (`CHANGELOG.md:31`) and the repo's recent commit history shows a pattern of adding changelog entries for change-document-tracked work (e.g. commit `9d6362e chore: add changelog entry and mark change document Done`).
-  - Deferred to `pr` stage, which adds the CHANGELOG.md entry per this skill's standard process.
+- [x] [Minor] Root `CHANGELOG.md` was not updated with an entry for this removal, even though the original addition (2026-05-23 offering action) has a CHANGELOG entry (`CHANGELOG.md:31`) and the repo's recent commit history shows a pattern of adding changelog entries for change-document-tracked work (e.g. commit `9d6362e chore: add changelog entry and mark change document Done`).
+  - Fixed at `pr` stage: added a 2026-07-14 CHANGELOG.md entry summarizing the removal.
