@@ -98,10 +98,12 @@ def _action_display_name(action: str, action_target: str | None = None) -> str:
 
 def _build_village_section(
     stage_data: dict, resources: dict, buildings: dict, action_counts: list,
+    trial_data: dict | None = None,
 ) -> str:
     """
     Return the village status block as a text string.
     action_counts: list of (action, action_target, count) tuples.
+    trial_data: current trial_state row, or None/{} if there is no active trial.
     """
     unix_ts = _unix_from_iso(stage_data.get("updated_at", ""))
 
@@ -120,6 +122,23 @@ def _build_village_section(
     now_ts = int(datetime.now(timezone.utc).timestamp())
     is_overtime = stage_started_unix > 0 and (now_ts - stage_started_unix) > overtime_secs
     overtime_line = "   ⚠️ 逾時！通關效率已降低（產出計分 ×0.5）\n" if is_overtime else ""
+
+    trial_data = trial_data or {}
+    trial_line = ""
+    if trial_data.get("is_active"):
+        t_resource = trial_data.get("resource_type") or "food"
+        t_progress = trial_data.get("progress", 0)
+        t_target = trial_data.get("target", 1)
+        t_pct = math.floor(t_progress / max(t_target, 1) * 100)
+        t_bar = _progress_bar(t_progress, t_target)
+        t_deadline_unix = _unix_from_iso(trial_data.get("started_at", "")) + get_env_int("TRIAL_DURATION_SECONDS")
+        t_emoji = RESOURCE_EMOJIS.get(t_resource, "")
+        t_label = RESOURCE_LABELS.get(t_resource, t_resource)
+        trial_line = (
+            f"\n🏆 試煉 {t_emoji}{t_label} {t_progress} / {t_target} ({t_pct}%)\n"
+            f"   {t_bar}\n"
+            f"   ⏰ 期限: <t:{t_deadline_unix}:R>\n"
+        )
 
     food = resources.get("food", 0)
     wood = resources.get("wood", 0)
@@ -153,6 +172,7 @@ def _build_village_section(
         f"   {bar}  {progress} / {target} ({pct}%)\n"
         f"   ⏰ 期限: <t:{deadline_unix}:R>\n"
         f"{overtime_line}"
+        f"{trial_line}"
         f"\n公用資源\n"
         f"🌾 {food} | 🪵 {wood} | 🧠 {knowledge}\n"
         f"\n公用設施 (等級上限：Lv{level_cap})\n"
@@ -164,8 +184,9 @@ def _build_village_section(
 
 def build_village_embed(
     stage_data: dict, resources: dict, buildings: dict, action_counts: list,
+    trial_data: dict | None = None,
 ) -> disnake.Embed:
-    text = _build_village_section(stage_data, resources, buildings, action_counts)
+    text = _build_village_section(stage_data, resources, buildings, action_counts, trial_data)
     return disnake.Embed(description=text, color=disnake.Color.blue())
 
 
@@ -175,8 +196,10 @@ def build_main_embed(
     buildings: dict,
     action_counts: list,
     player_row: dict,
+    trial_data: dict | None = None,
+    trial_contribution: int = 0,
 ) -> disnake.Embed:
-    village_text = _build_village_section(stage_data, resources, buildings, action_counts)
+    village_text = _build_village_section(stage_data, resources, buildings, action_counts, trial_data)
 
     gear_parts = [
         f"{ACTION_EMOJIS[a]} {player_row.get(f'gear_{a}', 0)}"
@@ -231,6 +254,8 @@ def build_main_embed(
     else:
         ap_line = f"⚡ AP：{ap} / {ap_cap}"
 
+    trial_contrib_line = f"\n🏆 試煉貢獻：{trial_contribution}" if (trial_data or {}).get("is_active") else ""
+
     player_section = (
         f"\n**個人資訊**\n"
         f"📊 效率：{' | '.join(efficiency_parts)}\n"
@@ -238,6 +263,7 @@ def build_main_embed(
         f"🎒 素材：{' | '.join(mat_parts)}\n"
         f"{action_line}\n"
         f"{ap_line}"
+        f"{trial_contrib_line}"
     )
 
     return disnake.Embed(description=village_text + player_section, color=disnake.Color.blue())

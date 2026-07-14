@@ -9,6 +9,7 @@ source_paths:
   - src/core/config.py
   - .env.example
   - src/managers/trial_manager.py
+  - src/cogs/ui_renderer.py
 scope: "Tracks the village trial (試煉) feature from design through review: a global, resource-funded, timed community goal that rewards participants with universal material by contribution."
 ---
 
@@ -98,7 +99,7 @@ scope: "Tracks the village trial (試煉) feature from design through review: a 
   - Depends on: Task 1
   - Acceptance: 所有前置條件、進度累加、逾時（兩種觸發路徑共用同一失敗邏輯）、獎勵分配（ceil 無條件進位、可能總額略高於 target/divisor）行為與 `docs/managers/trial-manager.md` 一致；測試通過
 
-- [ ] Task 3: ui_renderer.py — Dashboard 與個人主介面新增試煉顯示
+- [x] Task 3: ui_renderer.py — Dashboard 與個人主介面新增試煉顯示
   - Files: `src/cogs/ui_renderer.py`
   - Tests: 更新 `tests/test_discord_commands.py`，涵蓋：(a) 試煉進行中時村莊區塊出現試煉進度列（含資源圖示/名稱、進度、期限）；(b) 試煉未進行時村莊區塊不出現試煉列；(c) 個人資訊區塊試煉進行中時出現「試煉貢獻」列；(d) 試煉未進行時不出現該列；(e) 呼叫端未傳入 `trial_data`（沿用預設值）時行為與試煉未進行時相同，確保既有呼叫端在 Task 6/7 串接前不會出錯
   - Depends on: Task 2（`trial_data`/貢獻值資料形狀）

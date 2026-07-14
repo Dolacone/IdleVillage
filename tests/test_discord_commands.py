@@ -315,6 +315,37 @@ class TestRendererVillageEmbed(unittest.TestCase):
         gather_idx = desc.index("採集")
         self.assertLess(combat_idx, gather_idx, "Higher count action should appear first")
 
+    def _make_trial_data(self, is_active=1):
+        now = datetime.now(timezone.utc).isoformat()
+        return {
+            "is_active": is_active,
+            "resource_type": "wood",
+            "target": 5000,
+            "progress": 2000,
+            "started_at": now,
+            "ended_at": None,
+        }
+
+    def test_embed_shows_trial_line_when_active(self):
+        from cogs.ui_renderer import build_village_embed
+        embed = build_village_embed(
+            self._make_stage_data(), {}, {}, [], self._make_trial_data()
+        )
+        desc = embed.description
+        self.assertIn("🏆 試煉 🪵木頭 2000 / 5000 (40%)", desc)
+
+    def test_embed_omits_trial_line_when_inactive(self):
+        from cogs.ui_renderer import build_village_embed
+        embed = build_village_embed(
+            self._make_stage_data(), {}, {}, [], self._make_trial_data(is_active=0)
+        )
+        self.assertNotIn("🏆 試煉", embed.description)
+
+    def test_embed_omits_trial_line_when_trial_data_not_provided(self):
+        from cogs.ui_renderer import build_village_embed
+        embed = build_village_embed(self._make_stage_data(), {}, {}, [])
+        self.assertNotIn("🏆 試煉", embed.description)
+
 
 class TestRendererMainEmbed(unittest.TestCase):
     """build_main_embed includes player status section."""
@@ -366,6 +397,21 @@ class TestRendererMainEmbed(unittest.TestCase):
         player = self._make_player(action=None)
         embed = build_main_embed(self._make_stage_data(), {}, {}, [], player)
         self.assertIn("未設定", embed.description)
+
+    def test_embed_shows_trial_contribution_when_active(self):
+        from cogs.ui_renderer import build_main_embed
+        player = self._make_player()
+        trial_data = {"is_active": 1, "resource_type": "food", "target": 1000, "progress": 100}
+        embed = build_main_embed(
+            self._make_stage_data(), {}, {}, [], player, trial_data, 42
+        )
+        self.assertIn("🏆 試煉貢獻：42", embed.description)
+
+    def test_embed_omits_trial_contribution_when_inactive(self):
+        from cogs.ui_renderer import build_main_embed
+        player = self._make_player()
+        embed = build_main_embed(self._make_stage_data(), {}, {}, [], player)
+        self.assertNotIn("試煉貢獻", embed.description)
 
     def test_embed_gear_levels_shown(self):
         from cogs.ui_renderer import build_main_embed
