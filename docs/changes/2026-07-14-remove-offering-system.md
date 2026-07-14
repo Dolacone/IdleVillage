@@ -1,6 +1,6 @@
 ---
 title: "移除奉獻系統"
-status: Ready-to-implement
+status: Ready-to-review
 created: 2026-07-14
 doc_type: change
 last_reviewed: 2026-07-14
@@ -11,6 +11,17 @@ source_paths:
   - docs/discord/ui-renderer.md
   - docs/discord/command-handler.md
   - docs/discord/notification.md
+  - src/database/schema.py
+  - src/core/config.py
+  - src/core/formula.py
+  - src/core/settlement.py
+  - src/core/notification.py
+  - src/cogs/actions.py
+  - src/cogs/ui_renderer.py
+  - .env.example
+  - tests/support.py
+  - tests/test_engine_formula.py
+  - tests/test_engine_settlement.py
 scope: "Tracks removal of the offering (奉獻) player action system from design through review."
 ---
 
@@ -67,7 +78,7 @@ scope: "Tracks removal of the offering (奉獻) player action system from design
   - Depends on: Task 2
   - Acceptance: notification.py 不再發送奉獻達標通知；既有通知（關卡通關/升級關/建築升級/工具強化/詞條）行為與順序不受影響；相關測試（若有）通過
 
-- [ ] Task 4: UI + 互動路由移除 — 行動下拉選單移除奉獻選項、移除 `offering_resource_select` 路由、Dashboard 移除奉獻進度行、村民行動列表移除奉獻變體
+- [x] Task 4: UI + 互動路由移除 — 行動下拉選單移除奉獻選項、移除 `offering_resource_select` 路由、Dashboard 移除奉獻進度行、村民行動列表移除奉獻變體
   - Files: `src/cogs/actions.py`, `src/cogs/ui_renderer.py`
   - Depends on: Task 2, Task 3
   - Acceptance: `/idlevillage` 行動下拉選單僅剩採集/建設/戰鬥/研究；不再出現奉獻資源選擇 Dropdown；Dashboard embed 不含 🎁 奉獻進度行；村民行動列表不含奉獻相關項目；相關測試通過
