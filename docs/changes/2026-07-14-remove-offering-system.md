@@ -1,6 +1,6 @@
 ---
 title: "移除奉獻系統"
-status: Ready-to-review
+status: Issues-confirmed
 created: 2026-07-14
 doc_type: change
 last_reviewed: 2026-07-14
@@ -83,9 +83,12 @@ scope: "Tracks removal of the offering (奉獻) player action system from design
   - Depends on: Task 2, Task 3
   - Acceptance: `/idlevillage` 行動下拉選單僅剩採集/建設/戰鬥/研究；不再出現奉獻資源選擇 Dropdown；Dashboard embed 不含 🎁 奉獻進度行；村民行動列表不含奉獻相關項目；相關測試通過
 
-## Review Issues
-
 ## Plan Review Issues
 
 - [x] Task 4 的 `Depends on: Task 2` 與 Architecture Decisions #1 所述依賴順序（schema/config → formula/settlement → notification → UI/command routing）不一致：該決策明確要求 UI 移除排在 notification 之後，但 Task 4 未宣告依賴 Task 3，導致實作時可能與 Task 3 並行或提前執行，UI 完成時 notification.py 的奉獻達標通知仍未移除。請將 Task 4 的 Depends on 改為「Task 2, Task 3」，或修改 Architecture Decisions #1 說明實際不需要此順序。
 - [x] Key Assumptions 第三點「現有正在進行中的奉獻行動...需於 plan 階段確認是否需要遷移腳本清理殘留狀態」仍以待確認的問句語氣呈現，但文件狀態已是 `Ready-to-implement`，且 Architecture Decisions #3 已將此議題定案為「不建立遷移腳本」。建議將 Key Assumptions 第三點改寫為確定性陳述（呼應 Architecture Decisions #3 的結論），避免與文件目前狀態矛盾。
+
+## Review Issues
+
+- [ ] [Major] `src/core/formula.py:64,71` (`compute_output`) indexes `ACTION_GEAR_COL[action]` / `ACTION_FACILITY_BUILDING[action]` with plain dict lookups, and both entries for `"offering"` were removed. If a player still has `action='offering'` in the DB at deploy time (the risk explicitly accepted in Key Assumptions / Architecture Decision #3), `settle_complete_cycles` (`src/core/settlement.py:100`, calling `compute_output` after the offering branch was deleted) and `change_action`'s partial-cycle path (`src/core/settlement.py:327`, now unconditionally calling `compute_output(db, user_id, old_action, ...)` for any `old_action` including `"offering"`) will raise an unhandled `KeyError` instead of the "natural override on next action change" behavior the change document promises (`docs/changes/2026-07-14-remove-offering-system.md` Key Assumptions: "部署後由該玩家下次設定新行動時自然覆蓋"). This contradicts the documented assumption: the player cannot change action either, since `change_action` itself crashes before reaching the "write new action" step — there is no code path that lets an affected player recover without a manual DB fix.
+- [ ] [Minor] Root `CHANGELOG.md` was not updated with an entry for this removal, even though the original addition (2026-05-23 offering action) has a CHANGELOG entry (`CHANGELOG.md:31`) and the repo's recent commit history shows a pattern of adding changelog entries for change-document-tracked work (e.g. commit `9d6362e chore: add changelog entry and mark change document Done`).
