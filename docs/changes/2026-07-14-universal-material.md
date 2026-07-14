@@ -1,6 +1,6 @@
 ---
 title: "新素材：萬能素材"
-status: Ready-to-review
+status: Reviewed
 created: 2026-07-14
 doc_type: change
 last_reviewed: 2026-07-14
@@ -110,3 +110,7 @@ shortfall = max(0, material_cost - materials[gear_type])
 ## Review Issues
 
 - [x] [Major] `src/database/schema.py`: `_migrate_v2_columns()` (lines ~173-192) was not updated to add `materials_universal` for existing installations. `CREATE TABLE IF NOT EXISTS` (line 83) only affects brand-new databases; on any pre-existing `players` table, `init_db()` leaves the schema unchanged, so the first call to `get_universal_material`/`spend_universal_material`/etc. (e.g. during `/idlevillage` gear upgrade or the `/idlevillage-manager` panel) will fail with `sqlite3.OperationalError: no such column: materials_universal`. This codebase already has a precedent additive-migration mechanism for exactly this case (`risky_failed_levels`, `offering_accumulator`); `materials_universal` needs the same `ALTER TABLE players ADD COLUMN ...` treatment in `_migrate_v2_columns()`. Task 1's acceptance criteria only checked the CREATE TABLE SQL and schema-init tests, which run against fresh databases and did not surface this gap.
+
+## Review Issues (Re-review 2026-07-14)
+
+- No new findings. `_migrate_v2_columns()` fix verified correct: guarded by `if "materials_universal" not in columns` (same pattern as `risky_failed_levels`), runs conditionally so repeated `init_db()` calls on an up-to-date DB do not raise "duplicate column". New test `MigratesLegacyPlayersMissingUniversalMaterial` in `tests/test_v2_schema_initialization.py` correctly drops/recreates the pre-change `players` schema, inserts legacy data, calls `init_db()`, and asserts the column exists with default 0 and prior data untouched. Full test suite passes (435 passed, 3 subtests passed). Tasks 2-5 (player_manager.py accessors, gear_manager.py shortfall/refund logic, ui_renderer.py displays, player_manager_cog.py modal) re-verified intact and matching acceptance criteria. `src/core/formula.py`, `src/managers/affix_manager.py`, `src/cogs/actions.py` confirmed untouched via `git diff main...HEAD`. All 5 Tasks checked, `source_paths` consistent with `git diff --stat`, all 5 touched docs have `last_reviewed: 2026-07-14`.
