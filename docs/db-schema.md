@@ -175,6 +175,50 @@ pity_* = 0
 risky_failed_levels = 0
 ```
 
+### trial_state
+
+Singleton global village trial state. See `managers/trial-manager.md` for gameplay rules.
+
+```sql
+CREATE TABLE trial_state (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  is_active INTEGER NOT NULL DEFAULT 0,
+  resource_type TEXT,
+  target INTEGER NOT NULL DEFAULT 0,
+  progress INTEGER NOT NULL DEFAULT 0,
+  started_at TEXT,
+  ended_at TEXT,
+  updated_at TEXT NOT NULL
+);
+```
+
+Initial row:
+
+```text
+id = 1
+is_active = 0
+resource_type = null
+target = 0
+progress = 0
+started_at = null
+ended_at = null
+```
+
+### trial_contributions
+
+Per-player accumulated contribution for the currently active trial. Cleared (all rows deleted)
+whenever a trial starts or ends (success or failure).
+
+```sql
+CREATE TABLE trial_contributions (
+  user_id TEXT PRIMARY KEY,
+  contribution INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL
+);
+```
+
+No initial rows.
+
 ### guild_installations
 
 Single supported Discord guild record.

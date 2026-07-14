@@ -25,6 +25,11 @@ source_paths:
    {progress_bar}  {progress} / {target} ({pct}%)
    ⏰ 期限: <t:{deadline}:R>
 {if overtime}   ⚠️ 逾時！通關效率已降低（產出計分 ×0.5）{/if}
+{if trial active}
+🏆 試煉 {resource_emoji}{resource_label} {progress} / {target} ({pct}%)
+   {progress_bar}
+   ⏰ 期限: <t:{deadline}:R>
+{/if}
 
 公用資源
 🌾 {food} | 🪵 {wood} | 🧠 {knowledge}
@@ -43,6 +48,12 @@ source_paths:
 ```
 
 `{stage_type_zh}` 對應表：採集 / 建設 / 戰鬥 / 研究 / 升級。
+
+### 試煉進度列
+
+僅於村莊試煉進行中（`trial_state.is_active`）時顯示，否則整行省略（比照 AP 列在滿值時省略下次回復時間的慣例）。
+`{resource_emoji}`/`{resource_label}` 沿用村莊資源的 🌾/🪵/🧠 圖示與中文名稱（見 `RESOURCE_LABELS`/`RESOURCE_EMOJIS`）。
+`{deadline}` = `trial_state.started_at` 的 unix 時間 + `TRIAL_DURATION_SECONDS`。不顯示試煉發起者（發起者僅出現在試煉開始的 Public 通知中）。
 
 ### Buildings 百分比計算
 
@@ -78,6 +89,7 @@ source_paths:
 🏃 行動：{emoji}{action_name}（下次結算：<t:{next_cycle}:R>）
 ⚡ AP：{ap} / {ap_cap}
 ⚡ AP：{ap} / {ap_cap}（下次：<t:{next_ap_unix}:R>）（AP < cap 時顯示）
+🏆 試煉貢獻：{n}（僅試煉進行中時顯示）
 ```
 
 效率欄位：`{n}` 為該行動類別的有效產出，`{p}` 為總加成百分比（floor）。
@@ -224,6 +236,7 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
 
 ## Changelog
 
+- 2026-07-14: Added village trial (🏆) display: village section gains a trial progress line (shown only while a trial is active); 個人資訊 gains a 試煉貢獻 line (shown only while a trial is active).
 - 2026-07-14: Added universal material (🌟) display: 個人資訊 素材 line appends universal material count; gear upgrade sub-menu 持有素材 line shows universal material holdings alongside the type-specific count; `/idlevillage-manager` 素材數量 field appends `萬能 {materials_universal}`.
 - 2026-07-14: Removed offering action — action dropdown option, `offering_resource_select` dropdown, 🎁 奉獻進度 dashboard line, villager action display names, and action emoji entry.
 - 2026-06-07: Removed AP requirement to open gear upgrade interface; unified gear action button labels to `{icon}+四字` format (`🎲 強化工具`, `🩸 獻祭素材`, `✨ 抽取詞條`, `🗑️ 清除詞條`); replaced per-slot clear buttons with single `🗑️ 清除詞條` button + `clear_affix_select:{gear_type}` StringSelect dropdown flow.

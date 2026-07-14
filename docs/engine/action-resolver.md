@@ -48,6 +48,10 @@ source_paths:
    關卡進度使用資源不足懲罰前的 output。
    若關卡已逾時，stage-manager 只對關卡進度套用逾時倍率。
 
+7.5. 若村莊試煉進行中，試煉進度 += output（呼叫 trial-manager，與關卡進度並行、互不影響）。
+   使用與步驟 7 相同的資源不足懲罰前 output，不分行動類型（比照升級關規則）。
+   詳見 `managers/trial-manager.md`。partial cycle 與 burst 的每次結算皆比照此規則計入試煉進度。
+
 8. 完整週期 settlement 依 player-manager 的有效素材掉落率獲得 +1 對應素材。
    普通關同類 action 與升級關全部 action 使用加倍掉落率。
    素材掉落獨立判定，不受資源不足或關卡逾時影響。
@@ -73,5 +77,6 @@ This module applies the cost and output values passed by cycle-engine using the 
 
 ## Changelog
 
+- 2026-07-14: Added village trial progress accumulation (step 7.5) alongside stage progress; owned by `managers/trial-manager.md`.
 - 2026-07-14: Removed offering action settlement logic and its row from the 行動類型參考表.
 - 2026.05.08.00: Material drop step now references stage-matching effective drop rate.
