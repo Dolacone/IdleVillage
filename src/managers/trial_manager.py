@@ -6,6 +6,7 @@ The caller is responsible for committing the transaction.
 """
 
 import math
+import random
 from datetime import datetime
 
 from core.config import get_env_int
@@ -13,14 +14,6 @@ from core.utils import dt_str, parse_dt
 from managers import player_manager, resource_manager
 
 TRIAL_RESOURCE_TYPES = ("food", "wood", "knowledge")
-
-
-def get_invalid_target_step(target: int) -> int | None:
-    """Return the required step when target is invalid, otherwise None."""
-    step = get_env_int("TRIAL_TARGET_STEP")
-    if target < step or target % step != 0:
-        return step
-    return None
 
 
 def get_cooldown_deadline_unix(ended_at_str: str | None) -> int | None:
@@ -65,26 +58,24 @@ async def _clear_contributions(db) -> None:
     await db.execute("DELETE FROM trial_contributions")
 
 
-async def start_trial(db, resource_type: str, target: int, user_id: str, now: datetime) -> dict:
+async def get_eligible_resource_types(db) -> list[str]:
+    """Return TRIAL_RESOURCE_TYPES entries the village can currently afford for a new trial."""
+    amount = get_env_int("TRIAL_TARGET_AMOUNT")
+    return [r for r in TRIAL_RESOURCE_TYPES if await resource_manager.can_afford(db, r, amount)]
+
+
+async def start_trial(db, now: datetime) -> dict:
     """
-    Open a new village trial.
+    Open a new village trial. The resource type is chosen automatically: uniformly at random
+    among the resource types the village can currently afford TRIAL_TARGET_AMOUNT of.
 
     Preconditions (raises ValueError if unmet; no resources are spent on failure):
-      - resource_type is one of TRIAL_RESOURCE_TYPES
-      - target is a positive multiple of TRIAL_TARGET_STEP
       - no trial is currently active
       - TRIAL_COOLDOWN_SECONDS has elapsed since the last trial ended (if any)
-      - the village has >= target of resource_type
+      - the village can afford TRIAL_TARGET_AMOUNT of at least one resource type
 
     Returns the new trial_state dict.
     """
-    if resource_type not in TRIAL_RESOURCE_TYPES:
-        raise ValueError(f"Invalid resource type: {resource_type!r}")
-
-    step = get_invalid_target_step(target)
-    if step is not None:
-        raise ValueError(f"target must be a positive multiple of {step}, got {target}")
-
     info = await get_trial_info(db)
     if info.get("is_active"):
         raise ValueError("A trial is already active")
@@ -92,10 +83,13 @@ async def start_trial(db, resource_type: str, target: int, user_id: str, now: da
     if is_cooldown_active(info.get("ended_at"), now):
         raise ValueError("Trial cooldown has not elapsed")
 
-    if not await resource_manager.can_afford(db, resource_type, target):
-        raise ValueError(f"Insufficient {resource_type}: need {target}")
+    amount = get_env_int("TRIAL_TARGET_AMOUNT")
+    eligible = await get_eligible_resource_types(db)
+    if not eligible:
+        raise ValueError(f"Insufficient resources: need {amount} of at least one type")
+    resource_type = random.choice(eligible)
 
-    await resource_manager.withdraw(db, resource_type, target, now)
+    await resource_manager.withdraw(db, resource_type, amount, now)
     await _clear_contributions(db)
 
     now_str = dt_str(now)
@@ -104,7 +98,7 @@ async def start_trial(db, resource_type: str, target: int, user_id: str, now: da
            is_active=1, resource_type=?, target=?, progress=0,
            started_at=?, updated_at=?
            WHERE id=1""",
-        (resource_type, target, now_str, now_str),
+        (resource_type, amount, now_str, now_str),
     )
     return await get_trial_info(db)
 

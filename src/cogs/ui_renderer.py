@@ -276,6 +276,7 @@ def build_main_components(
     pending_action: str | None = None,
     pending_target: str | None = None,
     trial_data: dict | None = None,
+    resources: dict | None = None,
 ) -> list:
     ap = player_row.get("_ap", 0)
     gear_cap = buildings.get("research_lab", {}).get("level", 0)
@@ -293,6 +294,10 @@ def build_main_components(
             ended_unix = _unix_from_iso(ended_at_str)
             now_unix = int(datetime.now(timezone.utc).timestamp())
             can_start_trial = (now_unix - ended_unix) >= cooldown
+    if can_start_trial:
+        resources = resources or {}
+        trial_amount = get_env_int("TRIAL_TARGET_AMOUNT")
+        can_start_trial = any(resources.get(r, 0) >= trial_amount for r in ("food", "wood", "knowledge"))
 
     action_options = [
         disnake.SelectOption(

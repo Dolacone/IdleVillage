@@ -170,38 +170,17 @@ class TestRenderMainTrialWiring(DatabaseTestCase):
         self.assertIn("🏆 試煉貢獻：77", embed.description)
 
 
-class TestTrialButtonAndModal(DatabaseTestCase):
+class TestTrialStartButton(DatabaseTestCase):
+    TRIAL_AMOUNT = 50000  # matches TRIAL_TARGET_AMOUNT in tests/support.py
+
     def _make_button_inter(self, user_id=111222333):
         inter = MagicMock()
         inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
         inter.component.custom_id = "open_trial_start"
         inter.user.id = user_id
-        inter.response.send_modal = AsyncMock()
         inter.response.defer = AsyncMock()
+        inter.edit_original_response = AsyncMock()
         return inter
-
-    def _make_modal_inter(self, resource, target, user_id=111222333):
-        inter = MagicMock()
-        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
-        inter.custom_id = "modal_start_trial"
-        inter.user.id = user_id
-        inter.text_values = {"trial_resource": resource, "trial_target": target}
-        inter.response.edit_message = AsyncMock()
-        return inter
-
-    async def test_button_click_opens_modal_with_resource_and_target_fields(self):
-        from cogs.actions import ActionsCog
-
-        inter = self._make_button_inter()
-        cog = ActionsCog(bot=MagicMock())
-        await cog.on_button_click(inter)
-
-        inter.response.send_modal.assert_awaited_once()
-        modal = inter.response.send_modal.call_args.args[0]
-        self.assertEqual(modal.custom_id, "modal_start_trial")
-        field_ids = [c.custom_id for row in modal.components for c in row.children]
-        self.assertEqual(field_ids, ["trial_resource", "trial_target"])
-        inter.response.defer.assert_not_awaited()
 
     def _dispatched_trial_start_events(self, dispatch):
         events = []
@@ -209,114 +188,104 @@ class TestTrialButtonAndModal(DatabaseTestCase):
             events.extend(e for e in call.args[1] if e.get("type") == "trial_start")
         return events
 
-    async def test_modal_submit_rejects_invalid_resource(self):
+    async def test_click_with_no_resource_funded_shows_error_and_spends_nothing(self):
         from cogs.actions import ActionsCog
 
-        inter = self._make_modal_inter("gold", "1000")
+        inter = self._make_button_inter()
         cog = ActionsCog(bot=MagicMock())
         with patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as dispatch:
-            await cog.on_modal_submit(inter)
+            await cog.on_button_click(inter)
 
-        embed = inter.response.edit_message.call_args.kwargs["embed"]
-        self.assertIn("資源類型須為", embed.description)
+        embed = inter.edit_original_response.call_args.kwargs["embed"]
+        self.assertIn("⚠️ 開啟試煉失敗", embed.description)
         self.assertEqual(self._dispatched_trial_start_events(dispatch), [])
+        row = await self.fetchone("SELECT is_active FROM trial_state WHERE id=1")
+        self.assertEqual(row[0], 0)
 
-    async def test_modal_submit_rejects_target_not_multiple_of_step(self):
-        from cogs.actions import ActionsCog
-
-        inter = self._make_modal_inter("食物", "1500")
-        cog = ActionsCog(bot=MagicMock())
-        with patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as dispatch:
-            await cog.on_modal_submit(inter)
-
-        embed = inter.response.edit_message.call_args.kwargs["embed"]
-        self.assertIn("1000 的整數倍", embed.description)
-        self.assertEqual(self._dispatched_trial_start_events(dispatch), [])
-
-    async def test_modal_submit_rejects_insufficient_resource(self):
+    async def test_click_starts_trial_and_dispatches_notification(self):
         from cogs.actions import ActionsCog
         from database.schema import get_connection
 
         async with get_connection() as db:
-            await db.execute("UPDATE village_resources SET amount=100 WHERE resource_type='food'")
+            await db.execute(
+                "UPDATE village_resources SET amount=? WHERE resource_type='wood'",
+                (self.TRIAL_AMOUNT * 2,),
+            )
             await db.commit()
 
-        inter = self._make_modal_inter("食物", "1000")
+        inter = self._make_button_inter()
         cog = ActionsCog(bot=MagicMock())
         with patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as dispatch:
-            await cog.on_modal_submit(inter)
+            await cog.on_button_click(inter)
 
-        embed = inter.response.edit_message.call_args.kwargs["embed"]
-        self.assertIn("食物不足", embed.description)
-        self.assertEqual(self._dispatched_trial_start_events(dispatch), [])
-
-    async def test_modal_submit_starts_trial_and_dispatches_notification(self):
-        from cogs.actions import ActionsCog
-        from database.schema import get_connection
-
-        async with get_connection() as db:
-            await db.execute("UPDATE village_resources SET amount=5000 WHERE resource_type='wood'")
-            await db.commit()
-
-        inter = self._make_modal_inter("木頭", "3000")
-        cog = ActionsCog(bot=MagicMock())
-        with patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as dispatch:
-            await cog.on_modal_submit(inter)
-
-        embed = inter.response.edit_message.call_args.kwargs["embed"]
+        embed = inter.edit_original_response.call_args.kwargs["embed"]
         self.assertIn("✅ 試煉已開始！", embed.description)
 
         row = await self.fetchone(
             "SELECT is_active, target, resource_type FROM trial_state WHERE id=1"
         )
-        self.assertEqual(row, (1, 3000, "wood"))
+        self.assertEqual(row, (1, self.TRIAL_AMOUNT, "wood"))
         row = await self.fetchone("SELECT amount FROM village_resources WHERE resource_type='wood'")
-        self.assertEqual(row[0], 2000)
+        self.assertEqual(row[0], self.TRIAL_AMOUNT)
 
         trial_start_events = self._dispatched_trial_start_events(dispatch)
         self.assertEqual(len(trial_start_events), 1)
         event = trial_start_events[0]
         self.assertEqual(event["resource_type"], "wood")
-        self.assertEqual(event["target"], 3000)
+        self.assertEqual(event["target"], self.TRIAL_AMOUNT)
+        self.assertNotIn("user_id", event)
 
-    async def test_modal_submit_accepts_english_resource_name_case_insensitive(self):
-        from cogs.actions import ActionsCog
-        from database.schema import get_connection
-
-        async with get_connection() as db:
-            await db.execute("UPDATE village_resources SET amount=5000 WHERE resource_type='knowledge'")
-            await db.commit()
-
-        inter = self._make_modal_inter("Knowledge", "1000")
-        cog = ActionsCog(bot=MagicMock())
-        with patch("cogs.actions.notification.dispatch_events", new=AsyncMock()):
-            await cog.on_modal_submit(inter)
-
-        row = await self.fetchone("SELECT is_active, resource_type FROM trial_state WHERE id=1")
-        self.assertEqual(row, (1, "knowledge"))
-
-    async def test_modal_submit_rejects_when_trial_already_active(self):
+    async def test_click_rejects_when_trial_already_active(self):
         from cogs.actions import ActionsCog
         from database.schema import get_connection
 
         now = datetime.now(timezone.utc)
         async with get_connection() as db:
-            await db.execute("UPDATE village_resources SET amount=5000 WHERE resource_type='food'")
+            await db.execute(
+                "UPDATE village_resources SET amount=? WHERE resource_type='food'",
+                (self.TRIAL_AMOUNT * 2,),
+            )
             await db.execute(
                 """UPDATE trial_state SET
-                   is_active=1, resource_type='food', target=2000, progress=0,
+                   is_active=1, resource_type='food', target=?, progress=0,
                    started_at=?, updated_at=? WHERE id=1""",
-                (now.isoformat(), now.isoformat()),
+                (self.TRIAL_AMOUNT, now.isoformat(), now.isoformat()),
             )
             await db.commit()
 
-        inter = self._make_modal_inter("食物", "1000")
+        inter = self._make_button_inter()
         cog = ActionsCog(bot=MagicMock())
         with patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as dispatch:
-            await cog.on_modal_submit(inter)
+            await cog.on_button_click(inter)
 
-        embed = inter.response.edit_message.call_args.kwargs["embed"]
-        self.assertIn("已有試煉進行中", embed.description)
+        embed = inter.edit_original_response.call_args.kwargs["embed"]
+        self.assertIn("⚠️ 開啟試煉失敗", embed.description)
+        self.assertEqual(self._dispatched_trial_start_events(dispatch), [])
+        row = await self.fetchone("SELECT amount FROM village_resources WHERE resource_type='food'")
+        self.assertEqual(row[0], self.TRIAL_AMOUNT * 2)
+
+    async def test_click_rejects_during_cooldown(self):
+        from cogs.actions import ActionsCog
+        from database.schema import get_connection
+
+        now = datetime.now(timezone.utc)
+        async with get_connection() as db:
+            await db.execute(
+                "UPDATE village_resources SET amount=? WHERE resource_type='food'",
+                (self.TRIAL_AMOUNT * 2,),
+            )
+            await db.execute(
+                "UPDATE trial_state SET is_active=0, ended_at=? WHERE id=1", (now.isoformat(),)
+            )
+            await db.commit()
+
+        inter = self._make_button_inter()
+        cog = ActionsCog(bot=MagicMock())
+        with patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as dispatch:
+            await cog.on_button_click(inter)
+
+        embed = inter.edit_original_response.call_args.kwargs["embed"]
+        self.assertIn("⚠️ 開啟試煉失敗", embed.description)
         self.assertEqual(self._dispatched_trial_start_events(dispatch), [])
 
 
@@ -790,19 +759,36 @@ class TestRendererMainComponents(unittest.TestCase):
             if getattr(component, "custom_id", None) == "open_trial_start"
         )
 
+    def _abundant_resources(self):
+        amount = int(ALL_TEST_ENV["TRIAL_TARGET_AMOUNT"])
+        return {"food": amount, "wood": 0, "knowledge": 0}
+
     def test_trial_start_enabled_when_no_trial_and_no_cooldown(self):
         from cogs.ui_renderer import build_main_components
 
         buildings = {"research_lab": {"level": 3, "xp_progress": 0}}
-        rows = build_main_components(self._make_player(), buildings, trial_data=None)
+        rows = build_main_components(
+            self._make_player(), buildings, trial_data=None, resources=self._abundant_resources()
+        )
         self.assertFalse(self._trial_button(rows).disabled)
+
+    def test_trial_start_disabled_when_no_resource_has_enough(self):
+        from cogs.ui_renderer import build_main_components
+
+        buildings = {"research_lab": {"level": 3, "xp_progress": 0}}
+        rows = build_main_components(
+            self._make_player(), buildings, trial_data=None, resources={"food": 1, "wood": 1, "knowledge": 1}
+        )
+        self.assertTrue(self._trial_button(rows).disabled)
 
     def test_trial_start_disabled_when_trial_active(self):
         from cogs.ui_renderer import build_main_components
 
         buildings = {"research_lab": {"level": 3, "xp_progress": 0}}
-        trial_data = {"is_active": 1, "target": 5000, "progress": 100, "ended_at": None}
-        rows = build_main_components(self._make_player(), buildings, trial_data=trial_data)
+        trial_data = {"is_active": 1, "target": 50000, "progress": 100, "ended_at": None}
+        rows = build_main_components(
+            self._make_player(), buildings, trial_data=trial_data, resources=self._abundant_resources()
+        )
         self.assertTrue(self._trial_button(rows).disabled)
 
     def test_trial_start_disabled_during_cooldown(self):
@@ -811,7 +797,9 @@ class TestRendererMainComponents(unittest.TestCase):
         now = datetime.now(timezone.utc)
         trial_data = {"is_active": 0, "ended_at": now.isoformat()}
         buildings = {"research_lab": {"level": 3, "xp_progress": 0}}
-        rows = build_main_components(self._make_player(), buildings, trial_data=trial_data)
+        rows = build_main_components(
+            self._make_player(), buildings, trial_data=trial_data, resources=self._abundant_resources()
+        )
         self.assertTrue(self._trial_button(rows).disabled)
 
     def test_trial_start_enabled_after_cooldown_elapsed(self):
@@ -821,7 +809,9 @@ class TestRendererMainComponents(unittest.TestCase):
         ended_at = datetime.now(timezone.utc) - timedelta(seconds=cooldown + 10)
         trial_data = {"is_active": 0, "ended_at": ended_at.isoformat()}
         buildings = {"research_lab": {"level": 3, "xp_progress": 0}}
-        rows = build_main_components(self._make_player(), buildings, trial_data=trial_data)
+        rows = build_main_components(
+            self._make_player(), buildings, trial_data=trial_data, resources=self._abundant_resources()
+        )
         self.assertFalse(self._trial_button(rows).disabled)
 
     def test_burst_and_gear_buttons_are_first_row_without_refresh(self):

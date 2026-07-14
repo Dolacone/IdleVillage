@@ -196,7 +196,6 @@ def _format_event(event: dict) -> str | None:
         return f"{user_name} 的 {gear_name} {verb}詞條：{affix_label}（{sign}{value}%）"
 
     if kind == "trial_start":
-        user_id = event.get("user_id", "")
         resource_type = event.get("resource_type", "")
         target = event.get("target", 0)
         reward_pool = event.get("reward_pool", 0)
@@ -204,7 +203,7 @@ def _format_event(event: dict) -> str | None:
         r_emoji = RESOURCE_EMOJIS.get(resource_type, "")
         r_label = RESOURCE_LABELS.get(resource_type, resource_type)
         return (
-            f"<@{user_id}> 花費 {target} 個 {r_emoji}{r_label} 發起了村莊試煉！\n"
+            f"🏆 村莊試煉開始！花費 {target} 個 {r_emoji}{r_label}\n"
             f"目標：全服玩家共同累積 {target} 點行動產出\n"
             f"期限：<t:{deadline_unix}:R> 前\n"
             f"達成後將依貢獻度瓜分共 {reward_pool} 個 🌟萬能素材"

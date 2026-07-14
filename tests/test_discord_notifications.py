@@ -382,14 +382,13 @@ class TestNotificationFormatting(unittest.TestCase):
         from core.notification import _format_event
         ev = {
             "type": "trial_start",
-            "user_id": "111222333",
             "resource_type": "wood",
             "target": 5000,
             "reward_pool": 50,
             "deadline_unix": 1234567890,
         }
         text = _format_event(ev)
-        self.assertIn("<@111222333>", text)
+        self.assertNotIn("<@", text)
         self.assertIn("花費 5000 個 🪵木頭", text)
         self.assertIn("目標：全服玩家共同累積 5000 點行動產出", text)
         self.assertIn("50 個 🌟萬能素材", text)

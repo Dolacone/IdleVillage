@@ -86,7 +86,7 @@ Discord UI 顯示使用繁體中文。資料庫與程式內部 enum 一律使用
 | `AFFIX_CLEAR_COST` | `managers/affix-manager.md` |
 | `TRIAL_DURATION_SECONDS` | `managers/trial-manager.md` |
 | `TRIAL_COOLDOWN_SECONDS` | `managers/trial-manager.md` |
-| `TRIAL_TARGET_STEP` | `managers/trial-manager.md` |
+| `TRIAL_TARGET_AMOUNT` | `managers/trial-manager.md` |
 | `TRIAL_REWARD_DIVISOR` | `managers/trial-manager.md` |
 
 ## Material Drop Rate
@@ -103,6 +103,7 @@ Discord UI 顯示使用繁體中文。資料庫與程式內部 enum 一律使用
 
 ## Changelog
 
+- 2026-07-14: Renamed TRIAL_TARGET_STEP to TRIAL_TARGET_AMOUNT (trial target/cost is now a fixed amount, not a player-chosen multiple of a step).
 - 2026-07-14: Added TRIAL_DURATION_SECONDS, TRIAL_COOLDOWN_SECONDS, TRIAL_TARGET_STEP, TRIAL_REWARD_DIVISOR env vars owned by trial-manager.
 - 2026-07-14: Removed offering action (stored value `offering`, action_target usage, `OFFERING_THRESHOLD_PER_PLAYER` env var).
 - 2026-05-22: Added AFFIX_SLOT_INTERVAL, AFFIX_EXTRACT_COST, AFFIX_CLEAR_COST env vars owned by affix-manager.

@@ -34,8 +34,7 @@ source_paths:
 | `confirm_action` | 點擊確認行動 | 呼叫 `player-manager.setAction()`，更新 Embed |
 | `burst_execute` | 點擊瞬間行動 | 確認 AP ≥ 1 → 呼叫 `cycle-engine.burst()`，更新 Embed |
 | `open_gear_upgrade` | 點擊強化工具 | 渲染工具強化子選單 |
-| `open_trial_start` | 點擊開啟試煉 | 彈出「開啟村莊試煉」Modal（2 欄位：資源類型、目標值）；僅在無進行中試煉且冷卻已過時可點擊，否則 disabled |
-| `modal_start_trial`（Modal 提交） | 提交開啟試煉 Modal | 驗證資源類型（食物/木頭/知識，中英文皆可，不分大小寫）與目標值（`TRIAL_TARGET_STEP` 整數倍）→ 檢查前置條件（無進行中試煉、冷卻已過、資源足夠）→ 呼叫 `trial-manager.start_trial()`，於主介面內嵌顯示結果訊息並觸發 Public 開始通知；任一前置條件失敗僅顯示對應訊息，不扣除資源 |
+| `open_trial_start` | 點擊開啟試煉 | 直接呼叫 `trial-manager.start_trial()`（無 Modal、無需玩家輸入）：系統自動在可負擔 `TRIAL_TARGET_AMOUNT` 的資源類型中隨機選一種扣除並開啟試煉；於主介面內嵌顯示結果訊息並觸發 Public 開始通知；前置條件不滿足時顯示統一錯誤訊息，不扣除資源。僅在無進行中試煉、冷卻已過、且至少一種資源足夠時可點擊，否則 disabled |
 
 ### 工具強化子選單
 | 元件 ID | 觸發條件 | 處理邏輯 |
@@ -79,6 +78,7 @@ source_paths:
 
 ## Changelog
 
+- 2026-07-14: `open_trial_start` no longer opens a Modal — clicking it directly starts a trial with a fixed, system-chosen amount/resource; no player input at all. Removed the `modal_start_trial` route.
 - 2026-07-14: Replaced the `/idlevillage-trial` slash command with an `open_trial_start` button on the main interface (same row as burst/gear upgrade), disabled unless a trial can currently be started; submits via `modal_start_trial` Modal (resource type + target, free-text) instead of slash command options.
 - 2026-07-14: `/idlevillage-manager` 編輯素材數量 Modal 新增第 5 個欄位（萬能素材），`mgr_modal_material` 提交流程改為呼叫 `set_material()` × 4 + `set_universal_material()` × 1。
 - 2026-07-14: Removed `offering_resource_select` dropdown route and offering resource validation in `confirm_action:` handler.

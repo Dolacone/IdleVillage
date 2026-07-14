@@ -36,7 +36,7 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 | 工具強化失敗 | gear-manager 回傳失敗 | `{user_display_name} 的 {gear_name} 升級失敗 :boom: Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）` | Public |
 | 詞條抽取 | `extract_affix` handler 成功後 | `{user_display_name} 的 {gear_name} 抽到詞條：{affix_label}（{sign}{value}%）`，sign 為 `-`（reduce 類型）或 `+`（其他） | Public |
 | 詞條清除 | `clear_affix` handler 成功後 | `{user_display_name} 的 {gear_name} 清除詞條：{affix_label}（{sign}{value}%）`，sign 為 `-`（reduce 類型）或 `+`（其他） | Public |
-| 試煉開始 | `open_trial_start` → `modal_start_trial` 成功開啟試煉 | 發起者 + 花費的資源類型與數量 + 目標值（行動產出總計，與資源類型脫鉤）+ 期限 + 獎勵池大小 | Public |
+| 試煉開始 | `open_trial_start` 成功開啟試煉 | 花費的資源類型與數量（系統自動隨機選定）+ 目標值（行動產出總計，與資源類型脫鉤）+ 期限 + 獎勵池大小；不顯示發起者 | Public |
 | 試煉達成 | trial-manager 判定進度達標 | 目標值（行動產出總計）+ 各參與者貢獻與獲得數量列表（依貢獻降冪） | Public |
 | 試煉失敗（逾時） | trial-manager 判定 24 小時內未達標 | 目標值（行動產出總計）+ 逾時當下進度，說明資源不退還 | Public |
 
@@ -50,7 +50,7 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 - 建築一次升多級時，每個等級分開發送。
 - 工具強化成功/失敗為 Public 訊息，只在強化處理瞬間發送，不需要持久去重。
 - 詞條抽取/清除通知只在操作瞬間發送，不需持久去重。
-- 試煉開始通知只在 `modal_start_trial` 成功開啟當下發送一次。
+- 試煉開始通知只在 `open_trial_start` 成功開啟當下發送一次。
 - 試煉達成/失敗通知只在 trial-manager 判定當下（settlement 內或 Watcher tick）發送一次，不需持久去重。
 
 ## 同一 settlement 內的通知順序
@@ -115,12 +115,12 @@ sign 為 `-`（reduce 類型，如 `upgrade_cost_reduce`）或 `+`（其他類�
 
 ### 試煉開始
 ```
-<@{user_id}> 花費 {target} 個 {resource_emoji}{resource_label} 發起了村莊試煉！
+🏆 村莊試煉開始！花費 {target} 個 {resource_emoji}{resource_label}
 目標：全服玩家共同累積 {target} 點行動產出
 期限：<t:{deadline_unix}:R> 前
 達成後將依貢獻度瓜分共 {reward_pool} 個 🌟萬能素材
 ```
-花費的資源類型只出現在第一行「花費」措辭中，刻意不與「目標」綁在一起，避免讓人誤以為試煉目標是收集單一資源，而非全服行動產出總和。
+不顯示發起者（開啟試煉不需要玩家輸入資訊，也不記錄是誰點擊了按鈕）。花費的資源類型只出現在第一行「花費」措辭中，刻意不與「目標」綁在一起，避免讓人誤以為試煉目標是收集單一資源，而非全服行動產出總和。
 `{reward_pool}` = `floor(target / TRIAL_REWARD_DIVISOR)`，僅供公告顯示的預覽值；實際發放總量以達成當下逐人無條件進位後加總為準（見達成訊息）。當 `target` 不能被 `TRIAL_REWARD_DIVISOR` 整除時，此預覽值與實際發放總量可能有些微差異，此為預期行為（預覽值刻意採 floor，不影響實際分配結果）。
 
 ### 試煉達成
@@ -147,6 +147,7 @@ sign 為 `-`（reduce 類型，如 `upgrade_cost_reduce`）或 `+`（其他類�
 
 ## Changelog
 
+- 2026-07-14: 試煉開始通知移除發起者 mention（開啟試煉不再需要玩家輸入，也不記錄是誰點擊）。花費的資源類型改由系統自動隨機選定，`target` 固定為 `TRIAL_TARGET_AMOUNT`。
 - 2026-07-14: 試煉開始由 `open_trial_start` 按鈕 + `modal_start_trial` Modal 觸發（取代 slash command）。三種試煉訊息移除「目標 {target} {resource_label}」措辭，改為「目標：{target} 點行動產出」，資源類型只保留在試煉開始訊息的「花費」措辭中，避免讓人誤以為試煉目標是收集單一資源。
 - 2026-07-14: 新增村莊試煉事件（試煉開始、達成、失敗）與訊息範本；「同一 settlement 內的通知順序」新增第 4 項試煉達成/失敗通知並重新編號。試煉相關訊息一律使用 `<@{user_id}>` mention 呈現使用者，不需額外解析 display name。
 - 2026-07-14: 移除奉獻達標事件、訊息範本，並自「同一 settlement 內的通知順序」重新編號。

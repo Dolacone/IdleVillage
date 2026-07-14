@@ -6,7 +6,6 @@ from disnake.ext import commands
 from cogs.ui_renderer import (
     ACTION_EMOJIS,
     ACTION_LABELS,
-    RESOURCE_LABELS,
     UI_BUILDING_TARGETS,
     build_affix_components,
     build_affix_embed,
@@ -22,27 +21,16 @@ from core.formula import ACTION_MATERIAL_COL
 from core.settlement import change_action, settle_burst, settle_complete_cycles
 from core.utils import dt_str
 from database.schema import get_connection
-from managers import affix_manager, building_manager, gear_manager, player_manager, resource_manager, trial_manager
+from managers import affix_manager, building_manager, gear_manager, player_manager, trial_manager
 
 _OWN_BUTTONS = frozenset({"burst_execute", "open_gear_upgrade", "open_trial_start", "back_to_main"})
 _OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:", "clear_affix:", "sacrifice_material:", "open_affix_mgmt:", "affix_extract:", "affix_clear:", "back_to_gear:")
 _OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "gear_type_select", "affix_gear_select"})
 _OWN_DROPDOWN_PREFIXES = ("upgrade_mode_select:", "affix_slot_select:")
-_OWN_MODAL_PREFIXES = ("modal_sacrifice:", "modal_start_trial")
+_OWN_MODAL_PREFIXES = ("modal_sacrifice:",)
 _VALID_GEAR_TYPES = frozenset({"gathering", "building", "combat", "research"})
 _VALID_ACTIONS = frozenset({"gathering", "building", "combat", "research"})
 _VALID_UPGRADE_MODES = frozenset(gear_manager.UPGRADE_MODES)
-_TRIAL_RESOURCE_LABELS_TO_TYPE = {"食物": "food", "木頭": "wood", "知識": "knowledge"}
-
-
-def _parse_trial_resource(raw: str) -> str | None:
-    raw = raw.strip()
-    if raw in _TRIAL_RESOURCE_LABELS_TO_TYPE:
-        return _TRIAL_RESOURCE_LABELS_TO_TYPE[raw]
-    lowered = raw.lower()
-    if lowered in trial_manager.TRIAL_RESOURCE_TYPES:
-        return lowered
-    return None
 
 
 def _is_own_button(cid: str) -> bool:
@@ -161,7 +149,7 @@ class ActionsCog(commands.Cog):
         )
         components = build_main_components(
             player_row, buildings, pending_action=pending_action, pending_target=pending_target,
-            trial_data=trial_data,
+            trial_data=trial_data, resources=resources,
         )
         if respond is not None:
             await respond(embed=embed, components=components)
@@ -320,28 +308,29 @@ class ActionsCog(commands.Cog):
             await self._render_gear(inter, None)
 
         elif cid == "open_trial_start":
-            await inter.response.send_modal(
-                disnake.ui.Modal(
-                    title="🏆 開啟試煉",
-                    custom_id="modal_start_trial",
-                    components=[
-                        disnake.ui.TextInput(
-                            label="資源類型（食物 / 木頭 / 知識）",
-                            custom_id="trial_resource",
-                            style=disnake.TextInputStyle.short,
-                            placeholder="食物 / 木頭 / 知識",
-                            required=True,
-                        ),
-                        disnake.ui.TextInput(
-                            label="目標值（1000 的整數倍）",
-                            custom_id="trial_target",
-                            style=disnake.TextInputStyle.short,
-                            placeholder="例如：5000",
-                            required=True,
-                        ),
-                    ],
-                )
-            )
+            await inter.response.defer()
+            now = datetime.now(timezone.utc)
+            trial_message: str
+            trial_started_event: dict | None = None
+            async with get_connection() as db:
+                try:
+                    info = await trial_manager.start_trial(db, now)
+                    await db.commit()
+                    trial_message = "✅ 試煉已開始！"
+                    divisor = get_env_int("TRIAL_REWARD_DIVISOR")
+                    duration = get_env_int("TRIAL_DURATION_SECONDS")
+                    trial_started_event = {
+                        "type": "trial_start",
+                        "resource_type": info["resource_type"],
+                        "target": info["target"],
+                        "reward_pool": info["target"] // divisor,
+                        "deadline_unix": int(now.timestamp()) + duration,
+                    }
+                except ValueError:
+                    trial_message = "⚠️ 開啟試煉失敗，請重新嘗試。"
+            await self._render_main(inter, trial_message=trial_message)
+            if trial_started_event is not None:
+                await notification.dispatch_events(self.bot, [trial_started_event])
 
         elif cid == "back_to_main":
             await inter.response.defer()
@@ -558,65 +547,6 @@ class ActionsCog(commands.Cog):
                 inter, gear_type, result=result,
                 respond=lambda **kw: inter.response.edit_message(**kw),
             )
-
-        elif cid == "modal_start_trial":
-            raw_resource = inter.text_values.get("trial_resource", "")
-            raw_target = inter.text_values.get("trial_target", "").strip()
-            resource = _parse_trial_resource(raw_resource)
-            now = datetime.now(timezone.utc)
-            trial_message: str
-            trial_started_event: dict | None = None
-
-            if resource is None:
-                trial_message = "⚠️ 資源類型須為「食物」「木頭」或「知識」。"
-            else:
-                try:
-                    target = int(raw_target)
-                except ValueError:
-                    target = None
-
-                if target is None:
-                    trial_message = "⚠️ 目標值須為整數。"
-                else:
-                    step = trial_manager.get_invalid_target_step(target)
-                    if step is not None:
-                        trial_message = f"⚠️ 目標值必須為 {step} 的整數倍。"
-                    else:
-                        async with get_connection() as db:
-                            info = await trial_manager.get_trial_info(db)
-                            if info.get("is_active"):
-                                trial_message = "⚠️ 目前已有試煉進行中，無法開啟新試煉。"
-                            elif trial_manager.is_cooldown_active(info.get("ended_at"), now):
-                                cooldown_end_unix = trial_manager.get_cooldown_deadline_unix(info.get("ended_at"))
-                                trial_message = f"⚠️ 試煉冷卻中，<t:{cooldown_end_unix}:R> 才能再次開啟試煉。"
-                            elif not await resource_manager.can_afford(db, resource, target):
-                                balance = await resource_manager.balance(db, resource)
-                                r_label = RESOURCE_LABELS.get(resource, resource)
-                                trial_message = f"⚠️ 村莊{r_label}不足，目前僅有 {balance} 個，需要 {target} 個。"
-                            else:
-                                try:
-                                    await trial_manager.start_trial(db, resource, target, str(inter.user.id), now)
-                                    await db.commit()
-                                    trial_message = "✅ 試煉已開始！"
-                                    divisor = get_env_int("TRIAL_REWARD_DIVISOR")
-                                    duration = get_env_int("TRIAL_DURATION_SECONDS")
-                                    trial_started_event = {
-                                        "type": "trial_start",
-                                        "user_id": str(inter.user.id),
-                                        "resource_type": resource,
-                                        "target": target,
-                                        "reward_pool": target // divisor,
-                                        "deadline_unix": int(now.timestamp()) + duration,
-                                    }
-                                except ValueError:
-                                    trial_message = "⚠️ 開啟試煉失敗，請重新嘗試。"
-
-            await self._render_main(
-                inter, trial_message=trial_message,
-                respond=lambda **kw: inter.response.edit_message(**kw),
-            )
-            if trial_started_event is not None:
-                await notification.dispatch_events(self.bot, [trial_started_event])
 
     @commands.Cog.listener("on_dropdown")
     async def on_dropdown(self, inter: disnake.MessageInteraction) -> None:

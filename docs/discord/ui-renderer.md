@@ -90,7 +90,7 @@ source_paths:
 ⚡ AP：{ap} / {ap_cap}
 ⚡ AP：{ap} / {ap_cap}（下次：<t:{next_ap_unix}:R>）（AP < cap 時顯示）
 🏆 試煉貢獻：{n}（僅試煉進行中時顯示）
-{trial_message}（僅剛透過「開啟試煉」Modal 提交後顯示一次，如 `✅ 試煉已開始！` 或 `⚠️ {原因}`；下次重新渲染主介面後即消失）
+{trial_message}（僅剛點擊「🏆 開啟試煉」按鈕後顯示一次，如 `✅ 試煉已開始！` 或 `⚠️ 開啟試煉失敗，請重新嘗試。`；下次重新渲染主介面後即消失）
 ```
 
 效率欄位：`{n}` 為該行動類別的有效產出，`{p}` 為總加成百分比（floor）。
@@ -124,11 +124,9 @@ Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
 ### 開啟試煉
 
 - **Button**：`🏆 開啟試煉`（Blue，custom_id: `open_trial_start`）
-  - 禁用條件：目前已有進行中試煉，或試煉冷卻中（`trial_state.ended_at` 存在且 `now - ended_at < TRIAL_COOLDOWN_SECONDS`）
-  - 點擊後彈出「開啟村莊試煉」Modal（custom_id: `modal_start_trial`），2 個 TextInput：
-    - `trial_resource`：資源類型，接受中文（食物/木頭/知識）或英文（food/wood/knowledge，不分大小寫）
-    - `trial_target`：目標值，須為 `TRIAL_TARGET_STEP` 的整數倍
-  - 提交後依序檢查：資源類型有效 → 目標值格式與整數倍 → 無進行中試煉 → 冷卻已過 → 村莊資源足夠；任一檢查失敗時，於主介面個人資訊區塊下方顯示對應 `⚠️ {原因}` 訊息，不扣除資源；全部通過則呼叫 `trial-manager.start_trial()`，顯示 `✅ 試煉已開始！`，並觸發 Public 開始通知
+  - 禁用條件：目前已有進行中試煉；或試煉冷卻中（`trial_state.ended_at` 存在且 `now - ended_at < TRIAL_COOLDOWN_SECONDS`）；或村莊三種資源（食物/木頭/知識）皆不足 `TRIAL_TARGET_AMOUNT`
+  - 點擊後**不彈出任何 Modal，不需玩家輸入任何資訊**：直接呼叫 `trial-manager.start_trial()`，由系統在可負擔 `TRIAL_TARGET_AMOUNT` 的資源類型中均勻隨機選一種扣除
+  - 成功時於主介面個人資訊區塊下方顯示 `✅ 試煉已開始！`，並觸發 Public 開始通知；前置條件不滿足時（理論上按鈕已 disabled，但仍防呆處理併發競態）顯示統一的 `⚠️ 開啟試煉失敗，請重新嘗試。`，不扣除資源
 
 ### 行動選擇組
 - **Dropdown 1**：選擇行動
@@ -246,6 +244,7 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
 
 ## Changelog
 
+- 2026-07-14: `open_trial_start` no longer opens a Modal. Clicking it directly starts a trial with a fixed `TRIAL_TARGET_AMOUNT` and a system-chosen resource (uniformly random among affordable types) — zero player input. `build_main_components` now also takes `resources` to additionally disable the button when no resource type can afford `TRIAL_TARGET_AMOUNT`.
 - 2026-07-14: Replaced the trial-opening slash command with an `open_trial_start` button (Row 1, alongside burst/gear upgrade) + `modal_start_trial` Modal (free-text resource + target). Button disabled unless a trial can currently be started. Removed resource type from the Dashboard trial progress line (was `🏆 試煉 {resource_emoji}{resource_label} {progress} / {target}`, now `🏆 試煉 {progress} / {target}`) to avoid implying the goal is a single-resource collection target. `build_main_embed` gained an optional `trial_message` line for post-submission feedback.
 - 2026-07-14: Added village trial (🏆) display: village section gains a trial progress line (shown only while a trial is active); 個人資訊 gains a 試煉貢獻 line (shown only while a trial is active).
 - 2026-07-14: Added universal material (🌟) display: 個人資訊 素材 line appends universal material count; gear upgrade sub-menu 持有素材 line shows universal material holdings alongside the type-specific count; `/idlevillage-manager` 素材數量 field appends `萬能 {materials_universal}`.

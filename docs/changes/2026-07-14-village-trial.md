@@ -32,6 +32,7 @@ source_paths:
   - tests/test_trial_manager.py
   - tests/test_v2_schema_initialization.py
   - tests/test_startup_shell.py
+  - tests/test_v2_config_validation.py
 scope: "Tracks the village trial (試煉) feature from design through review: a global, resource-funded, timed community goal that rewards participants with universal material by contribution."
 ---
 
@@ -207,3 +208,24 @@ scope: "Tracks the village trial (試煉) feature from design through review: a 
 `trial_manager.py`、`settlement.py`、`engine.py` 完全未變動——試煉的核心進度計算、逾時偵測、獎勵分配邏輯不受影響。
 
 驗證：`uv run python -m pytest -q` → 480 passed, 3 subtests passed，無失敗。
+
+## Post-Review Fixes Round 2 (2026-07-14, further UX simplification)
+
+使用者要求進一步簡化試煉開啟流程：
+
+1. **不顯示是誰點選開始** → `trial_start` 事件與訊息移除 `user_id`/`<@{user_id}>` mention，開頭改為「🏆 村莊試煉開始！花費 ...」。
+2. **固定消耗 50000 資源，拿掉倍率參數** → 環境變數 `TRIAL_TARGET_STEP`（倍率，玩家輸入目標須為其整數倍）整個移除，改為 `TRIAL_TARGET_AMOUNT`（固定目標值，預設 50000）。`start_trial()` 不再接受 `resource_type`/`target`/`user_id` 參數，簽章簡化為 `start_trial(db, now)`。移除 `get_invalid_target_step()`。
+3. **試煉時間改為 12hr** → `TRIAL_DURATION_SECONDS` 預設由 86400 改為 43200。`TRIAL_COOLDOWN_SECONDS`（試煉結束後 12hr 冷卻）本來就是 43200，未變動。
+4. **點擊後直接隨機扣資源，無需玩家輸入** → 移除 Modal 與 `modal_start_trial` 路由。`open_trial_start` 按鈕點擊後直接呼叫 `trial_manager.start_trial(db, now)`：內部計算 `eligible = [r for r in (food, wood, knowledge) if 該資源 >= TRIAL_TARGET_AMOUNT]`，若無合格資源則 raise ValueError；否則 `random.choice(eligible)` 均勻隨機選一種扣除。新增 `get_eligible_resource_types(db)` 供 UI 判斷按鈕是否該 disabled（`build_main_components` 新增 `resources` 參數）。
+
+### 受影響檔案
+
+- 修改：`src/managers/trial_manager.py`（`start_trial` 簽章簡化、新增 `get_eligible_resource_types()`、移除 `get_invalid_target_step()`、新增 `random` import）、`src/core/config.py`（`REQUIRED_KEYS` 換成 `TRIAL_TARGET_AMOUNT`；另外新增 `.env.example` fallback 機制，見下方獨立變更）、`.env.example`／`tests/support.py`（`TRIAL_TARGET_STEP`→`TRIAL_TARGET_AMOUNT=50000`，`TRIAL_DURATION_SECONDS` 86400→43200）、`src/cogs/actions.py`（移除 Modal 與 `_parse_trial_resource`，按鈕改直接動作）、`src/cogs/ui_renderer.py`（`build_main_components` 新增 `resources` 參數與資源足夠判斷）、`src/core/notification.py`（移除 `trial_start` 的使用者 mention）
+- 文件：`docs/managers/trial-manager.md`、`docs/engine/formula.md`、`docs/discord/command-handler.md`、`docs/discord/ui-renderer.md`、`docs/discord/notification.md`
+- 測試：`tests/test_trial_manager.py`（因應新簽章全面重寫）、`tests/test_discord_commands.py`（`TestTrialButtonAndModal` 改為 `TestTrialStartButton`，`TestRendererMainComponents` 試煉按鈕測試補上 `resources` 參數）、`tests/test_discord_notifications.py`（`test_format_trial_start` 移除 mention 斷言）、`tests/test_v2_config_validation.py`（因應 `config.py` 新增 `.env.example` fallback 機制而重寫）
+
+### 附帶變更：`.env` 改為可選、缺值時 fallback 到 `.env.example`
+
+使用者要求把本機 `.env` 清空，並讓程式在 `.env` 缺值時自動使用 `.env.example` 的預設值（而非啟動失敗）。`src/core/config.py` 新增 `_load_env_example_defaults()`（解析 `.env.example` 為 dict）與 `_resolve_raw(key)`（先讀真實環境變數，空白/缺失則 fallback 到該 dict）；`get_env_str`/`get_env_int`/`get_env_float`/`validate_env()` 全部改用 `_resolve_raw`。本機 `.env` 已清空（僅留一行說明註解），不影響 git（`.env` 本來就在 `.gitignore`）。
+
+驗證：`uv run python -m pytest -q` → 477 passed, 3 subtests passed，無失敗。
