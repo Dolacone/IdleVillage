@@ -1,6 +1,6 @@
 ---
 title: "移除奉獻系統"
-status: Issues-confirmed
+status: Reviewed
 created: 2026-07-14
 doc_type: change
 last_reviewed: 2026-07-14
