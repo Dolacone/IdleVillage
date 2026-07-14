@@ -19,7 +19,7 @@ source_paths:
 ## 結算流程
 
 ```
-1. 若未設定行動 → 跳過，結束。
+1. 若未設定行動，或行動值非四種有效類型（例如已移除功能遺留的舊 stored value）→ 跳過，結束。
 
 2. 計算完整週期消耗（消耗量見 formula.md 環境變數 FOOD_COST / WOOD_COST / KNOWLEDGE_COST）。
 
