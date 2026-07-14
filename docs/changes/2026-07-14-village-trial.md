@@ -1,6 +1,6 @@
 ---
 title: "新指令：村莊試煉"
-status: Draft
+status: Ready-to-implement
 created: 2026-07-14
 doc_type: change
 last_reviewed: 2026-07-14
@@ -25,7 +25,8 @@ scope: "Tracks the village trial (試煉) feature from design through review: a 
 - action-resolver 於每次完整週期結算（含 partial cycle、burst）後，若試煉進行中，呼叫 `trial_manager.add_progress()`；使用**資源不足懲罰前**的 output，比照 stage-manager 對關卡進度的既有規則，維持計分基準一致。
 - cycle-engine 的 Watcher tick 中新增一次 `trial_manager.check_timeout(now)` 呼叫，確保沒有任何玩家觸發結算時仍能在 `TRIAL_DURATION_SECONDS` 後偵測逾時（懶惰偵測依附既有 Watcher heartbeat，不新增獨立計時器，比照 stage-manager 逾時偵測風格但改掛在固定週期的 Watcher tick 上，因為試煉逾時不像關卡逾時依附於個別玩家的結算時機）。
 - 新增 Discord Slash Command `/idlevillage-trial`，選項：`resource`（Choice：食物/木頭/知識）與 `target`（整數，必須為 `TRIAL_TARGET_STEP` 的整數倍）。驗證失敗（非整數倍、試煉進行中、冷卻未過、資源不足）時回覆 Ephemeral 錯誤訊息並說明原因；成功時回覆 Ephemeral 確認並觸發 Public 開始通知。
-- 村莊 Dashboard 與 `/idlevillage` 個人主介面新增試煉進度顯示行（僅試煉進行中時顯示），比照現有關卡進度/建築進度呈現風格。
+- 村莊 Dashboard 與 `/idlevillage` 個人主介面新增試煉進度顯示行（僅試煉進行中時顯示），比照現有關卡進度/建築進度呈現風格。`ui_renderer.py` 的 `trial_data` 參數採可選（預設 `None`，內部視為無進行中試煉），使 Task 3 單獨完成後既有呼叫端（尚未傳入 `trial_data`）仍維持原本行為（不顯示試煉列），Task 6/7 再串接真實資料，避免任務之間出現簽章不符的中間壞狀態。
+- Dashboard／主介面的資料擷取層（`notification.py._fetch_village_dashboard_data`、`actions.py._fetch_all_data`、`general.py._fetch_village_data`）直接以 `SELECT * FROM trial_state WHERE id=1` 查詢，不透過 `trial_manager.get_trial_info()`。這與這三個函式現有查詢 `stage_state`／`buildings`／`village_resources` 的方式一致（皆為直接 SQL，未呼叫對應 manager 的 getter），屬既有慣例，非新增的不一致。`trial_manager.get_trial_info()`/`get_contribution()` 供沒有既有 fetch-helper 模式的呼叫端使用（例如 `trial_cog.py` 指令驗證邏輯、`trial_manager` 內部）。
 - 新增 Public 通知：試煉開始、試煉達成（含各參與者貢獻與獲得數量列表，比照 `/idlevillage-ranking` 的截斷規則）、試煉失敗（逾時）。
 - 新增環境變數（比照專案「平衡數值一律讀環境變數」慣例，見 `engine/formula.md`）：`TRIAL_DURATION_SECONDS`（預設 86400，即 24 小時）、`TRIAL_COOLDOWN_SECONDS`（預設 43200，即 12 小時）、`TRIAL_TARGET_STEP`（預設 1000）、`TRIAL_REWARD_DIVISOR`（預設 100）。命名採用 `_SECONDS` 後綴而非 `_HOURS`，比照專案既有大時長環境變數慣例（如 `STAGE_OVERTIME_SECONDS=86400`），非逐字沿用需求描述的「小時」措辭。
 - 獎勵計算：`reward_i = ceil(contribution_i / total_contribution × (target / TRIAL_REWARD_DIVISOR))`，逐一呼叫 `player-manager.addUniversalMaterial()`。依使用者決策採無條件進位，總發放量可能略高於 `target / TRIAL_REWARD_DIVISOR`（多人各自進位所致），此為使用者確認接受的行為，非 bug。
@@ -95,9 +96,9 @@ scope: "Tracks the village trial (試煉) feature from design through review: a 
 
 - [ ] Task 3: ui_renderer.py — Dashboard 與個人主介面新增試煉顯示
   - Files: `src/cogs/ui_renderer.py`
-  - Tests: 更新 `tests/test_discord_commands.py`，涵蓋：(a) 試煉進行中時村莊區塊出現試煉進度列（含資源圖示/名稱、進度、期限）；(b) 試煉未進行時村莊區塊不出現試煉列；(c) 個人資訊區塊試煉進行中時出現「試煉貢獻」列；(d) 試煉未進行時不出現該列
+  - Tests: 更新 `tests/test_discord_commands.py`，涵蓋：(a) 試煉進行中時村莊區塊出現試煉進度列（含資源圖示/名稱、進度、期限）；(b) 試煉未進行時村莊區塊不出現試煉列；(c) 個人資訊區塊試煉進行中時出現「試煉貢獻」列；(d) 試煉未進行時不出現該列；(e) 呼叫端未傳入 `trial_data`（沿用預設值）時行為與試煉未進行時相同，確保既有呼叫端在 Task 6/7 串接前不會出錯
   - Depends on: Task 2（`trial_data`/貢獻值資料形狀）
-  - Acceptance: `_build_village_section`/`build_village_embed`/`build_main_embed` 新增 `trial_data`（與既有 `stage_data` 同層級的必要參數）與（`build_main_embed` 另外）玩家個人貢獻值；顯示格式符合 `docs/discord/ui-renderer.md`；試煉未啟用時兩處顯示皆完整省略；既有 UI 測試不受影響且全數通過
+  - Acceptance: `_build_village_section`/`build_village_embed`/`build_main_embed` 新增**可選**關鍵字參數 `trial_data=None`（內部以 `trial_data or {}` 正規化，`{}`／`is_active` 為假值時視為無進行中試煉），`build_main_embed` 另外新增可選的玩家個人貢獻值參數（預設 0）；顯示格式符合 `docs/discord/ui-renderer.md`；試煉未啟用或參數未提供時兩處顯示皆完整省略；既有呼叫端（`notification.py`/`actions.py`/`general.py`，尚未於本任務更新）在不傳入新參數的情況下行為不變；既有 UI 測試不受影響且全數通過
 
 - [ ] Task 4: settlement.py — 掛載試煉進度累加
   - Files: `src/core/settlement.py`
@@ -124,7 +125,7 @@ scope: "Tracks the village trial (試煉) feature from design through review: a 
   - Acceptance: `actions.py._fetch_all_data` 與 `general.py._fetch_village_data` 皆查詢 `trial_state`（與 `actions.py` 額外查詢當前玩家的 `trial_contributions`），並傳入 `build_main_embed`/`build_village_embed`；既有指令測試不受影響且全數通過
 
 - [ ] Task 8: 新指令 `/idlevillage-trial`
-  - Files: `src/cogs/trial_cog.py`（新檔）, `src/main.py`（新增一行 `bot.load_extension("cogs.trial_cog")`，非核心邏輯變更不計入 2 檔限制之外的額外負擔，仍在 2 檔內）
+  - Files: `src/cogs/trial_cog.py`（新檔）, `src/main.py`（將 `"cogs.trial_cog"` 加入既有 `initial_extensions` 列表，非新增獨立的 `bot.load_extension()` 呼叫；非核心邏輯變更，仍在 2 檔限制內）
   - Tests: 新增 `tests/test_trial_cog.py`，涵蓋：(a) 非指定 Guild 時拒絕執行；(b) `target` 非 `TRIAL_TARGET_STEP` 整數倍時回覆 Ephemeral 錯誤且不呼叫 `start_trial`；(c) 已有進行中試煉、冷卻未過、資源不足三種前置條件失敗時分別回覆對應錯誤訊息；(d) 成功開啟時呼叫 `trial_manager.start_trial`、回覆 Ephemeral 確認、並 dispatch 一則 `trial_start` Public 通知
   - Depends on: Task 2, Task 6
   - Acceptance: Slash command `resource` 選項為 Choice（食物/木頭/知識對應 food/wood/knowledge）、`target` 為整數選項；所有前置條件失敗情境皆有對應 Ephemeral 錯誤訊息且不扣除資源；成功時觸發的 `trial_start` 事件格式符合 `docs/discord/notification.md`；`main.py` 正確載入新 cog；測試通過
@@ -135,3 +136,9 @@ scope: "Tracks the village trial (試煉) feature from design through review: a 
 - Task 6 需等待 Task 2 與 Task 3 皆完成。
 - Task 7 需等待 Task 1 與 Task 3 完成，可與 Task 4／Task 5／Task 6 平行進行（檔案無交集）。
 - Task 8 需等待 Task 2 與 Task 6 完成。
+
+## Plan Review Issues
+
+- [x] Issue 1 (dependency chain gap, intermediate broken state): Task 3 (`docs/changes/2026-07-14-village-trial.md:96-100`) changes `_build_village_section`/`build_village_embed`/`build_main_embed` signatures to require `trial_data` as a mandatory new parameter, but the existing call sites in `src/core/notification.py` (`_fetch_village_dashboard_data`/`update_dashboard`), `src/cogs/general.py` (`_fetch_village_data`/`announcement`), and `src/cogs/actions.py` (`_fetch_all_data`/`_render_main`) are not updated until Task 6/Task 7 — which per the stated sequential execution order (`docs/changes/2026-07-14-village-trial.md:132-137`) run strictly after Task 3. This leaves the codebase in a broken state (call sites passing wrong arity) between completion of Task 3 and completion of Task 6/7. Either make `trial_data` an optional/defaulted parameter in Task 3, or fold the call-site updates into the same task as the signature change.
+- [x] Issue 2 (Architecture Decisions / trial-manager.md inconsistency): The Recommended Direction and `docs/managers/trial-manager.md:91-92` define `get_trial_info(db)` and `get_contribution(db, user_id)` as the manager's query API for UI consumption, but Task 6 and Task 7 acceptance criteria (`docs/changes/2026-07-14-village-trial.md:118` and `:124`) specify that `notification.py._fetch_village_dashboard_data`, `actions.py._fetch_all_data`, and `general.py._fetch_village_data` query `trial_state`/`trial_contributions` directly via raw SQL rather than calling the manager's query functions. This bypasses the documented manager API and duplicates query logic across three call sites. Either update Task 6/7 to call `trial_manager.get_trial_info()`/`get_contribution()`, or update the Recommended Direction and trial-manager.md to explicitly permit direct DB queries from UI-adjacent fetch helpers (matching the existing pattern where these helpers already query other tables like `stage_state` directly).
+- [x] Issue 3 (inaccurate call-site description): Task 8's file-scope note for `src/main.py` (`docs/changes/2026-07-14-village-trial.md:127`) says to add "一行 `bot.load_extension(\"cogs.trial_cog\")`", but the actual code (`src/main.py:59-69`) loads extensions by iterating over an `initial_extensions` list, not via a standalone `load_extension` call. The correct change is to append `"cogs.trial_cog"` to that list, not insert a separate `bot.load_extension(...)` line.
