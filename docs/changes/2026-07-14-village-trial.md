@@ -12,6 +12,7 @@ source_paths:
   - src/cogs/ui_renderer.py
   - src/core/settlement.py
   - src/core/engine.py
+  - src/core/notification.py
 scope: "Tracks the village trial (試煉) feature from design through review: a global, resource-funded, timed community goal that rewards participants with universal material by contribution."
 ---
 
@@ -119,7 +120,7 @@ scope: "Tracks the village trial (試煉) feature from design through review: a 
   - Depends on: Task 2
   - Acceptance: `Engine._process_watcher_v2` 在處理完到期玩家後呼叫一次 `trial_manager.check_timeout(now)`，回傳事件併入 `all_events` 後才 dispatch；測試通過
 
-- [ ] Task 6: notification.py — 試煉事件格式化與 Dashboard 資料串接
+- [x] Task 6: notification.py — 試煉事件格式化與 Dashboard 資料串接
   - Files: `src/core/notification.py`
   - Tests: 更新 `tests/test_discord_notifications.py`，涵蓋：(a) `trial_start`/`trial_success`/`trial_fail` 三種事件的 `_format_event` 輸出符合範本；(b) `trial_success` 參與者列表超長時正確截斷並附加省略提示；(c) `update_dashboard` 正確將試煉資料傳入 `build_village_embed`
   - Depends on: Task 2, Task 3
