@@ -4,7 +4,8 @@ status: Ready-to-implement
 created: 2026-07-14
 doc_type: change
 last_reviewed: 2026-07-14
-source_paths: []
+source_paths:
+  - src/database/schema.py
 scope: "Tracks introduction of the universal material (萬能素材) placeholder and its use as a shortfall fallback during gear upgrade."
 ---
 
@@ -67,7 +68,7 @@ shortfall = max(0, material_cost - materials[gear_type])
 
 ## Tasks
 
-- [ ] Task 1: DB schema — 新增 `materials_universal` 欄位
+- [x] Task 1: DB schema — 新增 `materials_universal` 欄位
   - Files: `src/database/schema.py`
   - Tests: 既有 `tests/test_v2_schema_initialization.py` 等 schema 測試套件需維持通過（新欄位有 DEFAULT 0，不需額外 fixture 變更）
   - Depends on: 無

@@ -80,6 +80,7 @@ async def _create_v2_tables(db):
             materials_building INTEGER NOT NULL DEFAULT 0,
             materials_combat INTEGER NOT NULL DEFAULT 0,
             materials_research INTEGER NOT NULL DEFAULT 0,
+            materials_universal INTEGER NOT NULL DEFAULT 0,
             gear_gathering INTEGER NOT NULL DEFAULT 0,
             gear_building INTEGER NOT NULL DEFAULT 0,
             gear_combat INTEGER NOT NULL DEFAULT 0,
