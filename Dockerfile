@@ -9,6 +9,7 @@ COPY src/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY .env /app/.env
+COPY .env.example /app/.env.example
 COPY src/ .
 
 RUN mkdir -p /app/data

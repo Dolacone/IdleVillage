@@ -1,14 +1,35 @@
 import os
 
-_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-_ENV_EXAMPLE_PATH = os.path.join(_PROJECT_ROOT, ".env.example")
+
+def _find_env_example_path() -> str | None:
+    """
+    Locate .env.example by walking up from this file's directory.
+
+    Depth differs by context: in the repo it's two levels above src/core/config.py
+    (repo root); in the Docker image (WORKDIR /app, src/ contents copied flat into
+    /app) it's one level above /app/core/config.py. Searching handles both without
+    hardcoding either layout.
+    """
+    directory = os.path.dirname(os.path.abspath(__file__))
+    for _ in range(6):
+        candidate = os.path.join(directory, ".env.example")
+        if os.path.isfile(candidate):
+            return candidate
+        parent = os.path.dirname(directory)
+        if parent == directory:
+            break
+        directory = parent
+    return None
 
 
 def _load_env_example_defaults() -> dict:
     """Parse .env.example as fallback defaults for keys left blank in the real environment."""
     defaults = {}
+    path = _find_env_example_path()
+    if not path:
+        return defaults
     try:
-        with open(_ENV_EXAMPLE_PATH) as f:
+        with open(path) as f:
             for line in f:
                 line = line.strip()
                 if not line or line.startswith("#") or "=" not in line:
