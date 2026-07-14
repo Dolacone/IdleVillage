@@ -1,7 +1,7 @@
 ---
 title: "Module: formula"
 doc_type: module
-last_reviewed: 2026-05-23
+last_reviewed: 2026-07-14
 source_paths:
   - src/core/formula.py
 ---
@@ -39,12 +39,10 @@ Discord UI 顯示使用繁體中文。資料庫與程式內部 enum 一律使用
 | `building` | 建設 | 建設工具等級 | 加工廠等級 |
 | `combat` | 戰鬥 | 狩獵工具等級 | 狩獵場等級 |
 | `research` | 研究 | 研究工具等級 | 研究所等級 |
-| `offering` | 奉獻 | 無（不使用工具/設施加成） | 無 |
 
-`players.action` stored values: `gathering`, `building`, `combat`, `research`, `offering`.
+`players.action` stored values: `gathering`, `building`, `combat`, `research`.
 `players.action_target` usage:
 - `building`: stores building enum value (required).
-- `offering`: stores chosen resource type — `food`, `wood`, or `knowledge` (required).
 - 其他行動: `null`。Research maps to `research_lab` internally.
 
 ## Environment variables
@@ -86,7 +84,6 @@ Discord UI 顯示使用繁體中文。資料庫與程式內部 enum 一律使用
 | `AFFIX_SLOT_INTERVAL` | `managers/affix-manager.md` |
 | `AFFIX_EXTRACT_COST` | `managers/affix-manager.md` |
 | `AFFIX_CLEAR_COST` | `managers/affix-manager.md` |
-| `OFFERING_THRESHOLD_PER_PLAYER` | `engine/action-resolver.md` |
 
 ## Material Drop Rate
 
@@ -102,6 +99,7 @@ Discord UI 顯示使用繁體中文。資料庫與程式內部 enum 一律使用
 
 ## Changelog
 
+- 2026-07-14: Removed offering action (stored value `offering`, action_target usage, `OFFERING_THRESHOLD_PER_PLAYER` env var).
 - 2026-05-22: Added AFFIX_SLOT_INTERVAL, AFFIX_EXTRACT_COST, AFFIX_CLEAR_COST env vars owned by affix-manager.
 - 2026.05.08.00: Added material drop rate ownership note for stage-matching boost.
 - 2026.05.06.01: Official user-facing gear naming changed to tools:
