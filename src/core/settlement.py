@@ -22,7 +22,7 @@ from core.formula import (
 )
 from core.utils import dt_str, parse_dt
 from database.schema import get_connection
-from managers import affix_manager, building_manager, player_manager, resource_manager, stage_manager
+from managers import affix_manager, building_manager, player_manager, resource_manager, stage_manager, trial_manager
 
 
 # ---------------------------------------------------------------------------
@@ -199,6 +199,12 @@ async def _run_one_cycle(
     # Emit buffered building upgrades (from add_xp) after stage events
     events.extend(building_pre_events)
 
+    # Village trial progress — parallel to and independent of stage progress.
+    # Uses the same pre-shortage-penalty output as stage progress (all action types count).
+    trial_event = await trial_manager.add_progress(db, output, user_id, cycle_end_time)
+    if trial_event is not None:
+        events.append(trial_event)
+
     # Material drop — boosted when stage type matches action or is upgrade.
     # Use stage_pre (read before add_progress) so a stage clear in this cycle
     # doesn't shift the rate to the next stage's type.
@@ -343,6 +349,11 @@ async def change_action(
 
             # Stage progress uses pre-penalty partial_output; no material drop for partial
             await stage_manager.add_progress(db, old_action, partial_output, now)
+
+            # Village trial progress — parallel to stage progress, same pre-penalty basis
+            trial_event = await trial_manager.add_progress(db, partial_output, user_id, now)
+            if trial_event is not None:
+                events.append(trial_event)
 
         # Step 3: Write new action and reset cycle timing
         now_str = dt_str(now)

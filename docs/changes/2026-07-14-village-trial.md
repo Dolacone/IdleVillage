@@ -10,6 +10,7 @@ source_paths:
   - .env.example
   - src/managers/trial_manager.py
   - src/cogs/ui_renderer.py
+  - src/core/settlement.py
 scope: "Tracks the village trial (試煉) feature from design through review: a global, resource-funded, timed community goal that rewards participants with universal material by contribution."
 ---
 
@@ -105,7 +106,7 @@ scope: "Tracks the village trial (試煉) feature from design through review: a 
   - Depends on: Task 2（`trial_data`/貢獻值資料形狀）
   - Acceptance: `_build_village_section`/`build_village_embed`/`build_main_embed` 新增**可選**關鍵字參數 `trial_data=None`（內部以 `trial_data or {}` 正規化，`{}`／`is_active` 為假值時視為無進行中試煉），`build_main_embed` 另外新增可選的玩家個人貢獻值參數（預設 0）；顯示格式符合 `docs/discord/ui-renderer.md`；試煉未啟用或參數未提供時兩處顯示皆完整省略；既有呼叫端（`notification.py`/`actions.py`/`general.py`，尚未於本任務更新）在不傳入新參數的情況下行為不變；既有 UI 測試不受影響且全數通過
 
-- [ ] Task 4: settlement.py — 掛載試煉進度累加
+- [x] Task 4: settlement.py — 掛載試煉進度累加
   - Files: `src/core/settlement.py`
   - Tests: 更新 `tests/test_engine_settlement.py`，涵蓋：(a) 完整週期結算時試煉進行中會呼叫 `trial_manager.add_progress` 並將回傳的 `trial_success` 事件加入 events；(b) partial cycle（`change_action`）同樣計入試煉進度；(c) burst 3 次結算各自獨立計入試煉進度；(d) 試煉未啟用時不影響現有結算行為
   - Depends on: Task 2

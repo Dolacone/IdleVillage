@@ -479,6 +479,115 @@ class StageProgressTest(SettlementTestBase):
 
 
 # ---------------------------------------------------------------------------
+# Village trial progress tests
+# ---------------------------------------------------------------------------
+
+class TrialProgressTest(SettlementTestBase):
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        await self._set_resource("food", 10000)
+        await self._set_resource("wood", 10000)
+        await self._set_resource("knowledge", 10000)
+
+    async def _write_trial_state(self, target=1000, progress=0, started_at=None):
+        now_str = _now().isoformat()
+        started_at_str = (started_at or _now()).isoformat()
+        async with schema.get_connection() as db:
+            await db.execute(
+                """UPDATE trial_state SET
+                   is_active=1, resource_type='food', target=?, progress=?,
+                   started_at=?, updated_at=?
+                   WHERE id=1""",
+                (target, progress, started_at_str, now_str),
+            )
+            await db.commit()
+
+    async def _get_trial_state(self) -> dict:
+        async with schema.get_connection() as db:
+            async with db.execute("SELECT * FROM trial_state WHERE id=1") as cur:
+                row = await cur.fetchone()
+                cols = [d[0] for d in cur.description]
+                return dict(zip(cols, row))
+
+    async def test_full_cycle_settlement_adds_trial_progress(self):
+        """A full-cycle settlement of any action type contributes to an active trial."""
+        await self._write_trial_state(target=100000, progress=0)
+        cycle_end = _now() - timedelta(minutes=1)
+        await self._insert_player(
+            action="combat",
+            completion_time=cycle_end,
+            last_update_time=cycle_end - timedelta(minutes=10),
+        )
+        await settle_complete_cycles(self.TEST_USER, _now())
+        trial_after = await self._get_trial_state()
+        base = int(ALL_TEST_ENV["BASE_OUTPUT"])
+        self.assertEqual(trial_after["progress"], base)
+
+    async def test_full_cycle_settlement_emits_trial_success_event_on_target_reached(self):
+        base = int(ALL_TEST_ENV["BASE_OUTPUT"])
+        await self._write_trial_state(target=base, progress=0)
+        cycle_end = _now() - timedelta(minutes=1)
+        await self._insert_player(
+            action="combat",
+            completion_time=cycle_end,
+            last_update_time=cycle_end - timedelta(minutes=10),
+        )
+        events = await settle_complete_cycles(self.TEST_USER, _now())
+        self.assertIn("trial_success", [e["type"] for e in events])
+        trial_after = await self._get_trial_state()
+        self.assertEqual(trial_after["is_active"], 0)
+
+    async def test_inactive_trial_is_unaffected_by_settlement(self):
+        """Default (inactive) trial_state must not produce trial events or change progress."""
+        cycle_end = _now() - timedelta(minutes=1)
+        await self._insert_player(
+            action="gathering",
+            completion_time=cycle_end,
+            last_update_time=cycle_end - timedelta(minutes=10),
+        )
+        events = await settle_complete_cycles(self.TEST_USER, _now())
+        types = [e.get("type") for e in events]
+        self.assertNotIn("trial_success", types)
+        self.assertNotIn("trial_fail", types)
+        trial_after = await self._get_trial_state()
+        self.assertEqual(trial_after["progress"], 0)
+
+    async def test_partial_cycle_adds_trial_progress(self):
+        """change_action's partial-cycle settlement also contributes to an active trial."""
+        await self._write_trial_state(target=100000, progress=0)
+        cycle_mins = int(ALL_TEST_ENV["ACTION_CYCLE_MINUTES"])
+        last_update = _now() - timedelta(minutes=cycle_mins / 2)
+        completion = _now() + timedelta(minutes=cycle_mins / 2)
+        await self._insert_player(
+            action="gathering",
+            completion_time=completion,
+            last_update_time=last_update,
+        )
+        await change_action(self.TEST_USER, "combat", None, _now())
+        trial_after = await self._get_trial_state()
+        base = int(ALL_TEST_ENV["BASE_OUTPUT"])
+        expected = math.floor(base * 0.5)
+        self.assertEqual(trial_after["progress"], expected)
+
+    async def test_burst_adds_trial_progress_three_times_independently(self):
+        """Each of burst's 3 independent settlements contributes to the active trial."""
+        await self._write_trial_state(target=100000, progress=0)
+        ap_cap = int(ALL_TEST_ENV["AP_CAP"])
+        now = _now()
+        await self._insert_player(
+            action="gathering",
+            completion_time=now + timedelta(minutes=10),
+            last_update_time=now - timedelta(minutes=5),
+            ap_full_time=now - timedelta(minutes=1),
+        )
+        ok, _events = await settle_burst(self.TEST_USER, now)
+        self.assertTrue(ok)
+        trial_after = await self._get_trial_state()
+        base = int(ALL_TEST_ENV["BASE_OUTPUT"])
+        self.assertEqual(trial_after["progress"], base * 3)
+
+
+# ---------------------------------------------------------------------------
 # Building upgrade tests
 # ---------------------------------------------------------------------------
 
