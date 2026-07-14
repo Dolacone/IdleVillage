@@ -16,7 +16,6 @@ from core.formula import (
     ACTION_MATERIAL_COL,
     VALID_ACTIONS,
     action_costs,
-    compute_offering_cost,
     compute_output,
 )
 
@@ -207,26 +206,6 @@ class AffixEfficiencyTest(DatabaseTestCase):
         self.assertEqual(result, base)
 
 
-class ComputeOfferingCostTest(DatabaseTestCase):
-    TEST_USER = "offering_cost_user"
-
-    async def asyncSetUp(self):
-        await super().asyncSetUp()
-        from database import schema
-        async with schema.get_connection() as db:
-            await db.execute(
-                "INSERT OR IGNORE INTO players (user_id) VALUES (?)", (self.TEST_USER,)
-            )
-            await db.commit()
-
-    async def test_returns_sum_of_four_outputs(self):
-        base = int(ALL_TEST_ENV["BASE_OUTPUT"])
-        from database import schema
-        async with schema.get_connection() as db:
-            result = await compute_offering_cost(db, self.TEST_USER)
-        self.assertEqual(result, base * 4)
-
-
 _PRODUCTIVE_ACTIONS = ("gathering", "building", "combat", "research")
 
 
@@ -235,22 +214,13 @@ class ActionConfigMapsTest(unittest.TestCase):
         for action in _PRODUCTIVE_ACTIONS:
             self.assertIn(action, ACTION_GEAR_COL)
 
-    def test_offering_not_in_gear_col(self):
-        self.assertNotIn("offering", ACTION_GEAR_COL)
-
     def test_productive_actions_have_material_col(self):
         for action in _PRODUCTIVE_ACTIONS:
             self.assertIn(action, ACTION_MATERIAL_COL)
 
-    def test_offering_not_in_material_col(self):
-        self.assertNotIn("offering", ACTION_MATERIAL_COL)
-
     def test_productive_actions_have_facility(self):
         for action in _PRODUCTIVE_ACTIONS:
             self.assertIn(action, ACTION_FACILITY_BUILDING)
-
-    def test_offering_not_in_facility_building(self):
-        self.assertNotIn("offering", ACTION_FACILITY_BUILDING)
 
     def test_research_facility_is_research_lab(self):
         self.assertEqual(ACTION_FACILITY_BUILDING["research"], "research_lab")

@@ -18,7 +18,6 @@ from core.config import get_env_float, get_env_int
 from core.formula import (
     VALID_ACTIONS,
     action_costs,
-    compute_offering_cost,
     compute_output,
 )
 from core.utils import dt_str, parse_dt
@@ -49,45 +48,6 @@ async def _read_player(db, user_id: str) -> dict | None:
             return None
         cols = [d[0] for d in cur.description]
         return dict(zip(cols, row))
-
-
-# ---------------------------------------------------------------------------
-# Offering helpers
-# ---------------------------------------------------------------------------
-
-async def _check_offering_reward(db, contribution: int, now_str: str) -> list[dict]:
-    """Increment offering_accumulator by contribution and trigger reward if threshold met."""
-    async with db.execute("SELECT offering_accumulator FROM village_state WHERE id=1") as cur:
-        row = await cur.fetchone()
-    current_acc = row[0] if row else 0
-    new_acc = current_acc + contribution
-
-    async with db.execute("SELECT COUNT(*) FROM players") as cur:
-        row = await cur.fetchone()
-    player_count = max(1, row[0] if row else 1)
-    threshold = player_count * get_env_int("OFFERING_THRESHOLD_PER_PLAYER")
-
-    if new_acc >= threshold:
-        await db.execute(
-            """UPDATE players SET
-               materials_gathering = materials_gathering + 1,
-               materials_building = materials_building + 1,
-               materials_combat = materials_combat + 1,
-               materials_research = materials_research + 1,
-               updated_at = ?""",
-            (now_str,),
-        )
-        await db.execute(
-            "UPDATE village_state SET offering_accumulator = 0, updated_at = ? WHERE id=1",
-            (now_str,),
-        )
-        return [{"type": "offering_reward", "total_contributed": new_acc, "threshold": threshold}]
-
-    await db.execute(
-        "UPDATE village_state SET offering_accumulator = ?, updated_at = ? WHERE id=1",
-        (new_acc, now_str),
-    )
-    return []
 
 
 # ---------------------------------------------------------------------------
@@ -136,26 +96,6 @@ async def _run_one_cycle(
         if current < cost:
             shortage_flag = True
         await resource_manager.withdraw(db, resource, cost, cycle_end_time)
-
-    # Offering: consume chosen resource, update accumulator, check reward, skip normal output path
-    if action == "offering":
-        offering_cost = await compute_offering_cost(db, user_id)
-        chosen = player["action_target"] or "food"
-        available = await resource_manager.balance(db, chosen)
-        contribution = min(available, offering_cost)
-        if contribution > 0:
-            await resource_manager.withdraw(db, chosen, contribution, cycle_end_time)
-        now_str = dt_str(cycle_end_time)
-        offering_events = await _check_offering_reward(db, contribution, now_str)
-        events.extend(offering_events)
-        if update_timestamps:
-            effective_secs = _effective_cycle_seconds(affix_bonuses["cycle_time_reduce"])
-            new_completion = dt_str(cycle_end_time + timedelta(seconds=effective_secs))
-            await db.execute(
-                "UPDATE players SET last_update_time=?, completion_time=?, updated_at=? WHERE user_id=?",
-                (now_str, new_completion, now_str, user_id),
-            )
-        return events
 
     # Compute raw output and apply shortage penalty to settlement output
     output = await compute_output(db, user_id, action, affix_efficiency_pct=affix_bonuses["efficiency"])
@@ -338,10 +278,6 @@ async def change_action(
         if new_target not in BUILDING_TYPES:
             raise ValueError(f"Invalid building target: {new_target!r}. Must be one of {BUILDING_TYPES}")
 
-    if new_action == "offering":
-        if new_target not in ("food", "wood", "knowledge"):
-            raise ValueError(f"Invalid offering resource: {new_target!r}. Must be one of (food, wood, knowledge)")
-
     events: list[dict] = []
     async with get_connection() as db:
         player = await _read_player(db, user_id)
@@ -388,39 +324,28 @@ async def change_action(
                     shortage_flag = True
                 await resource_manager.withdraw(db, resource, partial_cost, now)
 
-            if old_action == "offering":
-                offering_cost = await compute_offering_cost(db, user_id)
-                partial_offering = math.floor(offering_cost * ratio)
-                chosen = player["action_target"] or "food"
-                available = await resource_manager.balance(db, chosen)
-                contribution = min(available, partial_offering)
-                if contribution > 0:
-                    await resource_manager.withdraw(db, chosen, contribution, now)
-                offering_events = await _check_offering_reward(db, contribution, dt_str(now))
-                events.extend(offering_events)
-            else:
-                output = await compute_output(db, user_id, old_action, affix_efficiency_pct=old_affix_bonuses["efficiency"])
-                partial_output = math.floor(output * ratio)
-                settlement_output = math.floor(partial_output * 0.5) if shortage_flag else partial_output
+            output = await compute_output(db, user_id, old_action, affix_efficiency_pct=old_affix_bonuses["efficiency"])
+            partial_output = math.floor(output * ratio)
+            settlement_output = math.floor(partial_output * 0.5) if shortage_flag else partial_output
 
-                if old_action == "gathering":
-                    await resource_manager.deposit(db, "food", settlement_output, now)
-                    await resource_manager.deposit(db, "wood", settlement_output, now)
-                elif old_action == "combat":
-                    await resource_manager.deposit(db, "knowledge", settlement_output, now)
-                elif old_action in ("building", "research"):
-                    target_building = (
-                        "research_lab" if old_action == "research" else player["action_target"]
-                    )
-                    stages_cleared = await stage_manager.get_stages_cleared(db)
-                    await building_manager.add_xp(db, target_building, settlement_output, stages_cleared, now)
+            if old_action == "gathering":
+                await resource_manager.deposit(db, "food", settlement_output, now)
+                await resource_manager.deposit(db, "wood", settlement_output, now)
+            elif old_action == "combat":
+                await resource_manager.deposit(db, "knowledge", settlement_output, now)
+            elif old_action in ("building", "research"):
+                target_building = (
+                    "research_lab" if old_action == "research" else player["action_target"]
+                )
+                stages_cleared = await stage_manager.get_stages_cleared(db)
+                await building_manager.add_xp(db, target_building, settlement_output, stages_cleared, now)
 
-                # Stage progress uses pre-penalty partial_output; no material drop for partial
-                await stage_manager.add_progress(db, old_action, partial_output, now)
+            # Stage progress uses pre-penalty partial_output; no material drop for partial
+            await stage_manager.add_progress(db, old_action, partial_output, now)
 
         # Step 3: Write new action and reset cycle timing
         now_str = dt_str(now)
-        actual_target = new_target if new_action in ("building", "offering") else None
+        actual_target = new_target if new_action == "building" else None
         if new_action is not None:
             new_affix_bonuses = await affix_manager.get_affix_bonuses(db, user_id, new_action)
             new_effective_secs = _effective_cycle_seconds(new_affix_bonuses["cycle_time_reduce"])

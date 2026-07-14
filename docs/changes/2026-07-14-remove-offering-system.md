@@ -56,7 +56,7 @@ scope: "Tracks removal of the offering (奉獻) player action system from design
   - Depends on: 無
   - Acceptance: schema.py 建表 SQL 不再包含 `offering_accumulator`；config.py 不再讀取 `OFFERING_THRESHOLD_PER_PLAYER`；`.env.example` 不再列出該 key；全套測試通過
 
-- [ ] Task 2: Formula + settlement 奉獻結算移除 — 移除 `compute_offering_cost`（或等效函式）與 `settlement.py` 中 `action == 'offering'` 分支
+- [x] Task 2: Formula + settlement 奉獻結算移除 — 移除 `compute_offering_cost`（或等效函式）與 `settlement.py` 中 `action == 'offering'` 分支
   - Files: `src/core/formula.py`, `src/core/settlement.py`
   - Tests: 移除/更新 `tests/test_engine_formula.py`、`tests/test_engine_settlement.py` 中奉獻相關測試案例，確保其餘四種行動測試不受影響
   - Depends on: Task 1
