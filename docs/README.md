@@ -1,7 +1,7 @@
 ---
 title: IdleVillage v2 Preview SSOT Map
 doc_type: index
-last_reviewed: 2026-05-15
+last_reviewed: 2026-07-14
 source_paths: []
 scope: "Documentation entry point. All repository docs are reachable from this index."
 ---
@@ -25,6 +25,7 @@ This directory is the v2 design preview. v2 is a fresh restart and replaces v1 g
 | Cycle timing, triggers, refresh, burst, partial timing | `engine/cycle-engine.md` |
 | Action settlement, resource shortage, output distribution | `engine/action-resolver.md` |
 | Stage sequence, targets, overtime, clears | `managers/stage-manager.md` |
+| Village trial: goal, timing, contribution, rewards | `managers/trial-manager.md` |
 | Building XP, level cap, capped progress | `managers/building-manager.md` |
 | Player state, AP, materials | `managers/player-manager.md` |
 | Gear upgrade rates, pity, costs | `managers/gear-manager.md` |

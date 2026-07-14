@@ -1,7 +1,7 @@
 ---
 title: "Module: cycle-engine"
 doc_type: module
-last_reviewed: 2026-05-22
+last_reviewed: 2026-07-14
 source_paths:
   - src/core/engine.py
 ---
@@ -29,6 +29,10 @@ source_paths:
 | **開啟介面 / Refresh** | 完整週期補算 | 先檢查 `completion_time`，若已到期則補算完整週期，再渲染 Dashboard |
 
 > Watcher heartbeat 間隔由 `WATCHER_HEARTBEAT_SECONDS` 定義。
+
+Watcher 每次心跳，除了逐一補算到期玩家的週期外，也會呼叫一次 `trial-manager.check_timeout()`
+檢查村莊試煉是否逾時（與個別玩家是否有到期行動無關，確保無人行動時試煉仍能在期限後被判定失敗）。
+詳見 `managers/trial-manager.md`。
 
 ## 完整週期結算流程
 
@@ -121,5 +125,6 @@ ratio          = elapsed / effective_secs（0 ~ 1）
 
 ## Changelog
 
+- 2026-07-14: Watcher tick now also calls `trial-manager.check_timeout()` once per heartbeat, independent of any player's `completion_time`.
 - 2026-05-22: Updated cycle timing to use `_effective_cycle_seconds(cycle_time_reduce_pct)` at all three calculation points (change_action, catch-up advance, partial ratio). `cycle_time_reduce` affix scoped to player's current action tool.
 - 2026.05.08.00: Burst material rolls now use the effective drop rate for the current stage at each settlement.

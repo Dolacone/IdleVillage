@@ -378,6 +378,73 @@ class TestNotificationFormatting(unittest.TestCase):
         self.assertIn("Lv1 -> Lv2", text)
         self.assertIn("總失敗次數：3", text)
 
+    def test_format_trial_start(self):
+        from core.notification import _format_event
+        ev = {
+            "type": "trial_start",
+            "resource_type": "wood",
+            "target": 5000,
+            "reward_pool": 50,
+            "deadline_unix": 1234567890,
+        }
+        text = _format_event(ev)
+        self.assertNotIn("<@", text)
+        self.assertIn("花費 5000 個 🪵木頭", text)
+        self.assertIn("目標：全服玩家共同累積 5000 點行動產出", text)
+        self.assertIn("50 個 🌟萬能素材", text)
+        self.assertIn("<t:1234567890:R>", text)
+
+    def test_format_trial_success(self):
+        from core.notification import _format_event
+        ev = {
+            "type": "trial_success",
+            "target": 5000,
+            "resource_type": "food",
+            "total_awarded": 50,
+            "participants": [
+                {"user_id": "u1", "contribution": 3000, "reward": 25},
+                {"user_id": "u2", "contribution": 2000, "reward": 25},
+            ],
+        }
+        text = _format_event(ev)
+        self.assertIn("🎉 村莊試煉達成", text)
+        self.assertIn("5000", text)
+        self.assertNotIn("食物", text)
+        self.assertIn("50 個 🌟萬能素材", text)
+        self.assertIn("<@u1>：貢獻 3000，獲得 25 個", text)
+        self.assertIn("<@u2>：貢獻 2000，獲得 25 個", text)
+
+    def test_format_trial_success_truncates_long_participant_list(self):
+        from core.notification import _format_event
+        participants = [
+            {"user_id": f"user_{i}", "contribution": 1, "reward": 1} for i in range(200)
+        ]
+        ev = {
+            "type": "trial_success",
+            "target": 1000,
+            "resource_type": "food",
+            "total_awarded": 200,
+            "participants": participants,
+        }
+        text = _format_event(ev)
+        self.assertLessEqual(len(text), 1900 + len("\n（清單過長，部分內容已省略）"))
+        self.assertIn("清單過長，部分內容已省略", text)
+
+    def test_format_trial_fail(self):
+        from core.notification import _format_event
+        ev = {
+            "type": "trial_fail",
+            "target": 5000,
+            "resource_type": "knowledge",
+            "progress": 3200,
+        }
+        text = _format_event(ev)
+        self.assertIn("⌛ 村莊試煉逾時失敗", text)
+        self.assertNotIn("知識", text)
+        self.assertIn("3200/5000", text)
+        self.assertIn("資源不予退還", text)
+        self.assertIn("12 小時內無法開啟新試煉", text)
+
     def test_format_unknown_event_returns_none(self):
         from core.notification import _format_event
         text = _format_event({"type": "unknown_type"})
@@ -550,6 +617,32 @@ class TestDashboardUpdate(DatabaseTestCase):
         self.assertIn("公用資源", embed.description)
         self.assertIn("100", embed.description)
         self.assertIn("村民行動", embed.description)
+
+    async def test_update_dashboard_shows_active_trial(self):
+        from core.notification import update_dashboard
+
+        async with get_connection() as db:
+            await db.execute(
+                "UPDATE village_state SET dashboard_channel_id='123', dashboard_message_id='456' WHERE id=1"
+            )
+            await db.execute(
+                """UPDATE trial_state SET
+                   is_active=1, resource_type='wood', target=5000, progress=1200,
+                   started_at=?, updated_at=?
+                   WHERE id=1""",
+                (_now().isoformat(), _now().isoformat()),
+            )
+            await db.commit()
+
+        message = SimpleNamespace(edit=AsyncMock())
+        channel = SimpleNamespace(fetch_message=AsyncMock(return_value=message))
+        bot = SimpleNamespace(get_channel=lambda channel_id: channel if channel_id == 123 else None)
+
+        await update_dashboard(bot)
+
+        embed = message.edit.call_args.kwargs["embed"]
+        self.assertIn("🏆 試煉", embed.description)
+        self.assertIn("1200 / 5000", embed.description)
 
     async def test_update_dashboard_clears_deleted_message_reference(self):
         from core import notification

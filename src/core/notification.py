@@ -15,7 +15,13 @@ from datetime import datetime, timezone
 
 import disnake
 from core.config import get_env_float, get_env_int
-from cogs.ui_renderer import BUILDING_LABELS, GEAR_LABELS, STAGE_TYPE_LABELS
+from cogs.ui_renderer import (
+    BUILDING_LABELS,
+    GEAR_LABELS,
+    RESOURCE_EMOJIS,
+    RESOURCE_LABELS,
+    STAGE_TYPE_LABELS,
+)
 
 REDUCE_AFFIX_TYPES = {"upgrade_cost_reduce"}
 
@@ -32,7 +38,7 @@ AFFIX_TYPE_LABELS = {
 logger = logging.getLogger(__name__)
 
 
-async def _fetch_village_dashboard_data(db) -> tuple[dict, dict, dict, list]:
+async def _fetch_village_dashboard_data(db) -> tuple[dict, dict, dict, list, dict]:
     async with db.execute("SELECT * FROM stage_state WHERE id=1") as cur:
         row = await cur.fetchone()
         cols = [d[0] for d in cur.description]
@@ -58,7 +64,12 @@ async def _fetch_village_dashboard_data(db) -> tuple[dict, dict, dict, list]:
         async for r in cur:
             action_counts.append((r[0], r[1], r[2]))
 
-    return stage_data, resources, buildings, action_counts
+    async with db.execute("SELECT * FROM trial_state WHERE id=1") as cur:
+        row = await cur.fetchone()
+        cols = [d[0] for d in cur.description]
+        trial_data = dict(zip(cols, row)) if row else {}
+
+    return stage_data, resources, buildings, action_counts, trial_data
 
 
 async def _clear_dashboard_reference(channel_id: str, message_id: str) -> None:
@@ -184,6 +195,44 @@ def _format_event(event: dict) -> str | None:
         sign = "-" if affix_type in REDUCE_AFFIX_TYPES else "+"
         return f"{user_name} 的 {gear_name} {verb}詞條：{affix_label}（{sign}{value}%）"
 
+    if kind == "trial_start":
+        resource_type = event.get("resource_type", "")
+        target = event.get("target", 0)
+        reward_pool = event.get("reward_pool", 0)
+        deadline_unix = event.get("deadline_unix", 0)
+        r_emoji = RESOURCE_EMOJIS.get(resource_type, "")
+        r_label = RESOURCE_LABELS.get(resource_type, resource_type)
+        return (
+            f"🏆 村莊試煉開始！花費 {target} 個 {r_emoji}{r_label}\n"
+            f"目標：全服玩家共同累積 {target} 點行動產出\n"
+            f"期限：<t:{deadline_unix}:R> 前\n"
+            f"達成後將依貢獻度瓜分共 {reward_pool} 個 🌟萬能素材"
+        )
+
+    if kind == "trial_success":
+        target = event.get("target", 0)
+        total_awarded = event.get("total_awarded", 0)
+        participants = event.get("participants", [])
+        lines = [
+            f"🎉 村莊試煉達成！目標 {target} 點行動產出已完成",
+            f"共 {len(participants)} 位玩家依貢獻度瓜分了 {total_awarded} 個 🌟萬能素材：",
+        ]
+        for p in participants:
+            lines.append(f"<@{p['user_id']}>：貢獻 {p['contribution']}，獲得 {p['reward']} 個")
+        text = "\n".join(lines)
+        if len(text) > 1900:
+            text = text[:1900] + "\n（清單過長，部分內容已省略）"
+        return text
+
+    if kind == "trial_fail":
+        target = event.get("target", 0)
+        progress = event.get("progress", 0)
+        cooldown_hours = get_env_int("TRIAL_COOLDOWN_SECONDS") // 3600
+        return (
+            f"⌛ 村莊試煉逾時失敗！目標 {target} 點行動產出未達成（進度：{progress}/{target}）\n"
+            f"資源不予退還。{cooldown_hours} 小時內無法開啟新試煉。"
+        )
+
     return None
 
 
@@ -236,7 +285,7 @@ async def update_dashboard(bot) -> None:
             "SELECT dashboard_channel_id, dashboard_message_id FROM village_state"
         ) as cur:
             row = await cur.fetchone()
-        stage_data, resources, buildings, action_counts = await _fetch_village_dashboard_data(db)
+        stage_data, resources, buildings, action_counts, trial_data = await _fetch_village_dashboard_data(db)
 
     if row is None or not row[0] or not row[1]:
         return
@@ -252,7 +301,7 @@ async def update_dashboard(bot) -> None:
 
     try:
         message = await channel.fetch_message(message_id)
-        embed = build_village_embed(stage_data, resources, buildings, action_counts)
+        embed = build_village_embed(stage_data, resources, buildings, action_counts, trial_data)
         await message.edit(embed=embed)
     except disnake.NotFound:
         await _clear_dashboard_reference(dashboard_channel_id, dashboard_message_id)

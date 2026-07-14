@@ -1,7 +1,6 @@
 data/
 tests/
 docs/
-.env.example
 .gitignore
 README.md
 AI_GUIDELINES.md

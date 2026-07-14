@@ -21,9 +21,9 @@ from core.formula import ACTION_MATERIAL_COL
 from core.settlement import change_action, settle_burst, settle_complete_cycles
 from core.utils import dt_str
 from database.schema import get_connection
-from managers import affix_manager, building_manager, gear_manager, player_manager
+from managers import affix_manager, building_manager, gear_manager, player_manager, trial_manager
 
-_OWN_BUTTONS = frozenset({"burst_execute", "open_gear_upgrade", "back_to_main"})
+_OWN_BUTTONS = frozenset({"burst_execute", "open_gear_upgrade", "open_trial_start", "back_to_main"})
 _OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:", "clear_affix:", "sacrifice_material:", "open_affix_mgmt:", "affix_extract:", "affix_clear:", "back_to_gear:")
 _OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "gear_type_select", "affix_gear_select"})
 _OWN_DROPDOWN_PREFIXES = ("upgrade_mode_select:", "affix_slot_select:")
@@ -73,7 +73,7 @@ class ActionsCog(commands.Cog):
 
     async def _fetch_all_data(
         self, db, user_id: str
-    ) -> tuple[dict, dict, dict, list, dict]:
+    ) -> tuple[dict, dict, dict, list, dict, dict, int]:
         async with db.execute("SELECT * FROM stage_state WHERE id=1") as cur:
             row = await cur.fetchone()
             cols = [d[0] for d in cur.description]
@@ -108,7 +108,18 @@ class ActionsCog(commands.Cog):
             cols = [d[0] for d in cur.description]
             player_row = dict(zip(cols, row)) if row else {}
 
-        return stage_data, resources, buildings, action_counts, player_row
+        async with db.execute("SELECT * FROM trial_state WHERE id=1") as cur:
+            row = await cur.fetchone()
+            cols = [d[0] for d in cur.description]
+            trial_data = dict(zip(cols, row)) if row else {}
+
+        async with db.execute(
+            "SELECT contribution FROM trial_contributions WHERE user_id=?", (user_id,)
+        ) as cur:
+            row = await cur.fetchone()
+        trial_contribution = row[0] if row else 0
+
+        return stage_data, resources, buildings, action_counts, player_row, trial_data, trial_contribution
 
     async def _render_main(
         self,
@@ -116,6 +127,8 @@ class ActionsCog(commands.Cog):
         *,
         pending_action: str | None = None,
         pending_target: str | None = None,
+        trial_message: str | None = None,
+        respond=None,
     ) -> None:
         user_id = str(inter.user.id)
         now = datetime.now(timezone.utc)
@@ -124,17 +137,24 @@ class ActionsCog(commands.Cog):
 
         async with get_connection() as db:
             await self._get_or_create_player(db, user_id, now)
-            stage_data, resources, buildings, action_counts, player_row = (
+            stage_data, resources, buildings, action_counts, player_row, trial_data, trial_contribution = (
                 await self._fetch_all_data(db, user_id)
             )
             ap = await player_manager.get_ap(db, user_id, now)
 
         player_row["_ap"] = ap
-        embed = build_main_embed(stage_data, resources, buildings, action_counts, player_row)
-        components = build_main_components(
-            player_row, buildings, pending_action=pending_action, pending_target=pending_target
+        embed = build_main_embed(
+            stage_data, resources, buildings, action_counts, player_row,
+            trial_data, trial_contribution, trial_message,
         )
-        await inter.edit_original_response(embed=embed, components=components)
+        components = build_main_components(
+            player_row, buildings, pending_action=pending_action, pending_target=pending_target,
+            trial_data=trial_data, resources=resources,
+        )
+        if respond is not None:
+            await respond(embed=embed, components=components)
+        else:
+            await inter.edit_original_response(embed=embed, components=components)
 
     async def _render_gear(
         self, inter, gear_type: str | None, *, mode: str | None = None, result: dict | None = None, respond=None
@@ -286,6 +306,31 @@ class ActionsCog(commands.Cog):
         elif cid == "open_gear_upgrade":
             await inter.response.defer()
             await self._render_gear(inter, None)
+
+        elif cid == "open_trial_start":
+            await inter.response.defer()
+            now = datetime.now(timezone.utc)
+            trial_message: str
+            trial_started_event: dict | None = None
+            async with get_connection() as db:
+                try:
+                    info = await trial_manager.start_trial(db, now)
+                    await db.commit()
+                    trial_message = "✅ 試煉已開始！"
+                    divisor = get_env_int("TRIAL_REWARD_DIVISOR")
+                    duration = get_env_int("TRIAL_DURATION_SECONDS")
+                    trial_started_event = {
+                        "type": "trial_start",
+                        "resource_type": info["resource_type"],
+                        "target": info["target"],
+                        "reward_pool": info["target"] // divisor,
+                        "deadline_unix": int(now.timestamp()) + duration,
+                    }
+                except ValueError:
+                    trial_message = "⚠️ 開啟試煉失敗，請重新嘗試。"
+            await self._render_main(inter, trial_message=trial_message)
+            if trial_started_event is not None:
+                await notification.dispatch_events(self.bot, [trial_started_event])
 
         elif cid == "back_to_main":
             await inter.response.defer()

@@ -28,26 +28,41 @@ class ValidateEnvBehavior(unittest.TestCase):
     def test_all_required_keys_present_passes_validation(self):
         self.assertTrue(config.validate_env())
 
-    def test_missing_single_key_fails_validation(self):
+    def test_missing_key_falls_back_to_env_example_default(self):
         os.environ.pop("STAGE_BASE_TARGET")
-        self.assertFalse(config.validate_env())
+        self.assertTrue(config.validate_env())
+        self.assertEqual(
+            config.get_stage_base_target(),
+            int(config._ENV_EXAMPLE_DEFAULTS["STAGE_BASE_TARGET"]),
+        )
 
-    def test_blank_value_treated_as_missing(self):
+    def test_blank_value_falls_back_to_env_example_default(self):
         os.environ["BASE_OUTPUT"] = "   "
-        self.assertFalse(config.validate_env())
+        self.assertTrue(config.validate_env())
+        self.assertEqual(
+            config.get_env_int("BASE_OUTPUT"),
+            int(config._ENV_EXAMPLE_DEFAULTS["BASE_OUTPUT"]),
+        )
 
-    def test_missing_keys_are_all_reported(self, capsys=None):
+    def test_validation_fails_when_key_missing_from_both_env_and_example(self):
         os.environ.pop("STAGE_BASE_TARGET")
         os.environ.pop("GEAR_PITY_BONUS")
-        import io
-        from contextlib import redirect_stdout
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            result = config.validate_env()
-        output = buf.getvalue()
-        self.assertFalse(result)
-        self.assertIn("STAGE_BASE_TARGET", output)
-        self.assertIn("GEAR_PITY_BONUS", output)
+        original = {
+            "STAGE_BASE_TARGET": config._ENV_EXAMPLE_DEFAULTS.pop("STAGE_BASE_TARGET"),
+            "GEAR_PITY_BONUS": config._ENV_EXAMPLE_DEFAULTS.pop("GEAR_PITY_BONUS"),
+        }
+        try:
+            import io
+            from contextlib import redirect_stdout
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                result = config.validate_env()
+            output = buf.getvalue()
+            self.assertFalse(result)
+            self.assertIn("STAGE_BASE_TARGET", output)
+            self.assertIn("GEAR_PITY_BONUS", output)
+        finally:
+            config._ENV_EXAMPLE_DEFAULTS.update(original)
 
     def test_required_keys_list_matches_env_example(self):
         env_example_path = os.path.join(ROOT_DIR, ".env.example")

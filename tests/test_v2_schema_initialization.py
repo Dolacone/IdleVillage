@@ -13,6 +13,8 @@ V2_TABLE_NAMES = {
     "players",
     "guild_installations",
     "gear_affixes",
+    "trial_state",
+    "trial_contributions",
 }
 
 
@@ -81,6 +83,23 @@ class SeedRowsExistAfterInit(DatabaseTestCase):
         self.assertEqual(row[0], os.environ["DISCORD_GUILD_ID"])
         self.assertEqual(row[1], 1)
 
+    async def test_trial_state_singleton_row_seeded(self):
+        row = await self.fetchone(
+            "SELECT is_active, resource_type, target, progress, started_at, ended_at FROM trial_state WHERE id = 1"
+        )
+        self.assertIsNotNone(row)
+        is_active, resource_type, target, progress, started_at, ended_at = row
+        self.assertEqual(is_active, 0)
+        self.assertIsNone(resource_type)
+        self.assertEqual(target, 0)
+        self.assertEqual(progress, 0)
+        self.assertIsNone(started_at)
+        self.assertIsNone(ended_at)
+
+    async def test_trial_contributions_starts_empty(self):
+        row = await self.fetchone("SELECT COUNT(*) FROM trial_contributions")
+        self.assertEqual(row[0], 0)
+
 
 class SchemaInitIsIdempotent(DatabaseTestCase):
     async def test_calling_init_db_twice_does_not_raise(self):
@@ -98,6 +117,8 @@ class SchemaInitIsIdempotent(DatabaseTestCase):
         self.assertEqual(row[0], 3)
         row = await self.fetchone("SELECT COUNT(*) FROM buildings")
         self.assertEqual(row[0], 4)
+        row = await self.fetchone("SELECT COUNT(*) FROM trial_state")
+        self.assertEqual(row[0], 1)
 
 
 class MigratesLegacyPlayersMissingUniversalMaterial(DatabaseTestCase):
@@ -166,6 +187,60 @@ class PlayerIndexesExist(DatabaseTestCase):
             "SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_players_action'"
         )
         self.assertIsNotNone(row)
+
+
+class WatcherTrialTimeout(DatabaseTestCase):
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        self._original_bot = Engine.bot
+
+    async def asyncTearDown(self):
+        Engine.bot = self._original_bot
+        await super().asyncTearDown()
+
+    async def _write_active_trial(self, started_at):
+        now_str = datetime.now(timezone.utc).isoformat()
+        async with schema.get_connection() as db:
+            await db.execute(
+                """UPDATE trial_state SET
+                   is_active=1, resource_type='food', target=1000, progress=100,
+                   started_at=?, updated_at=?
+                   WHERE id=1""",
+                (started_at.isoformat(), now_str),
+            )
+            await db.commit()
+
+    async def test_watcher_tick_fails_expired_trial_with_no_due_players(self):
+        from unittest.mock import AsyncMock, patch
+
+        now = datetime.now(timezone.utc)
+        await self._write_active_trial(now - timedelta(seconds=90000))
+        Engine.bot = object()
+
+        with patch("core.notification.dispatch_events", new=AsyncMock()) as dispatch:
+            await Engine.process_watcher()
+
+        dispatch.assert_awaited_once()
+        _, dispatched_events = dispatch.call_args[0]
+        self.assertEqual([e["type"] for e in dispatched_events], ["trial_fail"])
+
+        row = await self.fetchone("SELECT is_active FROM trial_state WHERE id=1")
+        self.assertEqual(row[0], 0)
+
+    async def test_watcher_tick_leaves_unexpired_trial_untouched(self):
+        now = datetime.now(timezone.utc)
+        await self._write_active_trial(now)
+
+        await Engine.process_watcher()
+
+        row = await self.fetchone("SELECT is_active, progress FROM trial_state WHERE id=1")
+        self.assertEqual(row[0], 1)
+        self.assertEqual(row[1], 100)
+
+    async def test_watcher_tick_no_event_when_no_active_trial(self):
+        await Engine.process_watcher()
+        row = await self.fetchone("SELECT is_active FROM trial_state WHERE id=1")
+        self.assertEqual(row[0], 0)
 
 
 class WatcherIsV2Safe(DatabaseTestCase):
