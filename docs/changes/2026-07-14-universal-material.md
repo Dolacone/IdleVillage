@@ -1,6 +1,6 @@
 ---
 title: "新素材：萬能素材"
-status: Ready-to-implement
+status: Ready-to-review
 created: 2026-07-14
 doc_type: change
 last_reviewed: 2026-07-14
@@ -9,6 +9,7 @@ source_paths:
   - src/managers/player_manager.py
   - src/managers/gear_manager.py
   - src/cogs/ui_renderer.py
+  - src/cogs/player_manager_cog.py
 scope: "Tracks introduction of the universal material (萬能素材) placeholder and its use as a shortfall fallback during gear upgrade."
 ---
 
@@ -95,7 +96,7 @@ shortfall = max(0, material_cost - materials[gear_type])
   - Depends on: Task 3
   - Acceptance: `build_main_embed` 輸出的素材列格式為 `🌾 {n} | 🔨 {n} | ⚔️ {n} | 🔬 {n} | 🌟 {n}`；`build_gear_embed` 持有素材列格式為 `持有素材：{n} 個 ｜ 🌟 萬能素材：{n} 個`；既有 UI 測試不受影響且全數通過
 
-- [ ] Task 5: 管理員介面新增萬能素材編輯欄位
+- [x] Task 5: 管理員介面新增萬能素材編輯欄位
   - Files: `src/cogs/player_manager_cog.py`, `src/cogs/ui_renderer.py`
   - Tests: 於 `tests/test_player_manager_cog.py` 更新/新增測試，涵蓋 `_fetch_player_data` 含 `materials_universal`、`mgr_modal_material` 提交含萬能素材欄位時正確呼叫 `set_universal_material`、`build_manager_embed` 素材數量欄位含萬能素材
   - Depends on: Task 2, Task 4

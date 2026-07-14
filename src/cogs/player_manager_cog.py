@@ -24,6 +24,7 @@ class PlayerManagerCog(commands.Cog):
         async with db.execute(
             "SELECT gear_gathering, gear_building, gear_combat, gear_research, "
             "materials_gathering, materials_building, materials_combat, materials_research, "
+            "materials_universal, "
             "pity_gathering, pity_building, pity_combat, pity_research, "
             "risky_failed_levels FROM players WHERE user_id=?",
             (user_id,),
@@ -34,6 +35,7 @@ class PlayerManagerCog(commands.Cog):
         (
             gear_gathering, gear_building, gear_combat, gear_research,
             materials_gathering, materials_building, materials_combat, materials_research,
+            materials_universal,
             pity_gathering, pity_building, pity_combat, pity_research,
             risky_failed_levels,
         ) = row
@@ -46,6 +48,7 @@ class PlayerManagerCog(commands.Cog):
             "materials_building": materials_building,
             "materials_combat": materials_combat,
             "materials_research": materials_research,
+            "materials_universal": materials_universal,
             "pity_gathering": pity_gathering,
             "pity_building": pity_building,
             "pity_combat": pity_combat,
@@ -141,6 +144,7 @@ class PlayerManagerCog(commands.Cog):
                     disnake.ui.TextInput(label="建設", custom_id="mat_building", style=disnake.TextInputStyle.short, required=True),
                     disnake.ui.TextInput(label="戰鬥", custom_id="mat_combat", style=disnake.TextInputStyle.short, required=True),
                     disnake.ui.TextInput(label="研究", custom_id="mat_research", style=disnake.TextInputStyle.short, required=True),
+                    disnake.ui.TextInput(label="萬能", custom_id="mat_universal", style=disnake.TextInputStyle.short, required=True),
                 ],
             )
         elif edit_type == "pity":
@@ -212,6 +216,7 @@ class PlayerManagerCog(commands.Cog):
                 elif modal_type == "material":
                     for gear_type in ("gathering", "building", "combat", "research"):
                         await player_manager.set_material(db, target_user_id, gear_type, parsed[f"mat_{gear_type}"], ts)
+                    await player_manager.set_universal_material(db, target_user_id, parsed["mat_universal"], ts)
                 elif modal_type == "pity":
                     for gear_type in ("gathering", "building", "combat", "research"):
                         await player_manager.set_pity(db, target_user_id, gear_type, parsed[f"pity_{gear_type}"], ts)

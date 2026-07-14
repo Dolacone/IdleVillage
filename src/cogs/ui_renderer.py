@@ -729,6 +729,8 @@ def build_manager_embed(target_user_display_name: str, player_data: dict) -> dis
             f"{ACTION_LABELS[a]} {player_data.get(f'{prefix}_{a}', 0)}"
             for a in ("gathering", "building", "combat", "research")
         )
+        if prefix == "materials":
+            value += f" ｜ 萬能 {player_data.get('materials_universal', 0)}"
         embed.add_field(name=field_name, value=value, inline=False)
 
     embed.add_field(
