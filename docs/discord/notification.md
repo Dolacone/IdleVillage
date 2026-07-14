@@ -121,7 +121,7 @@ sign 為 `-`（reduce 類型，如 `upgrade_cost_reduce`）或 `+`（其他類�
 期限：<t:{deadline_unix}:R> 前需全服玩家共同達成
 達成後將依貢獻度瓜分共 {reward_pool} 個 🌟萬能素材
 ```
-`{reward_pool}` = `floor(target / TRIAL_REWARD_DIVISOR)`，僅供公告顯示；實際發放總量以達成當下逐人無條件進位後加總為準（見達成訊息）。
+`{reward_pool}` = `floor(target / TRIAL_REWARD_DIVISOR)`，僅供公告顯示的預覽值；實際發放總量以達成當下逐人無條件進位後加總為準（見達成訊息）。當 `target` 不能被 `TRIAL_REWARD_DIVISOR` 整除時，此預覽值與實際發放總量可能有些微差異，此為預期行為（預覽值刻意採 floor，不影響實際分配結果）。
 
 ### 試煉達成
 ```

@@ -17,6 +17,23 @@ source_paths:
   - src/cogs/general.py
   - src/cogs/trial_cog.py
   - src/main.py
+  - docs/README.md
+  - docs/db-schema.md
+  - docs/discord/command-handler.md
+  - docs/discord/notification.md
+  - docs/discord/ui-renderer.md
+  - docs/engine/action-resolver.md
+  - docs/engine/cycle-engine.md
+  - docs/engine/formula.md
+  - docs/managers/trial-manager.md
+  - tests/support.py
+  - tests/test_discord_commands.py
+  - tests/test_discord_notifications.py
+  - tests/test_engine_settlement.py
+  - tests/test_trial_cog.py
+  - tests/test_trial_manager.py
+  - tests/test_v2_schema_initialization.py
+  - tests/test_startup_shell.py
 scope: "Tracks the village trial (試煉) feature from design through review: a global, resource-funded, timed community goal that rewards participants with universal material by contribution."
 ---
 
@@ -157,8 +174,8 @@ scope: "Tracks the village trial (試煉) feature from design through review: a 
 
 ## Review Issues
 
-- [ ] Issue 1 (`[Minor]`): `docs/changes/2026-07-14-village-trial.md` frontmatter `source_paths` lists only source code files (`src/database/schema.py`, `src/core/config.py`, `.env.example`, `src/managers/trial_manager.py`, `src/cogs/ui_renderer.py`, `src/core/settlement.py`, `src/core/engine.py`, `src/core/notification.py`, `src/cogs/actions.py`, `src/cogs/general.py`, `src/cogs/trial_cog.py`, `src/main.py`). It omits every doc file the change touched (`docs/README.md`, `docs/db-schema.md`, `docs/discord/command-handler.md`, `docs/discord/notification.md`, `docs/discord/ui-renderer.md`, `docs/engine/action-resolver.md`, `docs/engine/cycle-engine.md`, `docs/engine/formula.md`, `docs/managers/trial-manager.md`) and every test file created/modified (`tests/support.py`, `tests/test_discord_commands.py`, `tests/test_discord_notifications.py`, `tests/test_engine_settlement.py`, `tests/test_trial_cog.py`, `tests/test_trial_manager.py`, `tests/test_v2_schema_initialization.py`, `tests/test_startup_shell.py`), per `git diff main...HEAD --stat`. This is inconsistent with the convention set by `docs/changes/2026-07-14-remove-offering-system.md`, whose `source_paths` includes both docs and tests. No functional impact — bookkeeping only.
-- [ ] Issue 2 (`[Minor]`): `src/cogs/trial_cog.py` builds the `trial_start` event's `reward_pool` field with integer floor division (`target // divisor`), while the documented reward formula (`docs/managers/trial-manager.md` "達成與獎勵分配" section, and the actual `_succeed_trial` implementation in `src/managers/trial_manager.py`) uses true division (`info["target"] / divisor`). For default env values (`TRIAL_TARGET_STEP=1000`, `TRIAL_REWARD_DIVISOR=100`) `target` is always an exact multiple of the divisor so the two forms agree, but if an operator configures a non-default `TRIAL_TARGET_STEP`/`TRIAL_REWARD_DIVISOR` pair where `target` is not evenly divisible, the `trial_start` announcement's displayed reward pool would understate the actual pool used in the real ceil-based payout, causing a cosmetic display mismatch (no effect on actual reward computation/payout, which is computed independently and correctly in `_succeed_trial`).
+- [x] Issue 1 (`[Minor]`): `docs/changes/2026-07-14-village-trial.md` frontmatter `source_paths` lists only source code files (`src/database/schema.py`, `src/core/config.py`, `.env.example`, `src/managers/trial_manager.py`, `src/cogs/ui_renderer.py`, `src/core/settlement.py`, `src/core/engine.py`, `src/core/notification.py`, `src/cogs/actions.py`, `src/cogs/general.py`, `src/cogs/trial_cog.py`, `src/main.py`). It omits every doc file the change touched (`docs/README.md`, `docs/db-schema.md`, `docs/discord/command-handler.md`, `docs/discord/notification.md`, `docs/discord/ui-renderer.md`, `docs/engine/action-resolver.md`, `docs/engine/cycle-engine.md`, `docs/engine/formula.md`, `docs/managers/trial-manager.md`) and every test file created/modified (`tests/support.py`, `tests/test_discord_commands.py`, `tests/test_discord_notifications.py`, `tests/test_engine_settlement.py`, `tests/test_trial_cog.py`, `tests/test_trial_manager.py`, `tests/test_v2_schema_initialization.py`, `tests/test_startup_shell.py`), per `git diff main...HEAD --stat`. This is inconsistent with the convention set by `docs/changes/2026-07-14-remove-offering-system.md`, whose `source_paths` includes both docs and tests. No functional impact — bookkeeping only.
+- [x] Issue 2 (`[Minor]`): `src/cogs/trial_cog.py` builds the `trial_start` event's `reward_pool` field with integer floor division (`target // divisor`), while the documented reward formula (`docs/managers/trial-manager.md` "達成與獎勵分配" section, and the actual `_succeed_trial` implementation in `src/managers/trial_manager.py`) uses true division (`info["target"] / divisor`). For default env values (`TRIAL_TARGET_STEP=1000`, `TRIAL_REWARD_DIVISOR=100`) `target` is always an exact multiple of the divisor so the two forms agree, but if an operator configures a non-default `TRIAL_TARGET_STEP`/`TRIAL_REWARD_DIVISOR` pair where `target` is not evenly divisible, the `trial_start` announcement's displayed reward pool would understate the actual pool used in the real ceil-based payout, causing a cosmetic display mismatch (no effect on actual reward computation/payout, which is computed independently and correctly in `_succeed_trial`).
 
 **Verification notes:**
 - Test suite: `uv run python -m pytest -q` → 475 passed, 3 subtests passed. No failures.
