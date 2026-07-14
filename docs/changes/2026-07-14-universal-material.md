@@ -1,6 +1,6 @@
 ---
 title: "新素材：萬能素材"
-status: Issues-confirmed
+status: Ready-to-review
 created: 2026-07-14
 doc_type: change
 last_reviewed: 2026-07-14
@@ -76,7 +76,7 @@ shortfall = max(0, material_cost - materials[gear_type])
   - Files: `src/database/schema.py`
   - Tests: 既有 `tests/test_v2_schema_initialization.py` 等 schema 測試套件需維持通過（新欄位有 DEFAULT 0，不需額外 fixture 變更）
   - Depends on: 無
-  - Acceptance: `players` 建表 SQL 含 `materials_universal INTEGER NOT NULL DEFAULT 0`；既有測試套件全數通過
+  - Acceptance: `players` 建表 SQL 含 `materials_universal INTEGER NOT NULL DEFAULT 0`；`_migrate_v2_columns()` 對既有（欄位缺失）資料庫執行 `ALTER TABLE players ADD COLUMN materials_universal INTEGER NOT NULL DEFAULT 0`，既有資料列不受影響；既有測試套件全數通過
 
 - [x] Task 2: player-manager 萬能素材介面
   - Files: `src/managers/player_manager.py`
@@ -109,4 +109,4 @@ shortfall = max(0, material_cost - materials[gear_type])
 
 ## Review Issues
 
-- [ ] [Major] `src/database/schema.py`: `_migrate_v2_columns()` (lines ~173-192) was not updated to add `materials_universal` for existing installations. `CREATE TABLE IF NOT EXISTS` (line 83) only affects brand-new databases; on any pre-existing `players` table, `init_db()` leaves the schema unchanged, so the first call to `get_universal_material`/`spend_universal_material`/etc. (e.g. during `/idlevillage` gear upgrade or the `/idlevillage-manager` panel) will fail with `sqlite3.OperationalError: no such column: materials_universal`. This codebase already has a precedent additive-migration mechanism for exactly this case (`risky_failed_levels`, `offering_accumulator`); `materials_universal` needs the same `ALTER TABLE players ADD COLUMN ...` treatment in `_migrate_v2_columns()`. Task 1's acceptance criteria only checked the CREATE TABLE SQL and schema-init tests, which run against fresh databases and did not surface this gap.
+- [x] [Major] `src/database/schema.py`: `_migrate_v2_columns()` (lines ~173-192) was not updated to add `materials_universal` for existing installations. `CREATE TABLE IF NOT EXISTS` (line 83) only affects brand-new databases; on any pre-existing `players` table, `init_db()` leaves the schema unchanged, so the first call to `get_universal_material`/`spend_universal_material`/etc. (e.g. during `/idlevillage` gear upgrade or the `/idlevillage-manager` panel) will fail with `sqlite3.OperationalError: no such column: materials_universal`. This codebase already has a precedent additive-migration mechanism for exactly this case (`risky_failed_levels`, `offering_accumulator`); `materials_universal` needs the same `ALTER TABLE players ADD COLUMN ...` treatment in `_migrate_v2_columns()`. Task 1's acceptance criteria only checked the CREATE TABLE SQL and schema-init tests, which run against fresh databases and did not surface this gap.

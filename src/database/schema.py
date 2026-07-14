@@ -184,6 +184,11 @@ async def _migrate_v2_columns(db):
             "ALTER TABLE players ADD COLUMN risky_failed_levels INTEGER NOT NULL DEFAULT 0"
         )
 
+    if "materials_universal" not in columns:
+        await db.execute(
+            "ALTER TABLE players ADD COLUMN materials_universal INTEGER NOT NULL DEFAULT 0"
+        )
+
     async with db.execute("PRAGMA table_info(village_state)") as cur:
         vs_columns = {row[1] async for row in cur}
 
