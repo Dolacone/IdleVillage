@@ -8,6 +8,7 @@ source_paths:
   - src/database/schema.py
   - src/core/config.py
   - .env.example
+  - src/managers/trial_manager.py
 scope: "Tracks the village trial (試煉) feature from design through review: a global, resource-funded, timed community goal that rewards participants with universal material by contribution."
 ---
 
@@ -91,7 +92,7 @@ scope: "Tracks the village trial (試煉) feature from design through review: a 
   - Depends on: 無
   - Acceptance: `trial_state`（單例，`id=1` 初始列 `is_active=0`）與 `trial_contributions`（空表）皆以 `CREATE TABLE IF NOT EXISTS` 建立；`config.REQUIRED_KEYS` 新增 `TRIAL_DURATION_SECONDS`/`TRIAL_COOLDOWN_SECONDS`/`TRIAL_TARGET_STEP`/`TRIAL_REWARD_DIVISOR`；`.env.example` 列出四個 key 並附預設值（86400/43200/1000/100）；既有測試套件全數通過
 
-- [ ] Task 2: trial_manager 模組 — 開啟、進度累加、逾時偵測、獎勵分配、狀態/貢獻查詢
+- [x] Task 2: trial_manager 模組 — 開啟、進度累加、逾時偵測、獎勵分配、狀態/貢獻查詢
   - Files: `src/managers/trial_manager.py`（新檔）
   - Tests: 新增 `tests/test_trial_manager.py`，涵蓋：(a) `start_trial` 前置條件各項失敗案例（resource_type 無效、target 非整數倍、已有進行中試煉、冷卻未過、資源不足）皆 raise ValueError 且不扣除資源；(b) `start_trial` 成功扣除資源、清空 `trial_contributions`、寫入正確狀態；(c) `add_progress` 無試煉時 no-op 回傳 None；(d) `add_progress` 累加進度與個人貢獻，未達標回傳 None；(e) `add_progress` 達標時正確依 ceil 公式分配獎勵給所有貢獻者、呼叫 `addUniversalMaterial`、關閉試煉、清空 `trial_contributions`、回傳含 `participants` 明細的 `trial_success` 事件；(f) `add_progress` 傳入的 `effective_time` 已超過 `TRIAL_DURATION_SECONDS` 時觸發失敗而非計入進度；(g) `check_timeout` 未逾時回傳 None、逾時時觸發失敗並回傳 `trial_fail` 事件、清空 `trial_contributions`
   - Depends on: Task 1
