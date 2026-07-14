@@ -1,6 +1,6 @@
 ---
 title: "新素材：萬能素材"
-status: Draft
+status: Ready-to-implement
 created: 2026-07-14
 doc_type: change
 last_reviewed: 2026-07-14
@@ -62,7 +62,7 @@ shortfall = max(0, material_cost - materials[gear_type])
 
 1. 萬能素材不併入 `ACTION_MATERIAL_COL`（及同結構的 `ACTION_GEAR_COL`/`ACTION_FACILITY_BUILDING`）。這些字典的 key 集合等於四種行動類型，`gear-manager`/`player-manager`/`affix-manager`/`cogs/actions.py` 多處直接以 `[gear_type]` 查表；曾在 offering 行動移除時因這類共用字典殘留非行動 key 導致 `KeyError`（見 `docs/changes/2026-07-14-remove-offering-system.md` Review Issues）。萬能素材改用獨立的 `getUniversalMaterial`/`addUniversalMaterial`/`spendUniversalMaterial`/`setUniversalMaterial` 介面，直接操作 `materials_universal` 欄位，避免同類風險。
 2. `attempt_upgrade`/`get_upgrade_info` 的扣除順序固定「本類型優先，差額用萬能素材」，不提供玩家選擇扣除來源的選項——使用者描述的是「不足時才用萬能素材補」，非可選策略，維持單一、可預期的行為。
-3. `upgrade_material_refund` 詞條觸發時，退還的素材固定計入該類型本身（不追蹤本次消耗中来自萬能素材的比例並按比例退還）。追蹤來源比例需要在 `attempt_upgrade` 回傳值與呼叫端之間傳遞額外欄位，且僅影響一個機率性、每次至多 1 個素材差距的邊角情況，複雜度不成比例，故不做。
+3. `upgrade_material_refund` 詞條觸發時，退還金額改為「本次該類型本身實際扣除的部分」（`from_type = min(material_cost, 扣除前該類型持有量)`），而非固定退還全額 `material_cost`。原因：若固定退還全額，玩家可用萬能素材補足差額後，靠此詞條的成功退還機率把消耗掉的萬能素材「轉換」成可再生的該類型素材，且轉換量上限是 `material_cost`（標準模式下即目標等級，並非小額邊角案例），牴觸「萬能素材目前無法獲得」的前提。`from_type` 在 `attempt_upgrade` 扣除素材時已經計算得出（即 Architecture Decision #2 扣除順序中的本類型扣除量），不需新增回傳欄位即可在退還呼叫時直接使用。
 4. 依賴順序：schema → player-manager 介面 → gear-manager 消耗邏輯 → UI 顯示 → 管理員 Modal。UI 與管理員介面依賴 gear-manager 回傳的 `universal_materials` 欄位，故排在其後。
 
 ## Tasks
@@ -83,7 +83,7 @@ shortfall = max(0, material_cost - materials[gear_type])
   - Files: `src/managers/gear_manager.py`
   - Tests: 於 `tests/test_gear_manager.py` 新增測試涵蓋：(a) 本類型素材足夠時不動用萬能素材、(b) 本類型不足但萬能素材補足後可強化且兩者正確扣除、(c) 兩者相加仍不足時 `can_attempt=False` 且 `attempt_upgrade` raise ValueError、不扣除任何資源、(d) `get_upgrade_info` 回傳 `universal_materials` 欄位
   - Depends on: Task 2
-  - Acceptance: `attempt_upgrade` 與 `get_upgrade_info` 的前置檢查與扣除順序符合 Architecture Decision #2；`upgrade_material_refund` 退還邏輯不變（固定退還至本類型）；既有標準/墊檔/鐵齒測試不受影響且全數通過
+  - Acceptance: `attempt_upgrade` 與 `get_upgrade_info` 的前置檢查與扣除順序符合 Architecture Decision #2；`upgrade_material_refund` 觸發時只退還 `from_type`（本類型本身實際扣除量），不退還萬能素材補足的部分；新增測試涵蓋「本類型不足、靠萬能素材補足後成功且觸發 `upgrade_material_refund`」情境下，退還量等於 `from_type` 而非 `material_cost`；既有標準/墊檔/鐵齒測試不受影響且全數通過
 
 - [ ] Task 4: UI 顯示萬能素材（主介面 + 工具強化子選單）
   - Files: `src/cogs/ui_renderer.py`
@@ -96,3 +96,8 @@ shortfall = max(0, material_cost - materials[gear_type])
   - Tests: 於 `tests/test_player_manager_cog.py` 更新/新增測試，涵蓋 `_fetch_player_data` 含 `materials_universal`、`mgr_modal_material` 提交含萬能素材欄位時正確呼叫 `set_universal_material`、`build_manager_embed` 素材數量欄位含萬能素材
   - Depends on: Task 2, Task 4
   - Acceptance: 「編輯素材數量」Modal 為 5 個欄位（採集/建設/戰鬥/研究/萬能）；`mgr_modal_material` 驗證通過後呼叫 `set_material()` × 4 + `set_universal_material()` × 1；`build_manager_embed` 素材數量欄位格式為 `採集 {n} ｜ 建設 {n} ｜ 戰鬥 {n} ｜ 研究 {n} ｜ 萬能 {n}`；既有管理員介面測試不受影響且全數通過
+
+## Plan Review Issues
+
+- [x] [Major] Architecture Decision #3's rationale for not tracking the own-type/universal split on `upgrade_material_refund` claims the discrepancy is "每次至多 1 個素材差距" (at most a 1-material difference per attempt), but this is only true for `risky` mode where `material_cost == 1`. For `normal` mode (`material_cost = target_level`) and `buffer` mode (`ceil(target_level/2)`), the shortfall drawn from `materials_universal` can be up to the full `material_cost`. Since `attempt_upgrade`'s success-refund path (`src/managers/gear_manager.py`, the `upgrade_material_refund` branch calling `player_manager.add_material(db, user_id, gear_type, material_cost, ...)`) always refunds the *full* `material_cost` into the gear type's own material regardless of how much was actually drawn from `materials_universal`, a player who upgrades using mostly/entirely `materials_universal` and then triggers this affix's refund effectively converts that consumed `materials_universal` into an equal amount of renewable, type-specific material at whatever probability the affix grants — with no cap tied to "1 unit". This directly undercuts the Problem Statement's premise that `materials_universal` currently has "無法透過任何管道獲得" and is placeholder-only, since it creates a probabilistic conversion path from universal material into acquirable-in-practice type material at unbounded magnitude (bounded only by `material_cost`, not by 1). Task 3's acceptance criteria should either revise this refund rule (e.g., refund proportionally to each source, or refund only the own-type-sourced portion, tracking the split via `attempt_upgrade`'s internal locals — no new return field required since the split is known before the refund call) or the Architecture Decision should restate the actual magnitude and get an explicit sign-off that this leak is acceptable, rather than asserting a factually incorrect "at most 1" bound.
+- [x] [Minor] `docs/db-schema.md` was edited in this same plan commit (added `materials_universal INTEGER NOT NULL DEFAULT 0` to the `players` CREATE TABLE) but its front-matter `last_reviewed` is still `2026-05-23`, not bumped to `2026-07-14`. This repeats the same category of documentation-hygiene gap flagged as a Minor issue in a past change's review (see `docs/changelogs/2026-05-23-offering-action.md` Review Issues: stale `last_reviewed` on docs touched by the same change).

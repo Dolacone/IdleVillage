@@ -1,7 +1,7 @@
 ---
 title: "Module: db-schema"
 doc_type: reference
-last_reviewed: 2026-05-23
+last_reviewed: 2026-07-14
 source_paths:
   - src/database/schema.py
 ---

@@ -113,7 +113,7 @@ final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS)
 | `upgrade_success` | 成功率 +X%（加在 `_compute_rate` 結果上，min 1.0） |
 | `upgrade_cost_reduce` | 素材消耗 -X%（floor，最低 1） |
 | `upgrade_ap_refund` | 成功時 X% 機率退還 1 AP |
-| `upgrade_material_refund` | 成功時 X% 機率退還消耗素材（固定退還至該類型本身素材，不還原原本用萬能素材補足的部分） |
+| `upgrade_material_refund` | 成功時 X% 機率退還素材，僅退還本次「該類型本身」實際扣除的部分（`min(material_cost, 扣除前該類型持有量)`），不退還由萬能素材補足的部分 |
 
 鐵齒失敗時，呼叫 `affix_manager.clear_all_affixes(db, user_id, gear_type, now)` 清除所有詞條。
 
@@ -121,7 +121,7 @@ final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS)
 
 ## Changelog
 
-- 2026-07-14: Added universal material (`materials_universal`) fallback for upgrade material shortfall. Precondition changed from `materials[type] >= material_cost` to `materials[type] + materials_universal >= material_cost`; own-type material is spent first (up to material_cost), remaining shortfall drawn from universal material. Only applies to `attempt_upgrade`/`get_upgrade_info`; `sacrifice_material` and affix extract/clear are unaffected. `upgrade_material_refund` still refunds into the gear type's own material regardless of how much universal material was used.
+- 2026-07-14: Added universal material (`materials_universal`) fallback for upgrade material shortfall. Precondition changed from `materials[type] >= material_cost` to `materials[type] + materials_universal >= material_cost`; own-type material is spent first (up to material_cost), remaining shortfall drawn from universal material. Only applies to `attempt_upgrade`/`get_upgrade_info`; `sacrifice_material` and affix extract/clear are unaffected. `upgrade_material_refund` now refunds only the own-type-sourced portion actually spent (not the full `material_cost`), so it cannot convert consumed universal material into renewable type-specific material.
 - 2026-05-31: Risky mode success now rolls +1/+2/+3 at 50/35/15% (unconditional, regardless of pity state), replacing the fixed +1 from the 2026-05-15 simplification.
 - 2026-05-31: Added `sacrifice_material(db, user_id, gear_type, amount, now)` — consume N materials of a chosen type to gain `risky_failed_levels += N` without spending AP or triggering notifications. Returns `{type: "sacrifice", sacrificed, gear_type, risky_failed_levels_after}`.
 - 2026.05.22: 強化流程整合詞條：upgrade_success/upgrade_cost_reduce/upgrade_ap_refund/upgrade_material_refund；鐵齒炸裂後清除詞條。
