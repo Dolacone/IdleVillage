@@ -175,60 +175,6 @@ class MigratesLegacyPlayersMissingUniversalMaterial(DatabaseTestCase):
         self.assertEqual(row[1], 0)
 
 
-class MigratesLegacyPlayersMissingUniversalMaterial(DatabaseTestCase):
-    """A players table from before materials_universal existed must be migrated in place."""
-
-    async def asyncSetUp(self):
-        await super().asyncSetUp()
-        from database.schema import get_connection
-
-        now = "2026-01-01T00:00:00+00:00"
-        async with get_connection() as db:
-            await db.execute("DROP TABLE players")
-            await db.execute(
-                """
-                CREATE TABLE players (
-                    user_id TEXT PRIMARY KEY,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    action TEXT,
-                    action_target TEXT,
-                    completion_time TEXT,
-                    last_update_time TEXT,
-                    ap_full_time TEXT NOT NULL,
-                    materials_gathering INTEGER NOT NULL DEFAULT 0,
-                    materials_building INTEGER NOT NULL DEFAULT 0,
-                    materials_combat INTEGER NOT NULL DEFAULT 0,
-                    materials_research INTEGER NOT NULL DEFAULT 0,
-                    gear_gathering INTEGER NOT NULL DEFAULT 0,
-                    gear_building INTEGER NOT NULL DEFAULT 0,
-                    gear_combat INTEGER NOT NULL DEFAULT 0,
-                    gear_research INTEGER NOT NULL DEFAULT 0,
-                    pity_gathering INTEGER NOT NULL DEFAULT 0,
-                    pity_building INTEGER NOT NULL DEFAULT 0,
-                    pity_combat INTEGER NOT NULL DEFAULT 0,
-                    pity_research INTEGER NOT NULL DEFAULT 0,
-                    risky_failed_levels INTEGER NOT NULL DEFAULT 0
-                )
-                """
-            )
-            await db.execute(
-                "INSERT INTO players (user_id, created_at, updated_at, ap_full_time, materials_gathering) "
-                "VALUES (?, ?, ?, ?, 7)",
-                ("legacy_user", now, now, now),
-            )
-            await db.commit()
-
-    async def test_init_db_adds_materials_universal_with_default_zero(self):
-        await schema.init_db()
-        row = await self.fetchone(
-            "SELECT materials_gathering, materials_universal FROM players WHERE user_id=?",
-            ("legacy_user",),
-        )
-        self.assertEqual(row[0], 7)
-        self.assertEqual(row[1], 0)
-
-
 class PlayerIndexesExist(DatabaseTestCase):
     async def test_completion_time_index_exists(self):
         row = await self.fetchone(
