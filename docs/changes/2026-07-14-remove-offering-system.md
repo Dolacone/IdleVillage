@@ -50,7 +50,7 @@ scope: "Tracks removal of the offering (奉獻) player action system from design
 
 ## Tasks
 
-- [ ] Task 1: DB schema + config 清理 — 移除 `village_state.offering_accumulator` 欄位與 `OFFERING_THRESHOLD_PER_PLAYER` 環境變數
+- [x] Task 1: DB schema + config 清理 — 移除 `village_state.offering_accumulator` 欄位與 `OFFERING_THRESHOLD_PER_PLAYER` 環境變數
   - Files: `src/database/schema.py`, `src/core/config.py`（另需同步 `.env.example` 移除該 key，非 source/logic 檔不計入限制）
   - Tests: 更新 `tests/support.py` 中若有引用 offering_accumulator/該 env var 的 fixture
   - Depends on: 無
