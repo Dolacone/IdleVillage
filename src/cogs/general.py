@@ -36,7 +36,7 @@ class GeneralCog(commands.Cog):
     def _check_admin(self, inter) -> bool:
         return is_admin(inter.user.id)
 
-    async def _fetch_village_data(self, db) -> tuple[dict, dict, dict, list]:
+    async def _fetch_village_data(self, db) -> tuple[dict, dict, dict, list, dict]:
         async with db.execute("SELECT * FROM stage_state WHERE id=1") as cur:
             row = await cur.fetchone()
             cols = [d[0] for d in cur.description]
@@ -64,7 +64,12 @@ class GeneralCog(commands.Cog):
             async for r in cur:
                 action_counts.append((r[0], r[1], r[2]))
 
-        return stage_data, resources, buildings, action_counts
+        async with db.execute("SELECT * FROM trial_state WHERE id=1") as cur:
+            row = await cur.fetchone()
+            cols = [d[0] for d in cur.description]
+            trial_data = dict(zip(cols, row)) if row else {}
+
+        return stage_data, resources, buildings, action_counts, trial_data
 
     @commands.slash_command(
         name="idlevillage-announcement",
@@ -89,11 +94,11 @@ class GeneralCog(commands.Cog):
                 (channel_id, now_str),
             )
             await db.commit()
-            stage_data, resources, buildings, action_counts = (
+            stage_data, resources, buildings, action_counts, trial_data = (
                 await self._fetch_village_data(db)
             )
 
-        embed = build_village_embed(stage_data, resources, buildings, action_counts)
+        embed = build_village_embed(stage_data, resources, buildings, action_counts, trial_data)
         dashboard_msg = await inter.channel.send(embed=embed)
         now_str = datetime.now(timezone.utc).isoformat()
         async with get_connection() as db:

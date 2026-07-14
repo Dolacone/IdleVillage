@@ -13,6 +13,8 @@ source_paths:
   - src/core/settlement.py
   - src/core/engine.py
   - src/core/notification.py
+  - src/cogs/actions.py
+  - src/cogs/general.py
 scope: "Tracks the village trial (試煉) feature from design through review: a global, resource-funded, timed community goal that rewards participants with universal material by contribution."
 ---
 
@@ -126,7 +128,7 @@ scope: "Tracks the village trial (試煉) feature from design through review: a 
   - Depends on: Task 2, Task 3
   - Acceptance: 三種事件格式化輸出符合 `docs/discord/notification.md` 範本；`_fetch_village_dashboard_data` 新增試煉資料查詢；既有通知測試不受影響且全數通過
 
-- [ ] Task 7: actions.py + general.py — 現有指令串接試煉顯示資料
+- [x] Task 7: actions.py + general.py — 現有指令串接試煉顯示資料
   - Files: `src/cogs/actions.py`, `src/cogs/general.py`
   - Tests: 更新 `tests/test_discord_commands.py`（或對應現有測試檔），涵蓋 `/idlevillage` 主介面在試煉進行中正確顯示村莊試煉列與個人貢獻列；`/idlevillage-announcement` 建立的 Dashboard embed 同樣正確顯示試煉列
   - Depends on: Task 1, Task 3

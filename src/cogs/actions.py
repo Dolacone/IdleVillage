@@ -73,7 +73,7 @@ class ActionsCog(commands.Cog):
 
     async def _fetch_all_data(
         self, db, user_id: str
-    ) -> tuple[dict, dict, dict, list, dict]:
+    ) -> tuple[dict, dict, dict, list, dict, dict, int]:
         async with db.execute("SELECT * FROM stage_state WHERE id=1") as cur:
             row = await cur.fetchone()
             cols = [d[0] for d in cur.description]
@@ -108,7 +108,18 @@ class ActionsCog(commands.Cog):
             cols = [d[0] for d in cur.description]
             player_row = dict(zip(cols, row)) if row else {}
 
-        return stage_data, resources, buildings, action_counts, player_row
+        async with db.execute("SELECT * FROM trial_state WHERE id=1") as cur:
+            row = await cur.fetchone()
+            cols = [d[0] for d in cur.description]
+            trial_data = dict(zip(cols, row)) if row else {}
+
+        async with db.execute(
+            "SELECT contribution FROM trial_contributions WHERE user_id=?", (user_id,)
+        ) as cur:
+            row = await cur.fetchone()
+        trial_contribution = row[0] if row else 0
+
+        return stage_data, resources, buildings, action_counts, player_row, trial_data, trial_contribution
 
     async def _render_main(
         self,
@@ -124,13 +135,16 @@ class ActionsCog(commands.Cog):
 
         async with get_connection() as db:
             await self._get_or_create_player(db, user_id, now)
-            stage_data, resources, buildings, action_counts, player_row = (
+            stage_data, resources, buildings, action_counts, player_row, trial_data, trial_contribution = (
                 await self._fetch_all_data(db, user_id)
             )
             ap = await player_manager.get_ap(db, user_id, now)
 
         player_row["_ap"] = ap
-        embed = build_main_embed(stage_data, resources, buildings, action_counts, player_row)
+        embed = build_main_embed(
+            stage_data, resources, buildings, action_counts, player_row,
+            trial_data, trial_contribution,
+        )
         components = build_main_components(
             player_row, buildings, pending_action=pending_action, pending_target=pending_target
         )

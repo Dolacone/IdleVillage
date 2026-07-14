@@ -130,6 +130,46 @@ class TestNewPlayerCreation(DatabaseTestCase):
         self.assertEqual(count, 1, "Duplicate INSERT OR IGNORE should result in exactly 1 row")
 
 
+class TestRenderMainTrialWiring(DatabaseTestCase):
+    async def test_render_main_shows_trial_progress_and_personal_contribution(self):
+        from cogs.actions import ActionsCog
+        from database.schema import get_connection
+
+        user_id = "987654321"
+        now = datetime.now(timezone.utc)
+        async with get_connection() as db:
+            await db.execute(
+                "INSERT INTO players (user_id, created_at, updated_at, ap_full_time) VALUES (?, ?, ?, ?)",
+                (user_id, now.isoformat(), now.isoformat(), now.isoformat()),
+            )
+            await db.execute(
+                """UPDATE trial_state SET
+                   is_active=1, resource_type='food', target=1000, progress=300,
+                   started_at=?, updated_at=?
+                   WHERE id=1""",
+                (now.isoformat(), now.isoformat()),
+            )
+            await db.execute(
+                "INSERT INTO trial_contributions (user_id, contribution, updated_at) VALUES (?, 77, ?)",
+                (user_id, now.isoformat()),
+            )
+            await db.commit()
+
+        inter = MagicMock()
+        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+        inter.user.id = int(user_id)
+        inter.edit_original_response = AsyncMock()
+
+        cog = ActionsCog(bot=MagicMock())
+        with patch("cogs.actions.notification.dispatch_events", new=AsyncMock()):
+            await cog._render_main(inter)
+
+        embed = inter.edit_original_response.call_args.kwargs["embed"]
+        self.assertIn("🏆 試煉", embed.description)
+        self.assertIn("300 / 1000", embed.description)
+        self.assertIn("🏆 試煉貢獻：77", embed.description)
+
+
 class TestAnnouncementCommand(DatabaseTestCase):
     async def test_announcement_command_stores_sent_dashboard_reference(self):
         from cogs.general import GeneralCog
@@ -155,6 +195,35 @@ class TestAnnouncementCommand(DatabaseTestCase):
                 row = await cur.fetchone()
 
         self.assertEqual(row, ("123", "123", "456"))
+
+    async def test_announcement_dashboard_embed_shows_active_trial(self):
+        from cogs.general import GeneralCog
+        from database.schema import get_connection
+
+        async with get_connection() as db:
+            await db.execute(
+                """UPDATE trial_state SET
+                   is_active=1, resource_type='knowledge', target=2000, progress=500,
+                   started_at=?, updated_at=?
+                   WHERE id=1""",
+                (datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat()),
+            )
+            await db.commit()
+
+        inter = MagicMock()
+        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+        inter.channel_id = 123
+        inter.user.id = int(ALL_TEST_ENV["ADMIN_IDS"].split(",")[0])
+        inter.response.defer = AsyncMock()
+        inter.channel.send = AsyncMock(return_value=MagicMock(id=456))
+        inter.edit_original_response = AsyncMock()
+
+        cog = GeneralCog(bot=MagicMock())
+        await GeneralCog.announcement.callback(cog, inter)
+
+        embed = inter.channel.send.call_args.kwargs["embed"]
+        self.assertIn("🏆 試煉", embed.description)
+        self.assertIn("500 / 2000", embed.description)
 
 
 class TestManageCommand(DatabaseTestCase):
