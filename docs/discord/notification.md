@@ -1,7 +1,7 @@
 ---
 title: "Module: notification"
 doc_type: module
-last_reviewed: 2026-05-31
+last_reviewed: 2026-07-14
 source_paths:
   - src/core/notification.py
   - src/cogs/actions.py
@@ -36,7 +36,6 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 | 工具強化失敗 | gear-manager 回傳失敗 | `{user_display_name} 的 {gear_name} 升級失敗 :boom: Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）` | Public |
 | 詞條抽取 | `extract_affix` handler 成功後 | `{user_display_name} 的 {gear_name} 抽到詞條：{affix_label}（{sign}{value}%）`，sign 為 `-`（reduce 類型）或 `+`（其他） | Public |
 | 詞條清除 | `clear_affix` handler 成功後 | `{user_display_name} 的 {gear_name} 清除詞條：{affix_label}（{sign}{value}%）`，sign 為 `-`（reduce 類型）或 `+`（其他） | Public |
-| 奉獻達標 | 奉獻結算使 `offering_accumulator >= total_players × OFFERING_THRESHOLD_PER_PLAYER` | 見訊息範本 | Public |
 
 ## 通知去重
 
@@ -54,8 +53,7 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 1. 關卡通關通知
 2. 升級關建築等級上限通知
 3. 建築升級通知（若多級，逐級發送）
-4. 奉獻達標通知（若本週期觸發）
-5. Dashboard 更新
+4. Dashboard 更新
 
 ## 訊息範本
 
@@ -109,13 +107,6 @@ sign 為 `-`（reduce 類型，如 `upgrade_cost_reduce`）或 `+`（其他類�
 ```
 sign 為 `-`（reduce 類型，如 `upgrade_cost_reduce`）或 `+`（其他類型）。
 
-### 奉獻達標
-```
-🎁 奉獻達標！全村素材各 +1
-累積消耗：{total_contributed} / {threshold}（已重置）
-全體玩家獲得：🌾 +1 ｜ 🔨 +1 ｜ ⚔️ +1 ｜ 🔬 +1
-```
-
 ## 工具強化通知欄位
 
 - `current_level`: 本次強化嘗試前的工具等級。
@@ -124,6 +115,7 @@ sign 為 `-`（reduce 類型，如 `upgrade_cost_reduce`）或 `+`（其他類�
 
 ## Changelog
 
+- 2026-07-14: 移除奉獻達標事件、訊息範本，並自「同一 settlement 內的通知順序」重新編號。
 - 2026-05-31: 工具強化成功通知的 `target_level` 改為使用實際到達等級（`new_level`），以正確反映鐵齒 +2/+3 多段升級結果。失敗通知不變，仍顯示 `current_level + 1`。
 - 2026-05-22: 新增詞條抽取/清除公告事件（`affix_extracted`、`affix_cleared`）。
 - 2026.05.06.01: 工具強化成功/失敗 Public notification 改為顯示 current level、target level、成功/失敗狀態與總失敗次數；official user-facing gear naming changed to tools: 採集工具, 建設工具, 狩獵工具, 研究工具.

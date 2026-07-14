@@ -1,7 +1,7 @@
 ---
 title: "Module: ui-renderer"
 doc_type: module
-last_reviewed: 2026-06-27
+last_reviewed: 2026-07-14
 source_paths:
   - src/cogs/ui_renderer.py
 ---
@@ -28,7 +28,6 @@ source_paths:
 
 公用資源
 🌾 {food} | 🪵 {wood} | 🧠 {knowledge}
-🎁 奉獻進度：{offering_accumulator} / {offering_threshold}（{pct}%）   ← 僅當 offering_threshold > 0 時顯示
 
 公用設施 (等級上限：Lv{cap})
 🌾 採集場 Lv{n} ({pct}%)
@@ -63,9 +62,6 @@ source_paths:
 | 建設（狩獵場） | 建設（狩獵場） |
 | 戰鬥 | 戰鬥 |
 | 研究 | 研究 |
-| 奉獻（食物） | 奉獻（食物） |
-| 奉獻（木頭） | 奉獻（木頭） |
-| 奉獻（研究點） | 奉獻（研究點） |
 
 排序：人數降序；人數相同則動作名稱升序。
 
@@ -89,7 +85,7 @@ source_paths:
 `floor(stages_cleared / 5)`，不使用已通過總關卡數。
 emoji 順序與 工具 / 素材 欄位一致：🌾 🔨 ⚔️ 🔬。
 
-行動 emoji 對應：🌾採集、🔨建設、⚔️戰鬥、🔬研究、🎁奉獻
+行動 emoji 對應：🌾採集、🔨建設、⚔️戰鬥、🔬研究
 
 ## 互動元件
 
@@ -97,10 +93,10 @@ emoji 順序與 工具 / 素材 欄位一致：🌾 🔨 ⚔️ 🔬。
 
   Row 1: Button — ⚡ 消耗AP立刻完成三次行動 | 🔨 強化工具
   Row 2: Dropdown — 選擇行動
-  Row 3: Dropdown — 選擇建設目標（僅 building 時出現）或 選擇奉獻物資（僅 offering 時出現）
+  Row 3: Dropdown — 選擇建設目標（僅 building 時出現）
   Row 4: Button — ✅ 確認行動
 
-Discord 上限為 5 個 action row。選擇建設或奉獻時達到 4 rows。
+Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
 
 ### 瞬間行動
 
@@ -114,19 +110,15 @@ Discord 上限為 5 個 action row。選擇建設或奉獻時達到 4 rows。
 
 ### 行動選擇組
 - **Dropdown 1**：選擇行動
-  - 選項：採集 / 建設 / 戰鬥 / 研究 / 奉獻
+  - 選項：採集 / 建設 / 戰鬥 / 研究
   - 每個選項附帶描述，說明次要消耗與產出（食物消耗為全行動共用，不另列）：
     - 採集：`產出 🌾食物 + 🪵木頭`
     - 建設：`消耗 🪵木頭 | 產出 建築XP`
     - 戰鬥：`消耗 🪵木頭 | 產出 🧠知識`
     - 研究：`消耗 🧠知識 | 產出 研究所XP`
-    - 奉獻：`消耗四種行動產出合計 | 達標後全員素材各 +1`
 - **Dropdown 2**（僅選擇「建設」後出現）：選擇建設目標
   - 選項：採集場 / 加工廠 / 狩獵場
   - 顯示格式：`{建築名} Lv{n}（XP: {xp_progress}/{next_requirement}）`
-- **Dropdown 2**（僅選擇「奉獻」後出現）：選擇奉獻物資
-  - 選項：食物 / 木頭 / 研究點（custom_id: `offering_resource_select`）
-  - 顯示格式：`{emoji} {resource_name}`，描述：`消耗村莊 {resource_name}`
 - **Button**：`✅ 確認行動`（Green）
 
 ### 其他
@@ -230,6 +222,7 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
 
 ## Changelog
 
+- 2026-07-14: Removed offering action — action dropdown option, `offering_resource_select` dropdown, 🎁 奉獻進度 dashboard line, villager action display names, and action emoji entry.
 - 2026-06-07: Removed AP requirement to open gear upgrade interface; unified gear action button labels to `{icon}+四字` format (`🎲 強化工具`, `🩸 獻祭素材`, `✨ 抽取詞條`, `🗑️ 清除詞條`); replaced per-slot clear buttons with single `🗑️ 清除詞條` button + `clear_affix_select:{gear_type}` StringSelect dropdown flow.
 - 2026-05-31: Added 🩸 獻祭 button (Red/Danger) to the gear upgrade action row alongside 🎲 強化 and ← 返回; disabled when the selected gear type's material count is 0. Sacrifice result appended to embed description when `result["type"] == "sacrifice"`, showing consumed count and incremental risky bonus. Error result branch also added.
 - 2026.05.02.00: Stage line format changed to `📋 關卡 {n}: {type_zh}`; deadline prefixed with `期限:`; section headers localised to `公用資源` / `公用設施` / `村民行動` / `個人資訊`; building list moved out of code block with per-row emoji; gear line label changed to `裝備`, category text labels and `Lv` prefix removed; materials line category text labels removed; burst button renamed `⚡ 消耗AP立刻完成三次行動` and moved to Row 1 alongside `🔨 強化裝備`; Refresh button removed.
