@@ -182,6 +182,49 @@ async def set_material(
     )
 
 
+async def get_universal_material(db, user_id: str) -> int:
+    """Return the player's current universal material count."""
+    async with db.execute(
+        "SELECT materials_universal FROM players WHERE user_id=?", (user_id,)
+    ) as cur:
+        row = await cur.fetchone()
+    return row[0] if row else 0
+
+
+async def add_universal_material(db, user_id: str, amount: int, ts: datetime) -> None:
+    """Add amount to the player's universal material balance."""
+    await db.execute(
+        "UPDATE players SET materials_universal = materials_universal + ?, updated_at=? WHERE user_id=?",
+        (amount, dt_str(ts), user_id),
+    )
+
+
+async def spend_universal_material(db, user_id: str, amount: int, ts: datetime) -> bool:
+    """
+    Deduct amount from the player's universal material balance.
+    Returns True if successful, False if insufficient universal material.
+    """
+    async with db.execute(
+        "SELECT materials_universal FROM players WHERE user_id=?", (user_id,)
+    ) as cur:
+        row = await cur.fetchone()
+    if row is None or row[0] < amount:
+        return False
+    await db.execute(
+        "UPDATE players SET materials_universal = materials_universal - ?, updated_at=? WHERE user_id=?",
+        (amount, dt_str(ts), user_id),
+    )
+    return True
+
+
+async def set_universal_material(db, user_id: str, amount: int, ts: datetime) -> None:
+    """Set the player's universal material balance to an absolute value."""
+    await db.execute(
+        "UPDATE players SET materials_universal=?, updated_at=? WHERE user_id=?",
+        (amount, dt_str(ts), user_id),
+    )
+
+
 async def set_risky_failed_levels(
     db, user_id: str, value: int, ts: datetime
 ) -> None:

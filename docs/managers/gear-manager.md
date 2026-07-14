@@ -1,7 +1,7 @@
 ---
 title: "Module: gear-manager"
 doc_type: module
-last_reviewed: 2026-05-31
+last_reviewed: 2026-07-14
 source_paths:
   - src/managers/gear_manager.py
 ---
@@ -29,8 +29,9 @@ source_paths:
 | `buffer` | 墊檔 | ceil(目標等級 / 2)，最少 1 個 | 否 | — | pity +1（保證觸發） |
 | `risky` | 鐵齒 | 1 個 | 是 | gear +1/+2/+3（50/35/15%），pity 歸零 | gear 歸零、pity 歸零；`risky_failed_levels` += 當前等級 |
 
-三種模式共用相同前置條件：gear_level < research_lab level、AP >= 1、素材 >= 該模式消耗量。
-失敗時 AP 與素材**全部消耗，不退還**。
+三種模式共用相同前置條件：gear_level < research_lab level、AP >= 1、（該類型素材 + 萬能素材）>= 該模式消耗量。
+扣除順序：優先扣除該類型素材（最多扣至消耗量，不超過持有量），不足差額由萬能素材補足。若加上萬能素材仍不足消耗量，視為前置條件不滿足，無法進行強化（不扣除任何 AP 或素材）。萬能素材詳見 `managers/player-manager.md`。
+失敗時 AP 與素材（含已用於補足差額的萬能素材）**全部消耗，不退還**。
 
 ## 強化消耗（依模式）
 
@@ -64,11 +65,13 @@ final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS)
 1. 前置檢查：
    - gear_level < research_lab level（不得超過研究所等級上限）
    - player.ap >= 1
-   - player.materials[type] >= material_cost（依所選模式計算）
+   - player.materials[type] + player.materials_universal >= material_cost（依所選模式計算）
 
 2. 扣除資源：
    - AP -= 1
-   - materials[type] -= material_cost
+   - from_type = min(material_cost, materials[type])
+   - materials[type] -= from_type
+   - materials_universal -= (material_cost - from_type)
 
 3. 依模式執行：
 
@@ -98,7 +101,7 @@ final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS)
 ## 操作介面（供其他模組呼叫）
 
 - `attempt_upgrade(db, user_id, gear_type, now, mode="normal")` — 執行強化嘗試，回傳 `{success, new_level, level_gain, pity_before, pity_after, rate, mode}`
-- `get_upgrade_info(db, user_id, gear_type, now, mode="normal")` — 回傳強化預覽資訊（成功率、依模式計算的消耗量、保底狀態、模式）；標準與鐵齒模式額外回傳 `risky_failed_levels` 與 `risky_bonus_pct`
+- `get_upgrade_info(db, user_id, gear_type, now, mode="normal")` — 回傳強化預覽資訊（成功率、依模式計算的消耗量、保底狀態、模式），另回傳 `universal_materials`（萬能素材持有量）；標準與鐵齒模式額外回傳 `risky_failed_levels` 與 `risky_bonus_pct`
 - `sacrifice_material(db, user_id, gear_type, amount, now)` — 消耗 amount 個指定類型素材，直接將 `risky_failed_levels += amount`；不消耗 AP，不觸發通知；回傳 `{type: "sacrifice", sacrificed, gear_type, risky_failed_levels_after}`
 
 ## 詞條系統（Affix System）
@@ -110,7 +113,7 @@ final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS)
 | `upgrade_success` | 成功率 +X%（加在 `_compute_rate` 結果上，min 1.0） |
 | `upgrade_cost_reduce` | 素材消耗 -X%（floor，最低 1） |
 | `upgrade_ap_refund` | 成功時 X% 機率退還 1 AP |
-| `upgrade_material_refund` | 成功時 X% 機率退還消耗素材 |
+| `upgrade_material_refund` | 成功時 X% 機率退還素材，僅退還本次「該類型本身」實際扣除的部分（`min(material_cost, 扣除前該類型持有量)`），不退還由萬能素材補足的部分 |
 
 鐵齒失敗時，呼叫 `affix_manager.clear_all_affixes(db, user_id, gear_type, now)` 清除所有詞條。
 
@@ -118,6 +121,7 @@ final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS)
 
 ## Changelog
 
+- 2026-07-14: Added universal material (`materials_universal`) fallback for upgrade material shortfall. Precondition changed from `materials[type] >= material_cost` to `materials[type] + materials_universal >= material_cost`; own-type material is spent first (up to material_cost), remaining shortfall drawn from universal material. Only applies to `attempt_upgrade`/`get_upgrade_info`; `sacrifice_material` and affix extract/clear are unaffected. `upgrade_material_refund` now refunds only the own-type-sourced portion actually spent (not the full `material_cost`), so it cannot convert consumed universal material into renewable type-specific material.
 - 2026-05-31: Risky mode success now rolls +1/+2/+3 at 50/35/15% (unconditional, regardless of pity state), replacing the fixed +1 from the 2026-05-15 simplification.
 - 2026-05-31: Added `sacrifice_material(db, user_id, gear_type, amount, now)` — consume N materials of a chosen type to gain `risky_failed_levels += N` without spending AP or triggering notifications. Returns `{type: "sacrifice", sacrificed, gear_type, risky_failed_levels_after}`.
 - 2026.05.22: 強化流程整合詞條：upgrade_success/upgrade_cost_reduce/upgrade_ap_refund/upgrade_material_refund；鐵齒炸裂後清除詞條。

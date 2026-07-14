@@ -373,7 +373,14 @@ class TestRendererMainEmbed(unittest.TestCase):
         player["gear_building"] = 3
         embed = build_main_embed(self._make_stage_data(), {}, {}, [], player)
         self.assertIn("🏅 工具：🌾 0 | 🔨 3 | ⚔️ 0 | 🔬 0", embed.description)
-        self.assertIn("🎒 素材：🌾 3 | 🔨 2 | ⚔️ 1 | 🔬 0", embed.description)
+        self.assertIn("🎒 素材：🌾 3 | 🔨 2 | ⚔️ 1 | 🔬 0 | 🌟 0", embed.description)
+
+    def test_embed_universal_material_shown_in_materials_line(self):
+        from cogs.ui_renderer import build_main_embed
+        player = self._make_player()
+        player["materials_universal"] = 9
+        embed = build_main_embed(self._make_stage_data(), {}, {}, [], player)
+        self.assertIn("🎒 素材：🌾 3 | 🔨 2 | ⚔️ 1 | 🔬 0 | 🌟 9", embed.description)
 
     def test_embed_efficiency_line_uses_documented_formula(self):
         from cogs.ui_renderer import build_main_embed
@@ -546,7 +553,7 @@ class TestRendererGearEmbed(unittest.TestCase):
         for k, v in ALL_TEST_ENV.items():
             os.environ[k] = v
 
-    def _make_info(self, gear_level=2, pity=1, ap=3, materials=5):
+    def _make_info(self, gear_level=2, pity=1, ap=3, materials=5, universal_materials=0):
         from core.config import get_env_float, get_env_int
         import math
         min_rate = get_env_float("GEAR_MIN_SUCCESS_RATE")
@@ -564,6 +571,7 @@ class TestRendererGearEmbed(unittest.TestCase):
             "can_attempt": True,
             "gear_cap": 5,
             "materials": materials,
+            "universal_materials": universal_materials,
         }
 
     def test_embed_shows_levels(self):
@@ -591,6 +599,12 @@ class TestRendererGearEmbed(unittest.TestCase):
         info = self._make_info(materials=7)
         embed = build_gear_embed(info, "gathering")
         self.assertIn("持有素材：7 個", embed.description)
+
+    def test_universal_materials_displayed(self):
+        from cogs.ui_renderer import build_gear_embed
+        info = self._make_info(materials=7, universal_materials=12)
+        embed = build_gear_embed(info, "gathering")
+        self.assertIn("持有素材：7 個 ｜ 🌟 萬能素材：12 個", embed.description)
 
     def test_level_6_rate_display_uses_decimal_intent(self):
         from cogs.ui_renderer import build_gear_embed

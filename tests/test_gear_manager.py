@@ -19,7 +19,8 @@ USER = "user_gear_001"
 
 async def _insert_player(db, user_id: str, gear_type: str, gear_level: int = 0,
                           materials: int = 0, pity: int = 0,
-                          risky_failed_levels: int = 0) -> None:
+                          risky_failed_levels: int = 0,
+                          universal_materials: int = 0) -> None:
     """Helper: insert a player row with specific gear state."""
     from core.utils import dt_str
     from core.formula import ACTION_GEAR_COL, ACTION_MATERIAL_COL
@@ -31,10 +32,10 @@ async def _insert_player(db, user_id: str, gear_type: str, gear_level: int = 0,
     await db.execute(
         f"""INSERT INTO players
             (user_id, {gear_col}, {mat_col}, pity_{gear_type},
-             risky_failed_levels,
+             risky_failed_levels, materials_universal,
              ap_full_time, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        (user_id, gear_level, materials, pity, risky_failed_levels,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (user_id, gear_level, materials, pity, risky_failed_levels, universal_materials,
          now_str, now_str, now_str),
     )
     await db.commit()
@@ -883,6 +884,99 @@ class TestAffixIntegration(DatabaseTestCase):
         self.assertFalse(result["material_refunded"])
 
 
+class TestUniversalMaterialShortfall(DatabaseTestCase):
+    """gear_manager falls back to universal material for upgrade shortfalls."""
+
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        async with schema.get_connection() as db:
+            await _set_research_lab_level(db, 10)
+
+    async def test_sufficient_own_type_material_does_not_touch_universal(self):
+        """When own-type material covers the cost, universal material is untouched."""
+        async with schema.get_connection() as db:
+            await _insert_player(db, USER, "gathering", gear_level=5, materials=6, universal_materials=3)
+            await db.commit()
+        with patch("managers.gear_manager.random.random", return_value=0.0):
+            async with schema.get_connection() as db:
+                await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="normal")
+                await db.commit()
+        row = await self.fetchone(
+            "SELECT materials_gathering, materials_universal FROM players WHERE user_id=?", (USER,)
+        )
+        # target_level=6 -> cost=6; fully paid from own-type material.
+        self.assertEqual(row[0], 0)
+        self.assertEqual(row[1], 3)
+
+    async def test_universal_material_covers_shortfall(self):
+        """Own-type material insufficient; universal material makes up the difference."""
+        async with schema.get_connection() as db:
+            await _insert_player(db, USER, "gathering", gear_level=5, materials=2, universal_materials=10)
+            await db.commit()
+        info = await self.fetchone(
+            "SELECT materials_gathering, materials_universal FROM players WHERE user_id=?", (USER,)
+        )
+        with patch("managers.gear_manager.random.random", return_value=0.0):
+            async with schema.get_connection() as db:
+                result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="normal")
+                await db.commit()
+        self.assertTrue(result["success"])
+        row = await self.fetchone(
+            "SELECT materials_gathering, materials_universal FROM players WHERE user_id=?", (USER,)
+        )
+        # target_level=6 -> cost=6; own-type has 2, shortfall 4 drawn from universal.
+        self.assertEqual(row[0], 0)
+        self.assertEqual(row[1], 6)
+
+    async def test_combined_insufficient_raises_and_deducts_nothing(self):
+        """Own-type + universal still short of cost: reject without touching any resource."""
+        async with schema.get_connection() as db:
+            await _insert_player(db, USER, "gathering", gear_level=5, materials=2, universal_materials=1)
+            await db.commit()
+        async with schema.get_connection() as db:
+            with self.assertRaises(ValueError):
+                await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="normal")
+        row = await self.fetchone(
+            "SELECT materials_gathering, materials_universal, ap_full_time FROM players WHERE user_id=?", (USER,)
+        )
+        self.assertEqual(row[0], 2)
+        self.assertEqual(row[1], 1)
+
+    async def test_get_upgrade_info_reports_universal_materials_and_can_attempt(self):
+        """get_upgrade_info exposes universal_materials and factors it into can_attempt."""
+        async with schema.get_connection() as db:
+            await _insert_player(db, USER, "gathering", gear_level=5, materials=2, universal_materials=4)
+            await db.commit()
+        async with schema.get_connection() as db:
+            info = await gear_manager.get_upgrade_info(db, USER, "gathering", NOW, "normal")
+        # target_level=6 -> cost=6; 2 + 4 == 6, so can_attempt should be True.
+        self.assertEqual(info["universal_materials"], 4)
+        self.assertTrue(info["can_attempt"])
+
+    async def test_material_refund_only_refunds_own_type_portion(self):
+        """upgrade_material_refund must not refund the universal-sourced portion of the cost."""
+        async with schema.get_connection() as db:
+            await _insert_player(db, USER, "gathering", gear_level=5, materials=2, universal_materials=10)
+            await db.execute(
+                "INSERT INTO gear_affixes (user_id, gear_type, slot_index, affix_type, value) "
+                "VALUES (?, 'gathering', 0, 'upgrade_material_refund', 100)",
+                (USER,),
+            )
+            await db.commit()
+        with patch("managers.gear_manager.random.random", return_value=0.0):
+            async with schema.get_connection() as db:
+                result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="normal")
+                await db.commit()
+        self.assertTrue(result["success"])
+        self.assertTrue(result["material_refunded"])
+        row = await self.fetchone(
+            "SELECT materials_gathering, materials_universal FROM players WHERE user_id=?", (USER,)
+        )
+        # cost=6: 2 from own-type (fully refunded), 4 from universal (never refunded).
+        self.assertEqual(row[0], 2)
+        self.assertEqual(row[1], 6)
+
+
 class TestSacrificeMaterial(DatabaseTestCase):
     """Tests for gear_manager.sacrifice_material()."""
 
@@ -924,6 +1018,50 @@ class TestSacrificeMaterial(DatabaseTestCase):
             "SELECT ap_full_time FROM players WHERE user_id=?", (USER,)
         )
         self.assertEqual(ap_before_row[0], ap_after_row[0])
+
+
+class TestUniversalMaterial(DatabaseTestCase):
+    """Tests for player_manager's universal material accessors."""
+
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        async with schema.get_connection() as db:
+            await _insert_player(db, USER, "gathering", universal_materials=10)
+
+    async def test_get_universal_material_returns_current_balance(self):
+        async with schema.get_connection() as db:
+            value = await player_manager.get_universal_material(db, USER)
+        self.assertEqual(value, 10)
+
+    async def test_add_universal_material_increments_balance(self):
+        async with schema.get_connection() as db:
+            await player_manager.add_universal_material(db, USER, 5, NOW)
+            await db.commit()
+            value = await player_manager.get_universal_material(db, USER)
+        self.assertEqual(value, 15)
+
+    async def test_spend_universal_material_succeeds_and_deducts(self):
+        async with schema.get_connection() as db:
+            ok = await player_manager.spend_universal_material(db, USER, 4, NOW)
+            await db.commit()
+            value = await player_manager.get_universal_material(db, USER)
+        self.assertTrue(ok)
+        self.assertEqual(value, 6)
+
+    async def test_spend_universal_material_fails_when_insufficient(self):
+        async with schema.get_connection() as db:
+            ok = await player_manager.spend_universal_material(db, USER, 99, NOW)
+            await db.commit()
+            value = await player_manager.get_universal_material(db, USER)
+        self.assertFalse(ok)
+        self.assertEqual(value, 10)
+
+    async def test_set_universal_material_sets_absolute_value(self):
+        async with schema.get_connection() as db:
+            await player_manager.set_universal_material(db, USER, 42, NOW)
+            await db.commit()
+            value = await player_manager.get_universal_material(db, USER)
+        self.assertEqual(value, 42)
 
 
 if __name__ == "__main__":

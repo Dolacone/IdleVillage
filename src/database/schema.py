@@ -79,6 +79,7 @@ async def _create_v2_tables(db):
             materials_building INTEGER NOT NULL DEFAULT 0,
             materials_combat INTEGER NOT NULL DEFAULT 0,
             materials_research INTEGER NOT NULL DEFAULT 0,
+            materials_universal INTEGER NOT NULL DEFAULT 0,
             gear_gathering INTEGER NOT NULL DEFAULT 0,
             gear_building INTEGER NOT NULL DEFAULT 0,
             gear_combat INTEGER NOT NULL DEFAULT 0,
@@ -180,6 +181,11 @@ async def _migrate_v2_columns(db):
     if "risky_failed_levels" not in columns:
         await db.execute(
             "ALTER TABLE players ADD COLUMN risky_failed_levels INTEGER NOT NULL DEFAULT 0"
+        )
+
+    if "materials_universal" not in columns:
+        await db.execute(
+            "ALTER TABLE players ADD COLUMN materials_universal INTEGER NOT NULL DEFAULT 0"
         )
 
 

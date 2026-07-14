@@ -35,6 +35,7 @@ class TestBuildManagerEmbed(unittest.TestCase):
             "materials_building": 20,
             "materials_combat": 30,
             "materials_research": 40,
+            "materials_universal": 50,
             "pity_gathering": 0,
             "pity_building": 1,
             "pity_combat": 2,
@@ -122,6 +123,7 @@ class TestBuildManagerEmbed(unittest.TestCase):
         self.assertIn("建設 20", value)
         self.assertIn("戰鬥 30", value)
         self.assertIn("研究 40", value)
+        self.assertIn("萬能 50", value)
 
     def test_materials_field_is_not_inline(self):
         from cogs.ui_renderer import build_manager_embed
@@ -526,7 +528,7 @@ class TestPlayerManagerCogOnDropdown(unittest.IsolatedAsyncioTestCase):
 
             mat_val = get_field_value(embed.fields, "素材")
             self.assertIsNotNone(mat_val)
-            for expected in ["採集 10", "建設 20", "戰鬥 30", "研究 40"]:
+            for expected in ["採集 10", "建設 20", "戰鬥 30", "研究 40", "萬能 0"]:
                 self.assertIn(expected, mat_val)
 
             risky_val = get_field_value(embed.fields, "鐵齒")
@@ -688,7 +690,7 @@ class TestPlayerManagerCogOnButtonClick(unittest.IsolatedAsyncioTestCase):
         self.assertIn("gear_combat", field_ids)
         self.assertIn("gear_research", field_ids)
 
-    async def test_material_button_sends_modal_with_four_fields(self):
+    async def test_material_button_sends_modal_with_five_fields(self):
         cog = self._make_cog()
         uid = "123456789"
         inter = self._make_inter(custom_id=f"mgr_edit_material:{uid}")
@@ -702,6 +704,7 @@ class TestPlayerManagerCogOnButtonClick(unittest.IsolatedAsyncioTestCase):
         self.assertIn("mat_building", field_ids)
         self.assertIn("mat_combat", field_ids)
         self.assertIn("mat_research", field_ids)
+        self.assertIn("mat_universal", field_ids)
 
     async def test_pity_button_sends_modal_with_four_fields(self):
         cog = self._make_cog()
@@ -933,18 +936,20 @@ class TestPlayerManagerCogOnModalSubmit(unittest.IsolatedAsyncioTestCase):
                     "mat_building": "200",
                     "mat_combat": "300",
                     "mat_research": "400",
+                    "mat_universal": "500",
                 },
             )
             await cog.on_modal_submit(inter)
 
             async with get_connection() as db:
                 async with db.execute(
-                    "SELECT materials_gathering, materials_building, materials_combat, materials_research "
+                    "SELECT materials_gathering, materials_building, materials_combat, materials_research, "
+                    "materials_universal "
                     "FROM players WHERE user_id=?",
                     (target_uid,),
                 ) as cur:
                     row = await cur.fetchone()
-            self.assertEqual(row, (100, 200, 300, 400))
+            self.assertEqual(row, (100, 200, 300, 400, 500))
 
             _, kwargs = inter.edit_original_response.call_args
             self.assertIsInstance(kwargs.get("embed"), disnake.Embed)

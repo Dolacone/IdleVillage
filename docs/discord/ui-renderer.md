@@ -74,7 +74,7 @@ source_paths:
 **個人資訊**
 📊 效率：🌾 {n}(+{p}%) | 🔨 {n}(+{p}%) | ⚔️ {n}(+{p}%) | 🔬 {n}(+{p}%)
 🏅 工具：🌾 {n} | 🔨 {n} | ⚔️ {n} | 🔬 {n}
-🎒 素材：🌾 {n} | 🔨 {n} | ⚔️ {n} | 🔬 {n}
+🎒 素材：🌾 {n} | 🔨 {n} | ⚔️ {n} | 🔬 {n} | 🌟 {n}
 🏃 行動：{emoji}{action_name}（下次結算：<t:{next_cycle}:R>）
 ⚡ AP：{ap} / {ap_cap}
 ⚡ AP：{ap} / {ap_cap}（下次：<t:{next_ap_unix}:R>）（AP < cap 時顯示）
@@ -83,7 +83,7 @@ source_paths:
 效率欄位：`{n}` 為該行動類別的有效產出，`{p}` 為總加成百分比（floor）。
 計算方式參見 engine/formula.md 效率公式；關卡加成使用已完成升級關卡數
 `floor(stages_cleared / 5)`，不使用已通過總關卡數。
-emoji 順序與 工具 / 素材 欄位一致：🌾 🔨 ⚔️ 🔬。
+emoji 順序與 工具 欄位一致：🌾 🔨 ⚔️ 🔬；素材欄位額外附加 🌟（萬能素材）。
 
 行動 emoji 對應：🌾採集、🔨建設、⚔️戰鬥、🔬研究
 
@@ -139,10 +139,12 @@ Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
 保底率：{pity} x {pity_per}% = {pity_total}%
 鐵齒率：{risky_failed_levels} x 0.01% = {risky_bonus}%
 消耗：⚡ 1 AP + {n} 個 {material_name}
-持有素材：{material_count} 個
+持有素材：{material_count} 個 ｜ 🌟 萬能素材：{universal_material_count} 個
 ⚡ AP：{ap} / {ap_cap}
 工具等級上限：Lv{cap}（研究所 Lv{n}）
 ```
+
+若該類型素材不足消耗量，強化時自動用萬能素材補足差額（不足以補足時強化按鈕維持 disabled）；UI 不另外顯示扣除細節，僅顯示兩者持有量。
 
 保底率與鐵齒率明細行僅在標準（normal）與鐵齒（risky）模式下顯示；buffer 模式略去。
 墊檔模式下成功率欄位顯示 `0%（墊檔不進行強化）`，不顯示保底率/鐵齒率明細行。
@@ -203,7 +205,7 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
   | Field name | 格式 |
   | :--- | :--- |
   | 工具等級 | `採集 {gear_gathering} ｜ 建設 {gear_building} ｜ 戰鬥 {gear_combat} ｜ 研究 {gear_research}` |
-  | 素材數量 | `採集 {materials_gathering} ｜ 建設 {materials_building} ｜ 戰鬥 {materials_combat} ｜ 研究 {materials_research}` |
+  | 素材數量 | `採集 {materials_gathering} ｜ 建設 {materials_building} ｜ 戰鬥 {materials_combat} ｜ 研究 {materials_research} ｜ 萬能 {materials_universal}` |
   | 保底計數 | `採集 {pity_gathering} ｜ 建設 {pity_building} ｜ 戰鬥 {pity_combat} ｜ 研究 {pity_research}` |
   | 鐵齒失敗累積 | `{risky_failed_levels}` |
 
@@ -222,6 +224,7 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
 
 ## Changelog
 
+- 2026-07-14: Added universal material (🌟) display: 個人資訊 素材 line appends universal material count; gear upgrade sub-menu 持有素材 line shows universal material holdings alongside the type-specific count; `/idlevillage-manager` 素材數量 field appends `萬能 {materials_universal}`.
 - 2026-07-14: Removed offering action — action dropdown option, `offering_resource_select` dropdown, 🎁 奉獻進度 dashboard line, villager action display names, and action emoji entry.
 - 2026-06-07: Removed AP requirement to open gear upgrade interface; unified gear action button labels to `{icon}+四字` format (`🎲 強化工具`, `🩸 獻祭素材`, `✨ 抽取詞條`, `🗑️ 清除詞條`); replaced per-slot clear buttons with single `🗑️ 清除詞條` button + `clear_affix_select:{gear_type}` StringSelect dropdown flow.
 - 2026-05-31: Added 🩸 獻祭 button (Red/Danger) to the gear upgrade action row alongside 🎲 強化 and ← 返回; disabled when the selected gear type's material count is 0. Sacrifice result appended to embed description when `result["type"] == "sacrifice"`, showing consumed count and incremental risky bonus. Error result branch also added.

@@ -58,11 +58,11 @@ source_paths:
 | :--- | :--- | :--- |
 | `mgr_player_select` | User Select — 選擇目標玩家 | 查詢玩家 DB；玩家不存在回傳錯誤；存在則呼叫 `build_manager_embed()` + `build_manager_components()` 顯示面板 |
 | `mgr_edit_gear:{uid}` | 點擊「編輯工具等級」按鈕 | 彈出「編輯工具等級」Modal（4 欄位：採集/建設/戰鬥/研究等級） |
-| `mgr_edit_material:{uid}` | 點擊「編輯素材數量」按鈕 | 彈出「編輯素材數量」Modal（4 欄位） |
+| `mgr_edit_material:{uid}` | 點擊「編輯素材數量」按鈕 | 彈出「編輯素材數量」Modal（5 欄位：採集/建設/戰鬥/研究/萬能） |
 | `mgr_edit_pity:{uid}` | 點擊「編輯保底計數」按鈕 | 彈出「編輯保底計數」Modal（4 欄位） |
 | `mgr_edit_risky:{uid}` | 點擊「編輯鐵齒失敗累積」按鈕 | 彈出「編輯鐵齒失敗累積」Modal（1 欄位） |
 | `mgr_modal_gear:{uid}` | 提交工具等級 Modal | 驗證非負整數 → 呼叫 `player_manager.set_gear_level()` × 4 → 刷新面板 |
-| `mgr_modal_material:{uid}` | 提交素材 Modal | 驗證非負整數 → 呼叫 `player_manager.set_material()` × 4 → 刷新面板 |
+| `mgr_modal_material:{uid}` | 提交素材 Modal | 驗證非負整數 → 呼叫 `player_manager.set_material()` × 4 + `set_universal_material()` × 1 → 刷新面板 |
 | `mgr_modal_pity:{uid}` | 提交保底 Modal | 驗證非負整數 → 呼叫 `player_manager.set_pity()` × 4 → 刷新面板 |
 | `mgr_modal_risky:{uid}` | 提交鐵齒 Modal | 驗證非負整數 → 呼叫 `player_manager.set_risky_failed_levels()` → 刷新面板 |
 
@@ -77,6 +77,7 @@ source_paths:
 
 ## Changelog
 
+- 2026-07-14: `/idlevillage-manager` 編輯素材數量 Modal 新增第 5 個欄位（萬能素材），`mgr_modal_material` 提交流程改為呼叫 `set_material()` × 4 + `set_universal_material()` × 1。
 - 2026-07-14: Removed `offering_resource_select` dropdown route and offering resource validation in `confirm_action:` handler.
 - 2026-05-22: Added `extract_affix:{gear_type}` and `clear_affix:{gear_type}:{slot_index}` routes for the tool affix system.
 - 2026-05-15: Replaced five `/idlevillage-manager` sub-commands with a single unified interface driven by user select + modal edits.
