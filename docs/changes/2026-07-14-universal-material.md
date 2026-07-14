@@ -8,6 +8,7 @@ source_paths:
   - src/database/schema.py
   - src/managers/player_manager.py
   - src/managers/gear_manager.py
+  - src/cogs/ui_renderer.py
 scope: "Tracks introduction of the universal material (萬能素材) placeholder and its use as a shortfall fallback during gear upgrade."
 ---
 
@@ -88,7 +89,7 @@ shortfall = max(0, material_cost - materials[gear_type])
   - Depends on: Task 2
   - Acceptance: `attempt_upgrade` 與 `get_upgrade_info` 的前置檢查與扣除順序符合 Architecture Decision #2；`upgrade_material_refund` 觸發時只退還 `from_type`（本類型本身實際扣除量），不退還萬能素材補足的部分；新增測試涵蓋「本類型不足、靠萬能素材補足後成功且觸發 `upgrade_material_refund`」情境下，退還量等於 `from_type` 而非 `material_cost`；既有標準/墊檔/鐵齒測試不受影響且全數通過
 
-- [ ] Task 4: UI 顯示萬能素材（主介面 + 工具強化子選單）
+- [x] Task 4: UI 顯示萬能素材（主介面 + 工具強化子選單）
   - Files: `src/cogs/ui_renderer.py`
   - Tests: 於 `tests/test_discord_commands.py`（現有 UI embed 渲染測試所在檔案）新增涵蓋個人資訊素材列包含萬能素材數量、工具強化子選單持有素材列包含萬能素材數量的測試案例
   - Depends on: Task 3

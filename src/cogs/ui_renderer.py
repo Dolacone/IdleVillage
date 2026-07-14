@@ -213,6 +213,7 @@ def build_main_embed(
         f"{ACTION_EMOJIS[a]} {player_row.get(f'materials_{a}', 0)}"
         for a in ("gathering", "building", "combat", "research")
     ]
+    mat_parts.append(f"🌟 {player_row.get('materials_universal', 0)}")
     base_output = get_env_int("BASE_OUTPUT")
     stage_bonus_per = get_env_float("STAGE_BONUS_PER_CLEAR")
     gear_bonus_per = get_env_float("GEAR_BONUS_PER_LEVEL")
@@ -427,6 +428,7 @@ def build_gear_embed(
     gear_cap = upgrade_info.get("gear_cap", 0)
     ap = upgrade_info.get("ap", 0)
     materials = upgrade_info.get("materials", 0)
+    universal_materials = upgrade_info.get("universal_materials", 0)
     ap_cap = get_env_int("AP_CAP")
 
     pity_bonus_per = get_env_float("GEAR_PITY_BONUS")
@@ -474,7 +476,7 @@ def build_gear_embed(
 
     lines.extend([
         f"消耗：⚡ 1 AP + {material_cost} 個 {mat_label}",
-        f"持有素材：{materials} 個",
+        f"持有素材：{materials} 個 ｜ 🌟 萬能素材：{universal_materials} 個",
         f"⚡ AP：{ap} / {ap_cap}",
         f"工具等級上限：Lv{gear_cap}（研究所 Lv{gear_cap}）",
     ])
