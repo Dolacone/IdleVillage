@@ -11,6 +11,7 @@ source_paths:
   - src/managers/trial_manager.py
   - src/cogs/ui_renderer.py
   - src/core/settlement.py
+  - src/core/engine.py
 scope: "Tracks the village trial (試煉) feature from design through review: a global, resource-funded, timed community goal that rewards participants with universal material by contribution."
 ---
 
@@ -112,7 +113,7 @@ scope: "Tracks the village trial (試煉) feature from design through review: a 
   - Depends on: Task 2
   - Acceptance: `_run_one_cycle` 與 `change_action` 的 partial cycle 區塊皆在對應的 stage-manager 呼叫之後，以資源不足懲罰前的 output 呼叫 `trial_manager.add_progress`；回傳事件正確併入該次呼叫的 `events` 列表；既有結算測試不受影響且全數通過
 
-- [ ] Task 5: engine.py — Watcher tick 掛載試煉逾時偵測
+- [x] Task 5: engine.py — Watcher tick 掛載試煉逾時偵測
   - Files: `src/core/engine.py`
   - Tests: 於 `tests/test_v2_schema_initialization.py`（`WatcherIsV2Safe` 類別已直接呼叫 `Engine.process_watcher()`，為既有 Watcher 測試所在檔案）新增測試，涵蓋：(a) 試煉逾時時 Watcher tick 產生 `trial_fail` 事件並隨其他事件一併 dispatch；(b) 試煉未逾時或無進行中試煉時不產生額外事件
   - Depends on: Task 2

@@ -19,6 +19,7 @@ class Engine:
     async def _process_watcher_v2(watcher_req_id: str) -> None:
         from core import notification
         from core.settlement import settle_complete_cycles
+        from managers import trial_manager
 
         log_event(watcher_req_id, "SYSTEM", "STATUS", "Watcher sweep started (v2)")
         now = datetime.now(timezone.utc)
@@ -34,6 +35,14 @@ class Engine:
         for (user_id,) in due_players:
             events = await settle_complete_cycles(user_id, now)
             all_events.extend(events)
+
+        # Trial timeout backstop: runs every heartbeat regardless of whether any
+        # player has a due action, so a trial can still expire with no one playing.
+        async with get_connection() as db:
+            trial_event = await trial_manager.check_timeout(db, now)
+            await db.commit()
+        if trial_event is not None:
+            all_events.append(trial_event)
 
         if Engine.bot is not None and all_events:
             await notification.dispatch_events(Engine.bot, all_events)

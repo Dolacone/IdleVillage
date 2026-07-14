@@ -189,6 +189,60 @@ class PlayerIndexesExist(DatabaseTestCase):
         self.assertIsNotNone(row)
 
 
+class WatcherTrialTimeout(DatabaseTestCase):
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        self._original_bot = Engine.bot
+
+    async def asyncTearDown(self):
+        Engine.bot = self._original_bot
+        await super().asyncTearDown()
+
+    async def _write_active_trial(self, started_at):
+        now_str = datetime.now(timezone.utc).isoformat()
+        async with schema.get_connection() as db:
+            await db.execute(
+                """UPDATE trial_state SET
+                   is_active=1, resource_type='food', target=1000, progress=100,
+                   started_at=?, updated_at=?
+                   WHERE id=1""",
+                (started_at.isoformat(), now_str),
+            )
+            await db.commit()
+
+    async def test_watcher_tick_fails_expired_trial_with_no_due_players(self):
+        from unittest.mock import AsyncMock, patch
+
+        now = datetime.now(timezone.utc)
+        await self._write_active_trial(now - timedelta(seconds=90000))
+        Engine.bot = object()
+
+        with patch("core.notification.dispatch_events", new=AsyncMock()) as dispatch:
+            await Engine.process_watcher()
+
+        dispatch.assert_awaited_once()
+        _, dispatched_events = dispatch.call_args[0]
+        self.assertEqual([e["type"] for e in dispatched_events], ["trial_fail"])
+
+        row = await self.fetchone("SELECT is_active FROM trial_state WHERE id=1")
+        self.assertEqual(row[0], 0)
+
+    async def test_watcher_tick_leaves_unexpired_trial_untouched(self):
+        now = datetime.now(timezone.utc)
+        await self._write_active_trial(now)
+
+        await Engine.process_watcher()
+
+        row = await self.fetchone("SELECT is_active, progress FROM trial_state WHERE id=1")
+        self.assertEqual(row[0], 1)
+        self.assertEqual(row[1], 100)
+
+    async def test_watcher_tick_no_event_when_no_active_trial(self):
+        await Engine.process_watcher()
+        row = await self.fetchone("SELECT is_active FROM trial_state WHERE id=1")
+        self.assertEqual(row[0], 0)
+
+
 class WatcherIsV2Safe(DatabaseTestCase):
     async def test_process_watcher_does_not_raise_on_v2_schema(self):
         try:
