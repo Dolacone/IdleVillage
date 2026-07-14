@@ -116,6 +116,29 @@ async def _create_v2_tables(db):
     )
     await db.execute(
         """
+        CREATE TABLE IF NOT EXISTS trial_state (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            is_active INTEGER NOT NULL DEFAULT 0,
+            resource_type TEXT,
+            target INTEGER NOT NULL DEFAULT 0,
+            progress INTEGER NOT NULL DEFAULT 0,
+            started_at TEXT,
+            ended_at TEXT,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    await db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS trial_contributions (
+            user_id TEXT PRIMARY KEY,
+            contribution INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL
+        )
+        """
+    )
+    await db.execute(
+        """
         CREATE INDEX IF NOT EXISTS idx_players_completion_time
         ON players (completion_time)
         """
@@ -166,6 +189,11 @@ async def _seed_initial_rows(db):
     await db.execute(
         "INSERT OR IGNORE INTO guild_installations (guild_id, created_at, updated_at, is_active) VALUES (?, ?, ?, 1)",
         (get_discord_guild_id(), now, now),
+    )
+
+    await db.execute(
+        "INSERT OR IGNORE INTO trial_state (id, is_active, target, progress, updated_at) VALUES (1, 0, 0, 0, ?)",
+        (now,),
     )
 
 

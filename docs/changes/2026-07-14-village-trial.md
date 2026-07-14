@@ -4,7 +4,10 @@ status: Ready-to-implement
 created: 2026-07-14
 doc_type: change
 last_reviewed: 2026-07-14
-source_paths: []
+source_paths:
+  - src/database/schema.py
+  - src/core/config.py
+  - .env.example
 scope: "Tracks the village trial (試煉) feature from design through review: a global, resource-funded, timed community goal that rewards participants with universal material by contribution."
 ---
 
@@ -82,7 +85,7 @@ scope: "Tracks the village trial (試煉) feature from design through review: a 
 
 ## Tasks
 
-- [ ] Task 1: DB schema + config — 新增 `trial_state`、`trial_contributions` 兩張資料表；新增四個環境變數
+- [x] Task 1: DB schema + config — 新增 `trial_state`、`trial_contributions` 兩張資料表；新增四個環境變數
   - Files: `src/database/schema.py`, `src/core/config.py`（另需同步更新 `.env.example` 新增四個 key，非 source/logic 檔不計入限制）
   - Tests: 更新 `tests/test_v2_schema_initialization.py`（新表存在性、初始列）；更新 `tests/test_v2_config_validation.py`（新 REQUIRED_KEYS 通過驗證）
   - Depends on: 無

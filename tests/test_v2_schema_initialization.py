@@ -13,6 +13,8 @@ V2_TABLE_NAMES = {
     "players",
     "guild_installations",
     "gear_affixes",
+    "trial_state",
+    "trial_contributions",
 }
 
 
@@ -81,6 +83,23 @@ class SeedRowsExistAfterInit(DatabaseTestCase):
         self.assertEqual(row[0], os.environ["DISCORD_GUILD_ID"])
         self.assertEqual(row[1], 1)
 
+    async def test_trial_state_singleton_row_seeded(self):
+        row = await self.fetchone(
+            "SELECT is_active, resource_type, target, progress, started_at, ended_at FROM trial_state WHERE id = 1"
+        )
+        self.assertIsNotNone(row)
+        is_active, resource_type, target, progress, started_at, ended_at = row
+        self.assertEqual(is_active, 0)
+        self.assertIsNone(resource_type)
+        self.assertEqual(target, 0)
+        self.assertEqual(progress, 0)
+        self.assertIsNone(started_at)
+        self.assertIsNone(ended_at)
+
+    async def test_trial_contributions_starts_empty(self):
+        row = await self.fetchone("SELECT COUNT(*) FROM trial_contributions")
+        self.assertEqual(row[0], 0)
+
 
 class SchemaInitIsIdempotent(DatabaseTestCase):
     async def test_calling_init_db_twice_does_not_raise(self):
@@ -98,6 +117,8 @@ class SchemaInitIsIdempotent(DatabaseTestCase):
         self.assertEqual(row[0], 3)
         row = await self.fetchone("SELECT COUNT(*) FROM buildings")
         self.assertEqual(row[0], 4)
+        row = await self.fetchone("SELECT COUNT(*) FROM trial_state")
+        self.assertEqual(row[0], 1)
 
 
 class MigratesLegacyPlayersMissingUniversalMaterial(DatabaseTestCase):
