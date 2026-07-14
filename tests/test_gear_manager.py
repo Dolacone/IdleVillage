@@ -19,7 +19,8 @@ USER = "user_gear_001"
 
 async def _insert_player(db, user_id: str, gear_type: str, gear_level: int = 0,
                           materials: int = 0, pity: int = 0,
-                          risky_failed_levels: int = 0) -> None:
+                          risky_failed_levels: int = 0,
+                          universal_materials: int = 0) -> None:
     """Helper: insert a player row with specific gear state."""
     from core.utils import dt_str
     from core.formula import ACTION_GEAR_COL, ACTION_MATERIAL_COL
@@ -31,10 +32,10 @@ async def _insert_player(db, user_id: str, gear_type: str, gear_level: int = 0,
     await db.execute(
         f"""INSERT INTO players
             (user_id, {gear_col}, {mat_col}, pity_{gear_type},
-             risky_failed_levels,
+             risky_failed_levels, materials_universal,
              ap_full_time, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        (user_id, gear_level, materials, pity, risky_failed_levels,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (user_id, gear_level, materials, pity, risky_failed_levels, universal_materials,
          now_str, now_str, now_str),
     )
     await db.commit()
@@ -924,6 +925,50 @@ class TestSacrificeMaterial(DatabaseTestCase):
             "SELECT ap_full_time FROM players WHERE user_id=?", (USER,)
         )
         self.assertEqual(ap_before_row[0], ap_after_row[0])
+
+
+class TestUniversalMaterial(DatabaseTestCase):
+    """Tests for player_manager's universal material accessors."""
+
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        async with schema.get_connection() as db:
+            await _insert_player(db, USER, "gathering", universal_materials=10)
+
+    async def test_get_universal_material_returns_current_balance(self):
+        async with schema.get_connection() as db:
+            value = await player_manager.get_universal_material(db, USER)
+        self.assertEqual(value, 10)
+
+    async def test_add_universal_material_increments_balance(self):
+        async with schema.get_connection() as db:
+            await player_manager.add_universal_material(db, USER, 5, NOW)
+            await db.commit()
+            value = await player_manager.get_universal_material(db, USER)
+        self.assertEqual(value, 15)
+
+    async def test_spend_universal_material_succeeds_and_deducts(self):
+        async with schema.get_connection() as db:
+            ok = await player_manager.spend_universal_material(db, USER, 4, NOW)
+            await db.commit()
+            value = await player_manager.get_universal_material(db, USER)
+        self.assertTrue(ok)
+        self.assertEqual(value, 6)
+
+    async def test_spend_universal_material_fails_when_insufficient(self):
+        async with schema.get_connection() as db:
+            ok = await player_manager.spend_universal_material(db, USER, 99, NOW)
+            await db.commit()
+            value = await player_manager.get_universal_material(db, USER)
+        self.assertFalse(ok)
+        self.assertEqual(value, 10)
+
+    async def test_set_universal_material_sets_absolute_value(self):
+        async with schema.get_connection() as db:
+            await player_manager.set_universal_material(db, USER, 42, NOW)
+            await db.commit()
+            value = await player_manager.get_universal_material(db, USER)
+        self.assertEqual(value, 42)
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ doc_type: change
 last_reviewed: 2026-07-14
 source_paths:
   - src/database/schema.py
+  - src/managers/player_manager.py
 scope: "Tracks introduction of the universal material (萬能素材) placeholder and its use as a shortfall fallback during gear upgrade."
 ---
 
@@ -74,7 +75,7 @@ shortfall = max(0, material_cost - materials[gear_type])
   - Depends on: 無
   - Acceptance: `players` 建表 SQL 含 `materials_universal INTEGER NOT NULL DEFAULT 0`；既有測試套件全數通過
 
-- [ ] Task 2: player-manager 萬能素材介面
+- [x] Task 2: player-manager 萬能素材介面
   - Files: `src/managers/player_manager.py`
   - Tests: 於 `tests/test_gear_manager.py`（現有 player_manager 素材相關測試所在檔案）新增涵蓋 `get_universal_material`/`add_universal_material`/`spend_universal_material`（餘額不足時回傳 False，不扣除）/`set_universal_material` 的測試案例
   - Depends on: Task 1
