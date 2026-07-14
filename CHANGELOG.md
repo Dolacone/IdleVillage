@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-14
+
+- Added "萬能素材" (universal material), a 5th material type (`materials_universal`) currently unobtainable through any drop or acquisition path (admin-only, via `/idlevillage-manager`). During gear upgrade (standard/buffer/risky), if the tool type's own material is insufficient, universal material automatically covers the shortfall; own-type material is always spent first. If the combined total is still short, the upgrade cannot proceed (no AP or material spent). The `upgrade_material_refund` affix only refunds the own-type-sourced portion of the cost, never the universal-sourced portion. Sacrifice and affix extract/clear are unaffected. `/idlevillage` and the gear upgrade sub-menu now show universal material holdings; `/idlevillage-manager`'s material edit modal gains a 5th field for it.
+
 ## 2026-06-27
 
 - Gear upgrade interface: both dropdowns (tool type and upgrade mode) now start with no pre-selected item when first opened, showing only placeholder text. Matches the action select dropdown behavior.

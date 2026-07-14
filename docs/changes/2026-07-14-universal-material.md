@@ -1,6 +1,6 @@
 ---
 title: "新素材：萬能素材"
-status: Refactored
+status: Done
 created: 2026-07-14
 doc_type: change
 last_reviewed: 2026-07-14
