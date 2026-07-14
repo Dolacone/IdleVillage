@@ -1069,7 +1069,6 @@ class AffixIntegrationTest(SettlementTestBase):
         self.assertEqual(row[0], expected_food)
 
 
-
 # ---------------------------------------------------------------------------
 # Residual pre-removal action='offering' state (post offering-system removal)
 # ---------------------------------------------------------------------------
