@@ -5,7 +5,6 @@ from disnake.ext import commands
 
 from core import notification
 from core.config import get_discord_guild_id, get_env_int
-from core.utils import parse_dt
 from database.schema import get_connection
 from managers import resource_manager, trial_manager
 
@@ -32,8 +31,8 @@ class TrialCog(commands.Cog):
                 "此指令僅限指定伺服器使用。", ephemeral=True
             )
 
-        step = get_env_int("TRIAL_TARGET_STEP")
-        if target < step or target % step != 0:
+        step = trial_manager.get_invalid_target_step(target)
+        if step is not None:
             return await inter.response.send_message(
                 f"目標值必須為 {step} 的整數倍。", ephemeral=True
             )
@@ -48,16 +47,11 @@ class TrialCog(commands.Cog):
                     content="目前已有試煉進行中，無法開啟新試煉。"
                 )
 
-            ended_at_str = info.get("ended_at")
-            if ended_at_str:
-                cooldown = get_env_int("TRIAL_COOLDOWN_SECONDS")
-                ended_at = parse_dt(ended_at_str)
-                elapsed = (now - ended_at).total_seconds()
-                if elapsed < cooldown:
-                    cooldown_end_unix = int(ended_at.timestamp()) + cooldown
-                    return await inter.edit_original_response(
-                        content=f"試煉冷卻中，<t:{cooldown_end_unix}:R> 才能再次開啟試煉。"
-                    )
+            if trial_manager.is_cooldown_active(info.get("ended_at"), now):
+                cooldown_end_unix = trial_manager.get_cooldown_deadline_unix(info.get("ended_at"))
+                return await inter.edit_original_response(
+                    content=f"試煉冷卻中，<t:{cooldown_end_unix}:R> 才能再次開啟試煉。"
+                )
 
             if not await resource_manager.can_afford(db, resource, target):
                 balance = await resource_manager.balance(db, resource)

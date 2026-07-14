@@ -15,6 +15,33 @@ from managers import player_manager, resource_manager
 TRIAL_RESOURCE_TYPES = ("food", "wood", "knowledge")
 
 
+def get_invalid_target_step(target: int) -> int | None:
+    """Return the required step when target is invalid, otherwise None."""
+    step = get_env_int("TRIAL_TARGET_STEP")
+    if target < step or target % step != 0:
+        return step
+    return None
+
+
+def get_cooldown_deadline_unix(ended_at_str: str | None) -> int | None:
+    """Return the unix timestamp when the trial cooldown ends, or None if not on cooldown."""
+    if not ended_at_str:
+        return None
+
+    cooldown = get_env_int("TRIAL_COOLDOWN_SECONDS")
+    return int(parse_dt(ended_at_str).timestamp()) + cooldown
+
+
+def is_cooldown_active(ended_at_str: str | None, now: datetime) -> bool:
+    """Return whether the trial cooldown is still in effect at `now`."""
+    if not ended_at_str:
+        return False
+
+    cooldown = get_env_int("TRIAL_COOLDOWN_SECONDS")
+    elapsed = (now - parse_dt(ended_at_str)).total_seconds()
+    return elapsed < cooldown
+
+
 async def get_trial_info(db) -> dict:
     """Return the full current trial_state row as a dict."""
     async with db.execute("SELECT * FROM trial_state WHERE id=1") as cur:
@@ -54,20 +81,16 @@ async def start_trial(db, resource_type: str, target: int, user_id: str, now: da
     if resource_type not in TRIAL_RESOURCE_TYPES:
         raise ValueError(f"Invalid resource type: {resource_type!r}")
 
-    step = get_env_int("TRIAL_TARGET_STEP")
-    if target < step or target % step != 0:
+    step = get_invalid_target_step(target)
+    if step is not None:
         raise ValueError(f"target must be a positive multiple of {step}, got {target}")
 
     info = await get_trial_info(db)
     if info.get("is_active"):
         raise ValueError("A trial is already active")
 
-    ended_at_str = info.get("ended_at")
-    if ended_at_str:
-        cooldown = get_env_int("TRIAL_COOLDOWN_SECONDS")
-        elapsed = (now - parse_dt(ended_at_str)).total_seconds()
-        if elapsed < cooldown:
-            raise ValueError("Trial cooldown has not elapsed")
+    if is_cooldown_active(info.get("ended_at"), now):
+        raise ValueError("Trial cooldown has not elapsed")
 
     if not await resource_manager.can_afford(db, resource_type, target):
         raise ValueError(f"Insufficient {resource_type}: need {target}")
