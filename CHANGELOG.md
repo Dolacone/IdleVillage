@@ -3,6 +3,7 @@
 ## 2026-07-14
 
 - Added "萬能素材" (universal material), a 5th material type (`materials_universal`) currently unobtainable through any drop or acquisition path (admin-only, via `/idlevillage-manager`). During gear upgrade (standard/buffer/risky), if the tool type's own material is insufficient, universal material automatically covers the shortfall; own-type material is always spent first. If the combined total is still short, the upgrade cannot proceed (no AP or material spent). The `upgrade_material_refund` affix only refunds the own-type-sourced portion of the cost, never the universal-sourced portion. Sacrifice and affix extract/clear are unaffected. `/idlevillage` and the gear upgrade sub-menu now show universal material holdings; `/idlevillage-manager`'s material edit modal gains a 5th field for it.
+- Removed the "奉獻" (Offering) action system entirely: `village_state.offering_accumulator` column, `OFFERING_THRESHOLD_PER_PLAYER` env var, offering settlement logic, offering-threshold public notification, and the action dropdown option / resource-select dropdown / Dashboard progress line in the UI. Players are back to the original 4 actions (採集/建設/戰鬥/研究).
 
 ## 2026-06-27
 

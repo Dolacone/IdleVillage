@@ -35,8 +35,7 @@ CREATE TABLE village_state (
   updated_at TEXT NOT NULL,
   dashboard_channel_id TEXT,
   dashboard_message_id TEXT,
-  announcement_channel_id TEXT,
-  offering_accumulator INTEGER NOT NULL DEFAULT 0
+  announcement_channel_id TEXT
 );
 ```
 

@@ -16,26 +16,18 @@ ACTION_LABELS = {
     "building": "建設",
     "combat": "戰鬥",
     "research": "研究",
-    "offering": "奉獻",
 }
 ACTION_DESCRIPTIONS = {
     "gathering": "產出 🌾食物 + 🪵木頭",
     "building": "消耗 🪵木頭 | 產出 建築XP",
     "combat": "消耗 🪵木頭 | 產出 🧠知識",
     "research": "消耗 🧠知識 | 產出 研究所XP",
-    "offering": "消耗四種行動產出合計 | 達標後全員素材各 +1",
 }
 ACTION_EMOJIS = {
     "gathering": "🌾",
     "building": "🔨",
     "combat": "⚔️",
     "research": "🔬",
-    "offering": "🎁",
-}
-OFFERING_RESOURCE_LABELS = {
-    "food": "食物",
-    "wood": "木頭",
-    "knowledge": "研究點",
 }
 BUILDING_LABELS = {
     "gathering_field": "採集場",
@@ -101,15 +93,11 @@ def _action_display_name(action: str, action_target: str | None = None) -> str:
     if action == "building" and action_target:
         target_name = BUILDING_LABELS.get(action_target, action_target)
         return f"建設（{target_name}）"
-    if action == "offering" and action_target:
-        resource_name = OFFERING_RESOURCE_LABELS.get(action_target, action_target)
-        return f"奉獻（{resource_name}）"
     return ACTION_LABELS.get(action, action)
 
 
 def _build_village_section(
     stage_data: dict, resources: dict, buildings: dict, action_counts: list,
-    offering_accumulator: int = 0, offering_threshold: int = 0,
 ) -> str:
     """
     Return the village status block as a text string.
@@ -157,11 +145,6 @@ def _build_village_section(
     action_lines = [_action_display_name(a, t) + f": {c}" for a, t, c in sorted_counts]
     action_block = "\n".join(action_lines) if action_lines else "（無）"
 
-    offering_line = ""
-    if offering_threshold > 0:
-        acc_pct = math.floor(offering_accumulator / max(offering_threshold, 1) * 100)
-        offering_line = f"\n🎁 奉獻進度：{offering_accumulator} / {offering_threshold}（{acc_pct}%）\n"
-
     building_block = "\n".join(building_lines)
     return (
         f"(Last Update: <t:{unix_ts}:R>)\n\n"
@@ -172,7 +155,6 @@ def _build_village_section(
         f"{overtime_line}"
         f"\n公用資源\n"
         f"🌾 {food} | 🪵 {wood} | 🧠 {knowledge}\n"
-        f"{offering_line}"
         f"\n公用設施 (等級上限：Lv{level_cap})\n"
         f"{building_block}\n"
         f"\n村民行動\n"
@@ -182,12 +164,8 @@ def _build_village_section(
 
 def build_village_embed(
     stage_data: dict, resources: dict, buildings: dict, action_counts: list,
-    offering_accumulator: int = 0, offering_threshold: int = 0,
 ) -> disnake.Embed:
-    text = _build_village_section(
-        stage_data, resources, buildings, action_counts,
-        offering_accumulator=offering_accumulator, offering_threshold=offering_threshold,
-    )
+    text = _build_village_section(stage_data, resources, buildings, action_counts)
     return disnake.Embed(description=text, color=disnake.Color.blue())
 
 
@@ -197,13 +175,8 @@ def build_main_embed(
     buildings: dict,
     action_counts: list,
     player_row: dict,
-    offering_accumulator: int = 0,
-    offering_threshold: int = 0,
 ) -> disnake.Embed:
-    village_text = _build_village_section(
-        stage_data, resources, buildings, action_counts,
-        offering_accumulator=offering_accumulator, offering_threshold=offering_threshold,
-    )
+    village_text = _build_village_section(stage_data, resources, buildings, action_counts)
 
     gear_parts = [
         f"{ACTION_EMOJIS[a]} {player_row.get(f'gear_{a}', 0)}"
@@ -291,7 +264,7 @@ def build_main_components(
             description=ACTION_DESCRIPTIONS[a],
             default=(pending_action == a),
         )
-        for a in ("gathering", "building", "combat", "research", "offering")
+        for a in ("gathering", "building", "combat", "research")
     ]
     rows = [
         disnake.ui.ActionRow(
@@ -343,34 +316,12 @@ def build_main_components(
             )
         )
 
-    if pending_action == "offering":
-        resource_options = [
-            disnake.SelectOption(
-                label=f"{RESOURCE_EMOJIS[r]} {OFFERING_RESOURCE_LABELS[r]}",
-                value=r,
-                description=f"消耗村莊 {OFFERING_RESOURCE_LABELS[r]}",
-                default=(pending_target == r),
-            )
-            for r in ("food", "wood", "knowledge")
-        ]
-        rows.append(
-            disnake.ui.ActionRow(
-                disnake.ui.StringSelect(
-                    custom_id="offering_resource_select",
-                    placeholder="選擇奉獻物資...",
-                    options=resource_options,
-                )
-            )
-        )
-
     confirm_enabled = pending_action is not None and (
-        pending_action not in ("building", "offering") or pending_target is not None
+        pending_action != "building" or pending_target is not None
     )
     if pending_action == "building" and pending_target:
         confirm_id = f"confirm_action:building:{pending_target}"
-    elif pending_action == "offering" and pending_target:
-        confirm_id = f"confirm_action:offering:{pending_target}"
-    elif pending_action and pending_action not in ("building", "offering"):
+    elif pending_action and pending_action != "building":
         confirm_id = f"confirm_action:{pending_action}"
     else:
         confirm_id = "confirm_action:none"
