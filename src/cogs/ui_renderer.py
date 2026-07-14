@@ -126,16 +126,13 @@ def _build_village_section(
     trial_data = trial_data or {}
     trial_line = ""
     if trial_data.get("is_active"):
-        t_resource = trial_data.get("resource_type") or "food"
         t_progress = trial_data.get("progress", 0)
         t_target = trial_data.get("target", 1)
         t_pct = math.floor(t_progress / max(t_target, 1) * 100)
         t_bar = _progress_bar(t_progress, t_target)
         t_deadline_unix = _unix_from_iso(trial_data.get("started_at", "")) + get_env_int("TRIAL_DURATION_SECONDS")
-        t_emoji = RESOURCE_EMOJIS.get(t_resource, "")
-        t_label = RESOURCE_LABELS.get(t_resource, t_resource)
         trial_line = (
-            f"\n🏆 試煉 {t_emoji}{t_label} {t_progress} / {t_target} ({t_pct}%)\n"
+            f"\n🏆 試煉 {t_progress} / {t_target} ({t_pct}%)\n"
             f"   {t_bar}\n"
             f"   ⏰ 期限: <t:{t_deadline_unix}:R>\n"
         )
@@ -198,6 +195,7 @@ def build_main_embed(
     player_row: dict,
     trial_data: dict | None = None,
     trial_contribution: int = 0,
+    trial_message: str | None = None,
 ) -> disnake.Embed:
     village_text = _build_village_section(stage_data, resources, buildings, action_counts, trial_data)
 
@@ -255,6 +253,7 @@ def build_main_embed(
         ap_line = f"⚡ AP：{ap} / {ap_cap}"
 
     trial_contrib_line = f"\n🏆 試煉貢獻：{trial_contribution}" if (trial_data or {}).get("is_active") else ""
+    trial_message_line = f"\n{trial_message}" if trial_message else ""
 
     player_section = (
         f"\n**個人資訊**\n"
@@ -264,6 +263,7 @@ def build_main_embed(
         f"{action_line}\n"
         f"{ap_line}"
         f"{trial_contrib_line}"
+        f"{trial_message_line}"
     )
 
     return disnake.Embed(description=village_text + player_section, color=disnake.Color.blue())
@@ -275,6 +275,7 @@ def build_main_components(
     *,
     pending_action: str | None = None,
     pending_target: str | None = None,
+    trial_data: dict | None = None,
 ) -> list:
     ap = player_row.get("_ap", 0)
     gear_cap = buildings.get("research_lab", {}).get("level", 0)
@@ -282,6 +283,16 @@ def build_main_components(
         player_row.get(f"gear_{gear_type}", 0) >= gear_cap
         for gear_type in ("gathering", "building", "combat", "research")
     )
+
+    trial_data = trial_data or {}
+    can_start_trial = not trial_data.get("is_active")
+    if can_start_trial:
+        ended_at_str = trial_data.get("ended_at")
+        if ended_at_str:
+            cooldown = get_env_int("TRIAL_COOLDOWN_SECONDS")
+            ended_unix = _unix_from_iso(ended_at_str)
+            now_unix = int(datetime.now(timezone.utc).timestamp())
+            can_start_trial = (now_unix - ended_unix) >= cooldown
 
     action_options = [
         disnake.SelectOption(
@@ -305,6 +316,12 @@ def build_main_components(
                 style=disnake.ButtonStyle.primary,
                 custom_id="open_gear_upgrade",
                 disabled=all_gear_at_cap,
+            ),
+            disnake.ui.Button(
+                label="🏆 開啟試煉",
+                style=disnake.ButtonStyle.primary,
+                custom_id="open_trial_start",
+                disabled=not can_start_trial,
             ),
         ),
         disnake.ui.ActionRow(

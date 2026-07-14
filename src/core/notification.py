@@ -204,21 +204,18 @@ def _format_event(event: dict) -> str | None:
         r_emoji = RESOURCE_EMOJIS.get(resource_type, "")
         r_label = RESOURCE_LABELS.get(resource_type, resource_type)
         return (
-            f"<@{user_id}> 發起了村莊試煉！\n"
-            f"目標：{target} {r_emoji}{r_label}\n"
-            f"期限：<t:{deadline_unix}:R> 前需全服玩家共同達成\n"
+            f"<@{user_id}> 花費 {target} 個 {r_emoji}{r_label} 發起了村莊試煉！\n"
+            f"目標：全服玩家共同累積 {target} 點行動產出\n"
+            f"期限：<t:{deadline_unix}:R> 前\n"
             f"達成後將依貢獻度瓜分共 {reward_pool} 個 🌟萬能素材"
         )
 
     if kind == "trial_success":
         target = event.get("target", 0)
-        resource_type = event.get("resource_type", "")
         total_awarded = event.get("total_awarded", 0)
         participants = event.get("participants", [])
-        r_emoji = RESOURCE_EMOJIS.get(resource_type, "")
-        r_label = RESOURCE_LABELS.get(resource_type, resource_type)
         lines = [
-            f"🎉 村莊試煉達成！目標 {target} {r_emoji}{r_label} 已完成",
+            f"🎉 村莊試煉達成！目標 {target} 點行動產出已完成",
             f"共 {len(participants)} 位玩家依貢獻度瓜分了 {total_awarded} 個 🌟萬能素材：",
         ]
         for p in participants:
@@ -230,13 +227,10 @@ def _format_event(event: dict) -> str | None:
 
     if kind == "trial_fail":
         target = event.get("target", 0)
-        resource_type = event.get("resource_type", "")
         progress = event.get("progress", 0)
         cooldown_hours = get_env_int("TRIAL_COOLDOWN_SECONDS") // 3600
-        r_emoji = RESOURCE_EMOJIS.get(resource_type, "")
-        r_label = RESOURCE_LABELS.get(resource_type, resource_type)
         return (
-            f"⌛ 村莊試煉逾時失敗！目標 {target} {r_emoji}{r_label} 未達成（進度：{progress}/{target}）\n"
+            f"⌛ 村莊試煉逾時失敗！目標 {target} 點行動產出未達成（進度：{progress}/{target}）\n"
             f"資源不予退還。{cooldown_hours} 小時內無法開啟新試煉。"
         )
 

@@ -390,8 +390,8 @@ class TestNotificationFormatting(unittest.TestCase):
         }
         text = _format_event(ev)
         self.assertIn("<@111222333>", text)
-        self.assertIn("5000", text)
-        self.assertIn("🪵木頭", text)
+        self.assertIn("花費 5000 個 🪵木頭", text)
+        self.assertIn("目標：全服玩家共同累積 5000 點行動產出", text)
         self.assertIn("50 個 🌟萬能素材", text)
         self.assertIn("<t:1234567890:R>", text)
 
@@ -410,7 +410,7 @@ class TestNotificationFormatting(unittest.TestCase):
         text = _format_event(ev)
         self.assertIn("🎉 村莊試煉達成", text)
         self.assertIn("5000", text)
-        self.assertIn("🌾食物", text)
+        self.assertNotIn("食物", text)
         self.assertIn("50 個 🌟萬能素材", text)
         self.assertIn("<@u1>：貢獻 3000，獲得 25 個", text)
         self.assertIn("<@u2>：貢獻 2000，獲得 25 個", text)
@@ -441,7 +441,7 @@ class TestNotificationFormatting(unittest.TestCase):
         }
         text = _format_event(ev)
         self.assertIn("⌛ 村莊試煉逾時失敗", text)
-        self.assertIn("🧠知識", text)
+        self.assertNotIn("知識", text)
         self.assertIn("3200/5000", text)
         self.assertIn("資源不予退還", text)
         self.assertIn("12 小時內無法開啟新試煉", text)

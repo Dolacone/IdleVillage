@@ -88,7 +88,7 @@ reward_i = ceil(contribution_i / total_contribution × (target / TRIAL_REWARD_DI
 
 ## 操作介面（供其他模組呼叫）
 
-- `get_trial_info(db)` — 回傳 `trial_state` 完整 dict。供沒有既有 fetch-helper 模式的呼叫端使用（例如 `trial_cog.py` 指令前置條件驗證、`trial_manager` 內部）。Dashboard／`/idlevillage` 主介面的資料擷取層（`notification.py`／`actions.py`／`general.py`）比照其查詢 `stage_state`／`buildings`／`village_resources` 的既有慣例，直接以 `SELECT * FROM trial_state WHERE id=1` 查詢，不透過此函式。
+- `get_trial_info(db)` — 回傳 `trial_state` 完整 dict。供沒有既有 fetch-helper 模式的呼叫端使用（例如 `actions.py` 的 `open_trial_start`/`modal_start_trial` 前置條件驗證、`trial_manager` 內部）。Dashboard／`/idlevillage` 主介面的資料擷取層（`notification.py`／`actions.py`／`general.py`）比照其查詢 `stage_state`／`buildings`／`village_resources` 的既有慣例，直接以 `SELECT * FROM trial_state WHERE id=1` 查詢，不透過此函式。
 - `get_contribution(db, user_id)` — 回傳指定玩家在當前試煉的累積貢獻（無進行中試煉或無貢獻則回傳 0）。同上，`actions.py` 的主介面資料擷取層可直接查詢 `trial_contributions` 表。
 - `start_trial(db, resource_type, target, user_id, now)` — 開啟試煉；不滿足前置條件時 raise `ValueError`。
 - `add_progress(db, output, user_id, effective_time)` — 累加進度；回傳 `None`、`{"type": "trial_success", ...}` 或 `{"type": "trial_fail", ...}`。
@@ -112,4 +112,5 @@ reward_i = ceil(contribution_i / total_contribution × (target / TRIAL_REWARD_DI
 
 ## Changelog
 
+- 2026-07-14: 開啟試煉的呼叫端由獨立的 `trial_cog.py` slash command 改為 `actions.py` 的主介面按鈕（`open_trial_start`）+ Modal（`modal_start_trial`）流程；`get_invalid_target_step()`/`is_cooldown_active()`/`get_cooldown_deadline_unix()` 三個共用前置條件 helper 的呼叫端隨之改變，函式本身行為不變。
 - 2026-07-14: 新增模組。

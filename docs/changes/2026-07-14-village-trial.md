@@ -15,7 +15,6 @@ source_paths:
   - src/core/notification.py
   - src/cogs/actions.py
   - src/cogs/general.py
-  - src/cogs/trial_cog.py
   - src/main.py
   - docs/README.md
   - docs/db-schema.md
@@ -30,7 +29,6 @@ source_paths:
   - tests/test_discord_commands.py
   - tests/test_discord_notifications.py
   - tests/test_engine_settlement.py
-  - tests/test_trial_cog.py
   - tests/test_trial_manager.py
   - tests/test_v2_schema_initialization.py
   - tests/test_startup_shell.py
@@ -188,3 +186,24 @@ scope: "Tracks the village trial (試煉) feature from design through review: a 
 - `trial_cog.py`'s command performs all precondition checks (guild, target-step, is_active, cooldown, resource sufficiency) before calling `trial_manager.start_trial`, and `db.commit()` is only called after `start_trial` succeeds — the `except ValueError` fallback path cannot follow a partial commit since `start_trial` itself raises before any `withdraw`/state write.
 - No scope creep: `git diff main...HEAD --stat` confirms `sacrifice_material`, `affix_manager.py`, and `stage_manager.py` are untouched.
 - All Tasks 1-8 verified against the diff (not just document claims); all touched docs have `last_reviewed: 2026-07-14`; `status` is `Ready-to-review` prior to this review pass.
+
+## Post-Review Fixes (2026-07-14, post-PR feedback)
+
+使用者在 PR #5 開啟後回饋 5 項 UX 問題，修正如下（不變更試煉核心邏輯：`trial_manager.py` 完全未動）：
+
+1. **開啟試煉不應是 slash command** → 移除 `/idlevillage-trial`（刪除 `src/cogs/trial_cog.py`、`tests/test_trial_cog.py`，移除 `src/main.py` 的 cog 註冊）。
+2. **應與「消耗AP完成行動」「強化工具」同樣是按鍵** → 在 `/idlevillage` 主介面 Row 1 新增 `🏆 開啟試煉` 按鈕（custom_id: `open_trial_start`），與既有兩個按鈕同一列。點擊後彈出 `modal_start_trial` Modal（2 個 TextInput：資源類型、目標值），取代 slash command 的選項輸入方式。
+3. **按鍵應只在能開始試煉時出現** → 比照既有按鈕 disabled 慣例（而非整個隱藏）：`build_main_components()` 新增 `trial_data` 參數，計算 `can_start_trial =` 無進行中試煉 AND 冷卻已過，控制按鈕 `disabled`。
+4. **開始試煉訊息不應把資源類型寫入「目標」** → `trial_start` 通知改為「花費 {target} 個 {resource} 發起了村莊試煉！」+「目標：全服玩家共同累積 {target} 點行動產出」，資源類型只出現在「花費」措辭、與「目標」脫鉤。`trial_success`/`trial_fail` 訊息同理移除資源類型（原本的「目標 {target} {resource_label}」措辭一併修正，避免同一問題重複出現）。
+5. **Dashboard 不應寫出試煉的資源類型** → 村莊 Dashboard 試煉進度列格式由 `🏆 試煉 {resource_emoji}{resource_label} {progress} / {target}` 改為 `🏆 試煉 {progress} / {target}`。
+
+### 受影響檔案
+
+- 刪除：`src/cogs/trial_cog.py`、`tests/test_trial_cog.py`
+- 修改：`src/main.py`（移除 cog 註冊）、`src/cogs/actions.py`（新增按鈕/Modal 處理、`_render_main` 新增 `trial_message`/`respond` 參數）、`src/cogs/ui_renderer.py`（Dashboard 試煉列移除資源類型、`build_main_components` 新增試煉按鈕與 disabled 判斷、`build_main_embed` 新增 `trial_message` 顯示）、`src/core/notification.py`（三則試煉訊息移除「目標」與資源類型的耦合）
+- 文件：`docs/discord/command-handler.md`、`docs/discord/ui-renderer.md`、`docs/discord/notification.md`、`docs/managers/trial-manager.md`、`CHANGELOG.md`
+- 測試：`tests/test_discord_commands.py`（新增按鈕 disabled 狀態測試、按鈕/Modal 整合測試）、`tests/test_discord_notifications.py`（修正三則訊息斷言）、`tests/test_startup_shell.py`（還原 4 個 extension 的期望列表）
+
+`trial_manager.py`、`settlement.py`、`engine.py` 完全未變動——試煉的核心進度計算、逾時偵測、獎勵分配邏輯不受影響。
+
+驗證：`uv run python -m pytest -q` → 480 passed, 3 subtests passed，無失敗。
