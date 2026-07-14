@@ -62,7 +62,7 @@ scope: "Tracks removal of the offering (奉獻) player action system from design
   - Depends on: Task 1
   - Acceptance: formula.py 不再匯出奉獻消耗計算函式；settlement.py 不再處理 `offering` action；其餘四種行動結算邏輯與測試不變且全數通過
 
-- [ ] Task 3: 奉獻達標公開通知移除
+- [x] Task 3: 奉獻達標公開通知移除
   - Files: `src/core/notification.py`
   - Depends on: Task 2
   - Acceptance: notification.py 不再發送奉獻達標通知；既有通知（關卡通關/升級關/建築升級/工具強化/詞條）行為與順序不受影響；相關測試（若有）通過
