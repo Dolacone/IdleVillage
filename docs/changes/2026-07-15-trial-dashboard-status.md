@@ -1,6 +1,6 @@
 ---
 title: "村莊 Dashboard 隨時顯示試煉狀態"
-status: Ready-to-review
+status: Issues-confirmed
 created: 2026-07-15
 doc_type: change
 last_reviewed: 2026-07-15
@@ -75,3 +75,8 @@ scope: "Tracks making the village Dashboard trial line always visible (active/op
 ### 平行任務標記
 
 僅一個任務，無平行需求。
+
+## Review Issues
+- [ ] Issue 1: [Major] `_build_village_section` is shared by both `build_village_embed` (public Dashboard) and `build_main_embed` (Ephemeral `/idlevillage` main UI, `src/cogs/ui_renderer.py:200,214`). The new inactive-state branches (`src/cogs/ui_renderer.py:138-152`) are embedded inside this shared helper, so `build_main_embed` now also renders `🏆 試煉 ⚠️/✅/⏳ ...` whenever no trial is active — contradicting the change document's stated MVP exclusion ("範圍外: `/idlevillage` 主介面（Ephemeral）的顯示邏輯不變... 不在本次變更範圍內重複加上文字狀態說明"). Verified by direct invocation: `build_main_embed({}, {}, {}, [], {'action': None, '_ap': 0})` produces `🏆 試煉 ⚠️ 資源不足，尚無法開啟` in the description. No test exercises this — `test_embed_omits_trial_contribution_when_inactive` (tests/test_discord_commands.py:631) only asserts `"試煉貢獻"` is absent, not the `🏆 試煉` village-section line, so it still passes despite the regression.
+- [ ] Issue 2: [Minor] Architecture Decision 2 (change doc) states "目前僅有一個呼叫點組裝 `trial_line`（同時供 `build_village_embed` 使用）", which is internally inconsistent (says "only one call point" then names a second consumer) and factually incomplete — `_build_village_section` has two callers, `build_village_embed` (`src/cogs/ui_renderer.py:200`) and `build_main_embed` (`src/cogs/ui_renderer.py:214`), which is the root cause of Issue 1.
+- [ ] Issue 3: [Minor] `docs/discord/ui-renderer.md`'s 主介面 Embed section (lines 90-104) was not updated to document that the main interface's village status block now also shows the 3 new inactive-trial states (per Issue 1); it still only documents the pre-existing "試煉貢獻" line's active/inactive behavior.
