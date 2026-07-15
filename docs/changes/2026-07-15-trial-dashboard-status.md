@@ -1,6 +1,6 @@
 ---
 title: "村莊 Dashboard 隨時顯示試煉狀態"
-status: Reviewed
+status: Refactored
 created: 2026-07-15
 doc_type: change
 last_reviewed: 2026-07-15
