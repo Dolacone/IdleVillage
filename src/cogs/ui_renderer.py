@@ -96,6 +96,49 @@ def _action_display_name(action: str, action_target: str | None = None) -> str:
     return ACTION_LABELS.get(action, action)
 
 
+def _build_trial_line(trial_data: dict, resources: dict, now_ts: int, show_trial_status_line: bool) -> str:
+    """
+    Return the "🏆 試煉" status line (with a leading newline), or "" to omit it.
+    trial_data: current trial_state row, or {} if there is no active trial.
+        When inactive, it may still carry "ended_at" from the most recent
+        trial, used for the cooldown check below.
+    show_trial_status_line: when no trial is active, whether to render the
+        openable/insufficient-resources/cooldown status line (Dashboard only;
+        the Ephemeral main interface keeps omitting the line, since it already
+        has the "🏆 開啟試煉" button's disabled state for that information).
+    """
+    if trial_data.get("is_active"):
+        trial_progress = trial_data.get("progress", 0)
+        trial_target = trial_data.get("target", 1)
+        trial_pct = math.floor(trial_progress / max(trial_target, 1) * 100)
+        trial_bar = _progress_bar(trial_progress, trial_target)
+        trial_deadline_unix = _unix_from_iso(trial_data.get("started_at", "")) + get_env_int("TRIAL_DURATION_SECONDS")
+        return (
+            f"\n🏆 試煉 {trial_progress} / {trial_target} ({trial_pct}%)\n"
+            f"   {trial_bar}\n"
+            f"   ⏰ 期限: <t:{trial_deadline_unix}:R>\n"
+        )
+
+    if not show_trial_status_line:
+        return ""
+
+    trial_reopen_unix = None
+    ended_at_str = trial_data.get("ended_at")
+    if ended_at_str:
+        cooldown = get_env_int("TRIAL_COOLDOWN_SECONDS")
+        ended_unix = _unix_from_iso(ended_at_str)
+        if (now_ts - ended_unix) < cooldown:
+            trial_reopen_unix = ended_unix + cooldown
+
+    if trial_reopen_unix is not None:
+        return f"\n🏆 試煉 ⏳ 可於 <t:{trial_reopen_unix}:t> 後開啟\n"
+
+    trial_target_amount = get_env_int("TRIAL_TARGET_AMOUNT")
+    if any(resources.get(r, 0) >= trial_target_amount for r in ("food", "wood", "knowledge")):
+        return "\n🏆 試煉 ✅ 可開啟試煉\n"
+    return "\n🏆 試煉 ⚠️ 資源不足，尚無法開啟\n"
+
+
 def _build_village_section(
     stage_data: dict, resources: dict, buildings: dict, action_counts: list,
     trial_data: dict | None = None, show_trial_status_line: bool = False,
@@ -104,10 +147,7 @@ def _build_village_section(
     Return the village status block as a text string.
     action_counts: list of (action, action_target, count) tuples.
     trial_data: current trial_state row, or None/{} if there is no active trial.
-    show_trial_status_line: when no trial is active, whether to render the
-        openable/insufficient-resources/cooldown status line (Dashboard only;
-        the Ephemeral main interface keeps omitting the line, since it already
-        has the "🏆 開啟試煉" button's disabled state for that information).
+    show_trial_status_line: see _build_trial_line.
     """
     unix_ts = _unix_from_iso(stage_data.get("updated_at", ""))
 
@@ -127,35 +167,7 @@ def _build_village_section(
     is_overtime = stage_started_unix > 0 and (now_ts - stage_started_unix) > overtime_secs
     overtime_line = "   ⚠️ 逾時！通關效率已降低（產出計分 ×0.5）\n" if is_overtime else ""
 
-    trial_data = trial_data or {}
-    if trial_data.get("is_active"):
-        t_progress = trial_data.get("progress", 0)
-        t_target = trial_data.get("target", 1)
-        t_pct = math.floor(t_progress / max(t_target, 1) * 100)
-        t_bar = _progress_bar(t_progress, t_target)
-        t_deadline_unix = _unix_from_iso(trial_data.get("started_at", "")) + get_env_int("TRIAL_DURATION_SECONDS")
-        trial_line = (
-            f"\n🏆 試煉 {t_progress} / {t_target} ({t_pct}%)\n"
-            f"   {t_bar}\n"
-            f"   ⏰ 期限: <t:{t_deadline_unix}:R>\n"
-        )
-    elif show_trial_status_line:
-        cooldown_deadline_unix = None
-        ended_at_str = trial_data.get("ended_at")
-        if ended_at_str:
-            cooldown = get_env_int("TRIAL_COOLDOWN_SECONDS")
-            ended_unix = _unix_from_iso(ended_at_str)
-            if (now_ts - ended_unix) < cooldown:
-                cooldown_deadline_unix = ended_unix + cooldown
-
-        if cooldown_deadline_unix is not None:
-            trial_line = f"\n🏆 試煉 ⏳ 可於 <t:{cooldown_deadline_unix}:t> 後開啟\n"
-        elif any(resources.get(r, 0) >= get_env_int("TRIAL_TARGET_AMOUNT") for r in ("food", "wood", "knowledge")):
-            trial_line = "\n🏆 試煉 ✅ 可開啟試煉\n"
-        else:
-            trial_line = "\n🏆 試煉 ⚠️ 資源不足，尚無法開啟\n"
-    else:
-        trial_line = ""
+    trial_line = _build_trial_line(trial_data or {}, resources, now_ts, show_trial_status_line)
 
     food = resources.get("food", 0)
     wood = resources.get("wood", 0)
