@@ -1,10 +1,13 @@
 ---
 title: "村莊 Dashboard 隨時顯示試煉狀態"
-status: Ready-to-implement
+status: Ready-to-review
 created: 2026-07-15
 doc_type: change
 last_reviewed: 2026-07-15
-source_paths: []
+source_paths:
+  - src/cogs/ui_renderer.py
+  - docs/discord/ui-renderer.md
+  - tests/test_discord_commands.py
 scope: "Tracks making the village Dashboard trial line always visible (active/openable/insufficient-resources/cooldown), from design through review."
 ---
 
@@ -63,7 +66,7 @@ scope: "Tracks making the village Dashboard trial line always visible (active/op
 
 ## Tasks
 
-- [ ] Task 1: `ui_renderer.py` 試煉列四態顯示
+- [x] Task 1: `ui_renderer.py` 試煉列四態顯示
   - Files: `src/cogs/ui_renderer.py`（另需同步更新 `docs/discord/ui-renderer.md` 對應章節，非 source/logic 檔不計入限制）
   - Tests: 更新 `tests/test_discord_commands.py`，涵蓋：(a) 進行中時維持現有格式不變（既有測試 `test_embed_shows_trial_line_when_active` 應維持通過）；(b) 冷卻已過且至少一種資源足夠時顯示 `✅ 可開啟試煉`；(c) 冷卻已過但三種資源皆不足 `TRIAL_TARGET_AMOUNT` 時顯示 `⚠️ 資源不足，尚無法開啟`；(d) 冷卻中（`ended_at` 存在且未滿 `TRIAL_COOLDOWN_SECONDS`）時顯示 `⏳ 可於 <t:{deadline}:t> 後開啟`，且 `deadline = ended_at_unix + TRIAL_COOLDOWN_SECONDS`；(e) 更新既有 `test_embed_omits_trial_line_when_inactive`／`test_embed_omits_trial_line_when_trial_data_not_provided` 兩個測試，反映「不再整行省略、而是顯示四態之一」的新行為（`test_announcement_dashboard_embed_shows_active_trial` 等既有進行中測試不受影響）
   - Depends on: 無

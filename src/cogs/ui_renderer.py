@@ -124,7 +124,6 @@ def _build_village_section(
     overtime_line = "   ⚠️ 逾時！通關效率已降低（產出計分 ×0.5）\n" if is_overtime else ""
 
     trial_data = trial_data or {}
-    trial_line = ""
     if trial_data.get("is_active"):
         t_progress = trial_data.get("progress", 0)
         t_target = trial_data.get("target", 1)
@@ -136,6 +135,21 @@ def _build_village_section(
             f"   {t_bar}\n"
             f"   ⏰ 期限: <t:{t_deadline_unix}:R>\n"
         )
+    else:
+        cooldown_deadline_unix = None
+        ended_at_str = trial_data.get("ended_at")
+        if ended_at_str:
+            cooldown = get_env_int("TRIAL_COOLDOWN_SECONDS")
+            ended_unix = _unix_from_iso(ended_at_str)
+            if (now_ts - ended_unix) < cooldown:
+                cooldown_deadline_unix = ended_unix + cooldown
+
+        if cooldown_deadline_unix is not None:
+            trial_line = f"\n🏆 試煉 ⏳ 可於 <t:{cooldown_deadline_unix}:t> 後開啟\n"
+        elif any(resources.get(r, 0) >= get_env_int("TRIAL_TARGET_AMOUNT") for r in ("food", "wood", "knowledge")):
+            trial_line = "\n🏆 試煉 ✅ 可開啟試煉\n"
+        else:
+            trial_line = "\n🏆 試煉 ⚠️ 資源不足，尚無法開啟\n"
 
     food = resources.get("food", 0)
     wood = resources.get("wood", 0)
