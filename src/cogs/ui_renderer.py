@@ -98,12 +98,16 @@ def _action_display_name(action: str, action_target: str | None = None) -> str:
 
 def _build_village_section(
     stage_data: dict, resources: dict, buildings: dict, action_counts: list,
-    trial_data: dict | None = None,
+    trial_data: dict | None = None, show_trial_status_line: bool = False,
 ) -> str:
     """
     Return the village status block as a text string.
     action_counts: list of (action, action_target, count) tuples.
     trial_data: current trial_state row, or None/{} if there is no active trial.
+    show_trial_status_line: when no trial is active, whether to render the
+        openable/insufficient-resources/cooldown status line (Dashboard only;
+        the Ephemeral main interface keeps omitting the line, since it already
+        has the "🏆 開啟試煉" button's disabled state for that information).
     """
     unix_ts = _unix_from_iso(stage_data.get("updated_at", ""))
 
@@ -135,7 +139,7 @@ def _build_village_section(
             f"   {t_bar}\n"
             f"   ⏰ 期限: <t:{t_deadline_unix}:R>\n"
         )
-    else:
+    elif show_trial_status_line:
         cooldown_deadline_unix = None
         ended_at_str = trial_data.get("ended_at")
         if ended_at_str:
@@ -150,6 +154,8 @@ def _build_village_section(
             trial_line = "\n🏆 試煉 ✅ 可開啟試煉\n"
         else:
             trial_line = "\n🏆 試煉 ⚠️ 資源不足，尚無法開啟\n"
+    else:
+        trial_line = ""
 
     food = resources.get("food", 0)
     wood = resources.get("wood", 0)
@@ -197,7 +203,10 @@ def build_village_embed(
     stage_data: dict, resources: dict, buildings: dict, action_counts: list,
     trial_data: dict | None = None,
 ) -> disnake.Embed:
-    text = _build_village_section(stage_data, resources, buildings, action_counts, trial_data)
+    text = _build_village_section(
+        stage_data, resources, buildings, action_counts, trial_data,
+        show_trial_status_line=True,
+    )
     return disnake.Embed(description=text, color=disnake.Color.blue())
 
 

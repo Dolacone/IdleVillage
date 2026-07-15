@@ -1,6 +1,6 @@
 ---
 title: "村莊 Dashboard 隨時顯示試煉狀態"
-status: Issues-confirmed
+status: Ready-to-review
 created: 2026-07-15
 doc_type: change
 last_reviewed: 2026-07-15
@@ -60,7 +60,7 @@ scope: "Tracks making the village Dashboard trial line always visible (active/op
 ## Architecture Decisions
 
 1. **不新增任何資料查詢，僅修改 `ui_renderer.py` 的顯示邏輯**：實際檢視 `src/cogs/ui_renderer.py` 後確認 `_build_village_section(stage_data, resources, buildings, action_counts, trial_data)` 已經同時收到 `resources`（食物/木頭/知識現值，用於既有「公用資源」列）與 `trial_data`（`SELECT * FROM trial_state WHERE id=1` 的完整列，含 `is_active`／`ended_at`／`progress`／`target`／`started_at`）。四態判斷（進行中／可開啟／資源不足／冷卻中）所需的全部欄位都已在場，不需要修改 `notification.py`／`actions.py`／`general.py` 的資料擷取層或新增查詢。範圍縮小為 `ui_renderer.py` 單檔。
-2. **四態判斷邏輯內嵌於 `_build_village_section`，不獨立成 helper 函式**：目前僅有一個呼叫點組裝 `trial_line`（同時供 `build_village_embed` 使用），邏輯複雜度低（四個 if/elif 分支），抽出獨立函式對可讀性無明顯助益，比照現有 `is_active` 單分支的既有寫法直接擴充為 if/elif/elif/else。
+2. **四態判斷邏輯內嵌於 `_build_village_section`，不獨立成 helper 函式，並新增 `show_trial_status_line` 參數區分兩個呼叫端**：`_build_village_section` 有兩個呼叫點——`build_village_embed`（Dashboard）與 `build_main_embed`（Ephemeral 主介面）。邏輯複雜度低（四個 if/elif 分支），抽出獨立函式對可讀性無明顯助益，故直接擴充既有 `is_active` 分支為 if/elif/elif/else；但新的可開啟／資源不足／冷卻中三態文字僅屬於 Dashboard 的需求（見 MVP Scope 範圍外），故新增 `show_trial_status_line: bool = False` 參數，只有 `build_village_embed` 傳入 `True`，`build_main_embed` 維持預設 `False`（沿用「非進行中時整行省略」的原行為），避免共用函式導致新文字外溢到主介面。
 3. **冷卻中固定時刻使用 `<t:{unix}:t>`（Discord 短時間格式）**：既有「進行中」的期限使用 `<t:{unix}:R>`（相對時間），使用者明確要求冷卻時間改為固定時刻，`:t` 為 Discord timestamp style 中最接近「僅顯示時刻」的格式（如 `12:34 AM`），見 Key Assumptions 中對此假設的保留意見。
 4. **判斷優先序：`is_active` → 冷卻中 → 資源不足 → 可開啟**：與既有 `build_main_components()` 的 `open_trial_start` 按鈕 disabled 判斷條件（`docs/discord/ui-renderer.md` 「開啟試煉」小節）完全一致的檢查順序，確保 Dashboard 文字說明與按鈕實際可否點擊的邏輯不會互相矛盾。
 
@@ -77,6 +77,9 @@ scope: "Tracks making the village Dashboard trial line always visible (active/op
 僅一個任務，無平行需求。
 
 ## Review Issues
-- [ ] Issue 1: [Major] `_build_village_section` is shared by both `build_village_embed` (public Dashboard) and `build_main_embed` (Ephemeral `/idlevillage` main UI, `src/cogs/ui_renderer.py:200,214`). The new inactive-state branches (`src/cogs/ui_renderer.py:138-152`) are embedded inside this shared helper, so `build_main_embed` now also renders `🏆 試煉 ⚠️/✅/⏳ ...` whenever no trial is active — contradicting the change document's stated MVP exclusion ("範圍外: `/idlevillage` 主介面（Ephemeral）的顯示邏輯不變... 不在本次變更範圍內重複加上文字狀態說明"). Verified by direct invocation: `build_main_embed({}, {}, {}, [], {'action': None, '_ap': 0})` produces `🏆 試煉 ⚠️ 資源不足，尚無法開啟` in the description. No test exercises this — `test_embed_omits_trial_contribution_when_inactive` (tests/test_discord_commands.py:631) only asserts `"試煉貢獻"` is absent, not the `🏆 試煉` village-section line, so it still passes despite the regression.
-- [ ] Issue 2: [Minor] Architecture Decision 2 (change doc) states "目前僅有一個呼叫點組裝 `trial_line`（同時供 `build_village_embed` 使用）", which is internally inconsistent (says "only one call point" then names a second consumer) and factually incomplete — `_build_village_section` has two callers, `build_village_embed` (`src/cogs/ui_renderer.py:200`) and `build_main_embed` (`src/cogs/ui_renderer.py:214`), which is the root cause of Issue 1.
-- [ ] Issue 3: [Minor] `docs/discord/ui-renderer.md`'s 主介面 Embed section (lines 90-104) was not updated to document that the main interface's village status block now also shows the 3 new inactive-trial states (per Issue 1); it still only documents the pre-existing "試煉貢獻" line's active/inactive behavior.
+- [x] Issue 1: [Major] `_build_village_section` is shared by both `build_village_embed` (public Dashboard) and `build_main_embed` (Ephemeral `/idlevillage` main UI, `src/cogs/ui_renderer.py:200,214`). The new inactive-state branches (`src/cogs/ui_renderer.py:138-152`) are embedded inside this shared helper, so `build_main_embed` now also renders `🏆 試煉 ⚠️/✅/⏳ ...` whenever no trial is active — contradicting the change document's stated MVP exclusion ("範圍外: `/idlevillage` 主介面（Ephemeral）的顯示邏輯不變... 不在本次變更範圍內重複加上文字狀態說明"). Verified by direct invocation: `build_main_embed({}, {}, {}, [], {'action': None, '_ap': 0})` produces `🏆 試煉 ⚠️ 資源不足，尚無法開啟` in the description. No test exercises this — `test_embed_omits_trial_contribution_when_inactive` (tests/test_discord_commands.py:631) only asserts `"試煉貢獻"` is absent, not the `🏆 試煉` village-section line, so it still passes despite the regression.
+  - Fix: added `show_trial_status_line: bool = False` parameter to `_build_village_section`; only `build_village_embed` passes `True`. `build_main_embed` keeps the pre-existing omit-when-inactive behavior. Added regression test `test_embed_omits_trial_status_line_when_inactive`.
+- [x] Issue 2: [Minor] Architecture Decision 2 (change doc) states "目前僅有一個呼叫點組裝 `trial_line`（同時供 `build_village_embed` 使用）", which is internally inconsistent (says "only one call point" then names a second consumer) and factually incomplete — `_build_village_section` has two callers, `build_village_embed` (`src/cogs/ui_renderer.py:200`) and `build_main_embed` (`src/cogs/ui_renderer.py:214`), which is the root cause of Issue 1.
+  - Fix: rewrote Architecture Decision 2 to correctly describe both callers and the new `show_trial_status_line` parameter.
+- [x] Issue 3: [Minor] `docs/discord/ui-renderer.md`'s 主介面 Embed section (lines 90-104) was not updated to document that the main interface's village status block now also shows the 3 new inactive-trial states (per Issue 1); it still only documents the pre-existing "試煉貢獻" line's active/inactive behavior.
+  - Fix: added a note under 主介面 Embed clarifying it reuses `_build_village_section` but omits the Dashboard-only status line, since the fix for Issue 1 means this section no longer gains the new states.
