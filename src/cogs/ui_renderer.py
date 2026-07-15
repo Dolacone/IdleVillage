@@ -96,6 +96,43 @@ def _action_display_name(action: str, action_target: str | None = None) -> str:
     return ACTION_LABELS.get(action, action)
 
 
+def _build_trial_line(trial_data: dict, resources: dict, now_ts: int) -> str:
+    """
+    Return the "🏆 試煉" status line (with a leading newline). Always shown:
+    progress while active, otherwise one of openable/insufficient-resources/cooldown.
+    trial_data: current trial_state row, or {} if there is no active trial.
+        When inactive, it may still carry "ended_at" from the most recent
+        trial, used for the cooldown check below.
+    """
+    if trial_data.get("is_active"):
+        trial_progress = trial_data.get("progress", 0)
+        trial_target = trial_data.get("target", 1)
+        trial_pct = math.floor(trial_progress / max(trial_target, 1) * 100)
+        trial_bar = _progress_bar(trial_progress, trial_target)
+        trial_deadline_unix = _unix_from_iso(trial_data.get("started_at", "")) + get_env_int("TRIAL_DURATION_SECONDS")
+        return (
+            f"\n🏆 試煉 {trial_progress} / {trial_target} ({trial_pct}%)\n"
+            f"   {trial_bar}\n"
+            f"   ⏰ 期限: <t:{trial_deadline_unix}:R>\n"
+        )
+
+    trial_reopen_unix = None
+    ended_at_str = trial_data.get("ended_at")
+    if ended_at_str:
+        cooldown = get_env_int("TRIAL_COOLDOWN_SECONDS")
+        ended_unix = _unix_from_iso(ended_at_str)
+        if (now_ts - ended_unix) < cooldown:
+            trial_reopen_unix = ended_unix + cooldown
+
+    if trial_reopen_unix is not None:
+        return f"\n🏆 試煉 ⏳ 可於 <t:{trial_reopen_unix}:t> 後開啟\n"
+
+    trial_target_amount = get_env_int("TRIAL_TARGET_AMOUNT")
+    if any(resources.get(r, 0) >= trial_target_amount for r in ("food", "wood", "knowledge")):
+        return "\n🏆 試煉 ✅ 可開啟試煉\n"
+    return "\n🏆 試煉 ⚠️ 資源不足，尚無法開啟\n"
+
+
 def _build_village_section(
     stage_data: dict, resources: dict, buildings: dict, action_counts: list,
     trial_data: dict | None = None,
@@ -123,19 +160,7 @@ def _build_village_section(
     is_overtime = stage_started_unix > 0 and (now_ts - stage_started_unix) > overtime_secs
     overtime_line = "   ⚠️ 逾時！通關效率已降低（產出計分 ×0.5）\n" if is_overtime else ""
 
-    trial_data = trial_data or {}
-    trial_line = ""
-    if trial_data.get("is_active"):
-        t_progress = trial_data.get("progress", 0)
-        t_target = trial_data.get("target", 1)
-        t_pct = math.floor(t_progress / max(t_target, 1) * 100)
-        t_bar = _progress_bar(t_progress, t_target)
-        t_deadline_unix = _unix_from_iso(trial_data.get("started_at", "")) + get_env_int("TRIAL_DURATION_SECONDS")
-        trial_line = (
-            f"\n🏆 試煉 {t_progress} / {t_target} ({t_pct}%)\n"
-            f"   {t_bar}\n"
-            f"   ⏰ 期限: <t:{t_deadline_unix}:R>\n"
-        )
+    trial_line = _build_trial_line(trial_data or {}, resources, now_ts)
 
     food = resources.get("food", 0)
     wood = resources.get("wood", 0)

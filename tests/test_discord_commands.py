@@ -523,17 +523,49 @@ class TestRendererVillageEmbed(unittest.TestCase):
         self.assertIn("🏆 試煉 2000 / 5000 (40%)", desc)
         self.assertNotIn("木頭", desc)
 
-    def test_embed_omits_trial_line_when_inactive(self):
+    def test_embed_shows_insufficient_resources_when_inactive_and_no_resource_enough(self):
         from cogs.ui_renderer import build_village_embed
         embed = build_village_embed(
             self._make_stage_data(), {}, {}, [], self._make_trial_data(is_active=0)
         )
-        self.assertNotIn("🏆 試煉", embed.description)
+        self.assertIn("🏆 試煉 ⚠️ 資源不足，尚無法開啟", embed.description)
 
-    def test_embed_omits_trial_line_when_trial_data_not_provided(self):
+    def test_embed_shows_insufficient_resources_when_trial_data_not_provided(self):
         from cogs.ui_renderer import build_village_embed
         embed = build_village_embed(self._make_stage_data(), {}, {}, [])
-        self.assertNotIn("🏆 試煉", embed.description)
+        self.assertIn("🏆 試煉 ⚠️ 資源不足，尚無法開啟", embed.description)
+
+    def test_embed_shows_openable_when_inactive_and_resource_enough(self):
+        from cogs.ui_renderer import build_village_embed
+        trial_amount = int(ALL_TEST_ENV["TRIAL_TARGET_AMOUNT"])
+        resources = {"food": trial_amount, "wood": 0, "knowledge": 0}
+        embed = build_village_embed(
+            self._make_stage_data(), resources, {}, [], self._make_trial_data(is_active=0)
+        )
+        self.assertIn("🏆 試煉 ✅ 可開啟試煉", embed.description)
+
+    def test_embed_shows_cooldown_deadline_when_recently_ended(self):
+        from cogs.ui_renderer import build_village_embed
+        now = datetime.now(timezone.utc)
+        cooldown = int(ALL_TEST_ENV["TRIAL_COOLDOWN_SECONDS"])
+        ended_at = now - timedelta(seconds=cooldown - 100)
+        trial_data = self._make_trial_data(is_active=0)
+        trial_data["ended_at"] = ended_at.isoformat()
+        embed = build_village_embed(self._make_stage_data(), {}, {}, [], trial_data)
+        deadline_unix = int(ended_at.timestamp()) + cooldown
+        self.assertIn(f"🏆 試煉 ⏳ 可於 <t:{deadline_unix}:t> 後開啟", embed.description)
+
+    def test_embed_shows_openable_when_cooldown_elapsed(self):
+        from cogs.ui_renderer import build_village_embed
+        now = datetime.now(timezone.utc)
+        cooldown = int(ALL_TEST_ENV["TRIAL_COOLDOWN_SECONDS"])
+        ended_at = now - timedelta(seconds=cooldown + 100)
+        trial_data = self._make_trial_data(is_active=0)
+        trial_data["ended_at"] = ended_at.isoformat()
+        trial_amount = int(ALL_TEST_ENV["TRIAL_TARGET_AMOUNT"])
+        resources = {"food": trial_amount, "wood": 0, "knowledge": 0}
+        embed = build_village_embed(self._make_stage_data(), resources, {}, [], trial_data)
+        self.assertIn("🏆 試煉 ✅ 可開啟試煉", embed.description)
 
 
 class TestRendererMainEmbed(unittest.TestCase):
@@ -601,6 +633,12 @@ class TestRendererMainEmbed(unittest.TestCase):
         player = self._make_player()
         embed = build_main_embed(self._make_stage_data(), {}, {}, [], player)
         self.assertNotIn("試煉貢獻", embed.description)
+
+    def test_embed_shows_trial_status_line_when_inactive(self):
+        from cogs.ui_renderer import build_main_embed
+        player = self._make_player()
+        embed = build_main_embed(self._make_stage_data(), {}, {}, [], player)
+        self.assertIn("🏆 試煉 ⚠️ 資源不足，尚無法開啟", embed.description)
 
     def test_embed_gear_levels_shown(self):
         from cogs.ui_renderer import build_main_embed
