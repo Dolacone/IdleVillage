@@ -634,14 +634,11 @@ class TestRendererMainEmbed(unittest.TestCase):
         embed = build_main_embed(self._make_stage_data(), {}, {}, [], player)
         self.assertNotIn("試煉貢獻", embed.description)
 
-    def test_embed_omits_trial_status_line_when_inactive(self):
-        # Main interface already has the 🏆 開啟試煉 button's disabled state for
-        # this info; unlike the Dashboard, it should not also show the new
-        # openable/insufficient-resources/cooldown status line.
+    def test_embed_shows_trial_status_line_when_inactive(self):
         from cogs.ui_renderer import build_main_embed
         player = self._make_player()
         embed = build_main_embed(self._make_stage_data(), {}, {}, [], player)
-        self.assertNotIn("🏆 試煉", embed.description)
+        self.assertIn("🏆 試煉 ⚠️ 資源不足，尚無法開啟", embed.description)
 
     def test_embed_gear_levels_shown(self):
         from cogs.ui_renderer import build_main_embed

@@ -96,16 +96,13 @@ def _action_display_name(action: str, action_target: str | None = None) -> str:
     return ACTION_LABELS.get(action, action)
 
 
-def _build_trial_line(trial_data: dict, resources: dict, now_ts: int, show_trial_status_line: bool) -> str:
+def _build_trial_line(trial_data: dict, resources: dict, now_ts: int) -> str:
     """
-    Return the "🏆 試煉" status line (with a leading newline), or "" to omit it.
+    Return the "🏆 試煉" status line (with a leading newline). Always shown:
+    progress while active, otherwise one of openable/insufficient-resources/cooldown.
     trial_data: current trial_state row, or {} if there is no active trial.
         When inactive, it may still carry "ended_at" from the most recent
         trial, used for the cooldown check below.
-    show_trial_status_line: when no trial is active, whether to render the
-        openable/insufficient-resources/cooldown status line (Dashboard only;
-        the Ephemeral main interface keeps omitting the line, since it already
-        has the "🏆 開啟試煉" button's disabled state for that information).
     """
     if trial_data.get("is_active"):
         trial_progress = trial_data.get("progress", 0)
@@ -118,9 +115,6 @@ def _build_trial_line(trial_data: dict, resources: dict, now_ts: int, show_trial
             f"   {trial_bar}\n"
             f"   ⏰ 期限: <t:{trial_deadline_unix}:R>\n"
         )
-
-    if not show_trial_status_line:
-        return ""
 
     trial_reopen_unix = None
     ended_at_str = trial_data.get("ended_at")
@@ -141,13 +135,12 @@ def _build_trial_line(trial_data: dict, resources: dict, now_ts: int, show_trial
 
 def _build_village_section(
     stage_data: dict, resources: dict, buildings: dict, action_counts: list,
-    trial_data: dict | None = None, show_trial_status_line: bool = False,
+    trial_data: dict | None = None,
 ) -> str:
     """
     Return the village status block as a text string.
     action_counts: list of (action, action_target, count) tuples.
     trial_data: current trial_state row, or None/{} if there is no active trial.
-    show_trial_status_line: see _build_trial_line.
     """
     unix_ts = _unix_from_iso(stage_data.get("updated_at", ""))
 
@@ -167,7 +160,7 @@ def _build_village_section(
     is_overtime = stage_started_unix > 0 and (now_ts - stage_started_unix) > overtime_secs
     overtime_line = "   ⚠️ 逾時！通關效率已降低（產出計分 ×0.5）\n" if is_overtime else ""
 
-    trial_line = _build_trial_line(trial_data or {}, resources, now_ts, show_trial_status_line)
+    trial_line = _build_trial_line(trial_data or {}, resources, now_ts)
 
     food = resources.get("food", 0)
     wood = resources.get("wood", 0)
@@ -215,10 +208,7 @@ def build_village_embed(
     stage_data: dict, resources: dict, buildings: dict, action_counts: list,
     trial_data: dict | None = None,
 ) -> disnake.Embed:
-    text = _build_village_section(
-        stage_data, resources, buildings, action_counts, trial_data,
-        show_trial_status_line=True,
-    )
+    text = _build_village_section(stage_data, resources, buildings, action_counts, trial_data)
     return disnake.Embed(description=text, color=disnake.Color.blue())
 
 

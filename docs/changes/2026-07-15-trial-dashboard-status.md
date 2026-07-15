@@ -49,9 +49,10 @@ scope: "Tracks making the village Dashboard trial line always visible (active/op
   - 冷卻中狀態顯示固定時刻（`<t:{deadline}:t>`），非相對倒數時間。
   - `docs/discord/ui-renderer.md` 更新對應格式規格與判斷優先序。
 - 範圍外：
-  - `/idlevillage` 主介面（Ephemeral）的顯示邏輯不變：該介面已有「🏆 開啟試煉」按鈕本身的 disabled 狀態，不在本次變更範圍內重複加上文字狀態說明。
   - 不新增/變更任何試煉核心邏輯（`trial_manager.py` 完全不動）。
   - 不變更試煉「進行中」狀態本身的顯示格式（沿用既有進度條/期限格式）。
+
+（原本排除 `/idlevillage` 主介面顯示，後於 Post-Review Fixes 中依使用者回饋改為兩處皆顯示，見下方「Post-Review Fixes」章節。）
 
 ## Key Assumptions
 
@@ -85,4 +86,22 @@ scope: "Tracks making the village Dashboard trial line always visible (active/op
   - Fix: added a note under 主介面 Embed clarifying it reuses `_build_village_section` but omits the Dashboard-only status line, since the fix for Issue 1 means this section no longer gains the new states.
 
 Verification notes (re-review, 2026-07-15): Confirmed via `git diff main...HEAD` that Issue 1's fix is correctly scoped — `build_main_embed` (src/cogs/ui_renderer.py:223) calls `_build_village_section` without `show_trial_status_line`, so it defaults to `False` and the inactive-state elif branch is skipped, leaving `trial_line = ""`; `build_village_embed` (src/cogs/ui_renderer.py:206-209) explicitly passes `show_trial_status_line=True`. New regression test `test_embed_omits_trial_status_line_when_inactive` (tests/test_discord_commands.py) asserts `"🏆 試煉"` is absent from `build_main_embed`'s output, and existing Dashboard tests confirm all 4 states still render for `build_village_embed`. Change document `source_paths`, `status`, and all Tasks checkboxes verified; `docs/discord/ui-renderer.md` `last_reviewed` confirmed as 2026-07-15 and its 主介面 Embed section now documents the omission. Full test suite passes: `uv run python -m pytest -q` → 481 passed, 3 subtests passed. A secondary review pass (codex) flagged a sub-second cooldown-boundary rounding discrepancy in the new `elif show_trial_status_line` branch (src/cogs/ui_renderer.py:142-156), but this reuses the pre-existing `_unix_from_iso` truncation convention already used elsewhere in this same file (e.g. line 136 for the active-trial deadline), so it is not a new regression and is not blocking.
+
+## Post-Review Fixes (2026-07-15, scope expansion)
+
+使用者在 PR 開啟前回饋：`/idlevillage` 個人主介面（Ephemeral）也應顯示相同的四態試煉狀態文字，而不是只靠「🏆 開啟試煉」按鈕本身的 disabled 狀態表達。原本 MVP Scope 將此排除，是基於「按鈕已有 disabled 狀態」的假設；使用者確認兩者應並存（文字說明 + 按鈕本身狀態），修正如下：
+
+1. **`build_main_embed` 也顯示四態文字**：移除 `show_trial_status_line` 參數（原本用來讓 `build_village_embed` 顯示、`build_main_embed` 省略），改為兩個呼叫端都無條件顯示。`_build_trial_line`／`_build_village_section` 簽章因此簡化（不再需要該布林參數）。
+2. **測試**：`tests/test_discord_commands.py` 的 `test_embed_omits_trial_status_line_when_inactive` 改為 `test_embed_shows_trial_status_line_when_inactive`，斷言 `build_main_embed` 在非進行中時顯示 `🏆 試煉 ⚠️ 資源不足，尚無法開啟`（而非省略整行）。
+3. **文件**：`docs/discord/ui-renderer.md`「主介面 Embed」章節改為說明村莊狀態區塊與 Dashboard 完全共用同一份四態顯示邏輯，兩者不再有差異。
+
+### 受影響檔案
+
+- 修改：`src/cogs/ui_renderer.py`（移除 `show_trial_status_line` 參數，兩呼叫端統一行為）
+- 測試：`tests/test_discord_commands.py`（重新命名並反轉 1 個測試斷言）
+- 文件：`docs/discord/ui-renderer.md`（更新「主介面 Embed」章節說明、新增 Changelog 項目）
+
+`trial_manager.py`、`notification.py`、`actions.py`、`general.py` 完全未變動——資料擷取層本來就已提供四態所需的全部欄位，此次調整純屬顯示邏輯的呼叫端統一。
+
+驗證：`uv run python -m pytest -q` → 481 passed, 3 subtests passed，無失敗。
 

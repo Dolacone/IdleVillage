@@ -91,7 +91,7 @@ source_paths:
 
 此 embed 為 Ephemeral（只有指令使用者看得到），包含村莊狀態（同上）+ 個人狀態與互動元件。
 
-村莊狀態區塊沿用與 Dashboard 相同的 `_build_village_section`，但試煉非進行中時僅省略 `🏆 試煉` 這一行，不顯示 Dashboard 才有的可開啟／資源不足／冷卻中狀態文字——本介面已有「🏆 開啟試煉」按鈕的 disabled 狀態傳達同一資訊，不重複呈現。
+村莊狀態區塊沿用與 Dashboard 完全相同的 `_build_village_section`，包含「試煉進度列」章節所述的四態 `🏆 試煉` 顯示（進行中／可開啟／資源不足／冷卻中），與下方「🏆 開啟試煉」按鈕的 disabled 狀態並存、互為補充。
 
 ### 個人狀態區（下半部）
 ```
@@ -257,6 +257,7 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
 
 ## Changelog
 
+- 2026-07-15: The 4-state `🏆 試煉` display (previously Dashboard-only, see below) now also applies to the `/idlevillage` main interface's village section, since both reuse the same `_build_village_section`/`_build_trial_line` with no distinguishing parameter. Removed the `show_trial_status_line` toggle that had scoped the new states to the Dashboard only.
 - 2026-07-15: Dashboard `🏆 試煉` line is now always shown instead of being omitted while no trial is active. Content switches between 4 states: active (unchanged progress format), cooldown (`⏳ 可於 <t:{cooldown_deadline}:t> 後開啟`, fixed time via Discord's `:t` style, not relative), insufficient resources (`⚠️ 資源不足，尚無法開啟`), and openable (`✅ 可開啟試煉`).
 - 2026-07-14: `open_trial_start` no longer opens a Modal. Clicking it directly starts a trial with a fixed `TRIAL_TARGET_AMOUNT` and a system-chosen resource (uniformly random among affordable types) — zero player input. `build_main_components` now also takes `resources` to additionally disable the button when no resource type can afford `TRIAL_TARGET_AMOUNT`.
 - 2026-07-14: Replaced the trial-opening slash command with an `open_trial_start` button (Row 1, alongside burst/gear upgrade) + `modal_start_trial` Modal (free-text resource + target). Button disabled unless a trial can currently be started. Removed resource type from the Dashboard trial progress line (was `🏆 試煉 {resource_emoji}{resource_label} {progress} / {target}`, now `🏆 試煉 {progress} / {target}`) to avoid implying the goal is a single-resource collection target. `build_main_embed` gained an optional `trial_message` line for post-submission feedback.
