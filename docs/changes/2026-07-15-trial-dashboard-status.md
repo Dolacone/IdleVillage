@@ -1,6 +1,6 @@
 ---
 title: "村莊 Dashboard 隨時顯示試煉狀態"
-status: Draft
+status: Ready-to-implement
 created: 2026-07-15
 doc_type: change
 last_reviewed: 2026-07-15
@@ -56,8 +56,19 @@ scope: "Tracks making the village Dashboard trial line always visible (active/op
 
 ## Architecture Decisions
 
-（於 plan 階段補充）
+1. **不新增任何資料查詢，僅修改 `ui_renderer.py` 的顯示邏輯**：實際檢視 `src/cogs/ui_renderer.py` 後確認 `_build_village_section(stage_data, resources, buildings, action_counts, trial_data)` 已經同時收到 `resources`（食物/木頭/知識現值，用於既有「公用資源」列）與 `trial_data`（`SELECT * FROM trial_state WHERE id=1` 的完整列，含 `is_active`／`ended_at`／`progress`／`target`／`started_at`）。四態判斷（進行中／可開啟／資源不足／冷卻中）所需的全部欄位都已在場，不需要修改 `notification.py`／`actions.py`／`general.py` 的資料擷取層或新增查詢。範圍縮小為 `ui_renderer.py` 單檔。
+2. **四態判斷邏輯內嵌於 `_build_village_section`，不獨立成 helper 函式**：目前僅有一個呼叫點組裝 `trial_line`（同時供 `build_village_embed` 使用），邏輯複雜度低（四個 if/elif 分支），抽出獨立函式對可讀性無明顯助益，比照現有 `is_active` 單分支的既有寫法直接擴充為 if/elif/elif/else。
+3. **冷卻中固定時刻使用 `<t:{unix}:t>`（Discord 短時間格式）**：既有「進行中」的期限使用 `<t:{unix}:R>`（相對時間），使用者明確要求冷卻時間改為固定時刻，`:t` 為 Discord timestamp style 中最接近「僅顯示時刻」的格式（如 `12:34 AM`），見 Key Assumptions 中對此假設的保留意見。
+4. **判斷優先序：`is_active` → 冷卻中 → 資源不足 → 可開啟**：與既有 `build_main_components()` 的 `open_trial_start` 按鈕 disabled 判斷條件（`docs/discord/ui-renderer.md` 「開啟試煉」小節）完全一致的檢查順序，確保 Dashboard 文字說明與按鈕實際可否點擊的邏輯不會互相矛盾。
 
 ## Tasks
 
-（於 plan 階段補充）
+- [ ] Task 1: `ui_renderer.py` 試煉列四態顯示
+  - Files: `src/cogs/ui_renderer.py`（另需同步更新 `docs/discord/ui-renderer.md` 對應章節，非 source/logic 檔不計入限制）
+  - Tests: 更新 `tests/test_discord_commands.py`，涵蓋：(a) 進行中時維持現有格式不變（既有測試 `test_embed_shows_trial_line_when_active` 應維持通過）；(b) 冷卻已過且至少一種資源足夠時顯示 `✅ 可開啟試煉`；(c) 冷卻已過但三種資源皆不足 `TRIAL_TARGET_AMOUNT` 時顯示 `⚠️ 資源不足，尚無法開啟`；(d) 冷卻中（`ended_at` 存在且未滿 `TRIAL_COOLDOWN_SECONDS`）時顯示 `⏳ 可於 <t:{deadline}:t> 後開啟`，且 `deadline = ended_at_unix + TRIAL_COOLDOWN_SECONDS`；(e) 更新既有 `test_embed_omits_trial_line_when_inactive`／`test_embed_omits_trial_line_when_trial_data_not_provided` 兩個測試，反映「不再整行省略、而是顯示四態之一」的新行為（`test_announcement_dashboard_embed_shows_active_trial` 等既有進行中測試不受影響）
+  - Depends on: 無
+  - Acceptance: `_build_village_section`／`build_village_embed` 在任何 `trial_data`／`resources` 組合下皆輸出四態之一的 `🏆 試煉` 列（不再省略整行）；判斷優先序與 `open_trial_start` 按鈕 disabled 條件一致；`docs/discord/ui-renderer.md` 「試煉進度列」章節更新為四態格式規格並更新 `last_reviewed`；既有測試套件全數通過
+
+### 平行任務標記
+
+僅一個任務，無平行需求。
