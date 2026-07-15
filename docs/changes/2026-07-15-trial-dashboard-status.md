@@ -1,6 +1,6 @@
 ---
 title: "村莊 Dashboard 隨時顯示試煉狀態"
-status: Ready-to-review
+status: Reviewed
 created: 2026-07-15
 doc_type: change
 last_reviewed: 2026-07-15
@@ -83,3 +83,6 @@ scope: "Tracks making the village Dashboard trial line always visible (active/op
   - Fix: rewrote Architecture Decision 2 to correctly describe both callers and the new `show_trial_status_line` parameter.
 - [x] Issue 3: [Minor] `docs/discord/ui-renderer.md`'s 主介面 Embed section (lines 90-104) was not updated to document that the main interface's village status block now also shows the 3 new inactive-trial states (per Issue 1); it still only documents the pre-existing "試煉貢獻" line's active/inactive behavior.
   - Fix: added a note under 主介面 Embed clarifying it reuses `_build_village_section` but omits the Dashboard-only status line, since the fix for Issue 1 means this section no longer gains the new states.
+
+Verification notes (re-review, 2026-07-15): Confirmed via `git diff main...HEAD` that Issue 1's fix is correctly scoped — `build_main_embed` (src/cogs/ui_renderer.py:223) calls `_build_village_section` without `show_trial_status_line`, so it defaults to `False` and the inactive-state elif branch is skipped, leaving `trial_line = ""`; `build_village_embed` (src/cogs/ui_renderer.py:206-209) explicitly passes `show_trial_status_line=True`. New regression test `test_embed_omits_trial_status_line_when_inactive` (tests/test_discord_commands.py) asserts `"🏆 試煉"` is absent from `build_main_embed`'s output, and existing Dashboard tests confirm all 4 states still render for `build_village_embed`. Change document `source_paths`, `status`, and all Tasks checkboxes verified; `docs/discord/ui-renderer.md` `last_reviewed` confirmed as 2026-07-15 and its 主介面 Embed section now documents the omission. Full test suite passes: `uv run python -m pytest -q` → 481 passed, 3 subtests passed. A secondary review pass (codex) flagged a sub-second cooldown-boundary rounding discrepancy in the new `elif show_trial_status_line` branch (src/cogs/ui_renderer.py:142-156), but this reuses the pre-existing `_unix_from_iso` truncation convention already used elsewhere in this same file (e.g. line 136 for the active-trial deadline), so it is not a new regression and is not blocking.
+
