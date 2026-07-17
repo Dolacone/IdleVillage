@@ -64,6 +64,12 @@ class ValidateEnvBehavior(unittest.TestCase):
         finally:
             config._ENV_EXAMPLE_DEFAULTS.update(original)
 
+    def test_auto_tool_keys_are_required_and_resolve(self):
+        self.assertIn("AUTO_TOOL_SECONDS_PER_MATERIAL", config.REQUIRED_KEYS)
+        self.assertIn("AUTO_TOOL_MAX_MATERIALS", config.REQUIRED_KEYS)
+        self.assertEqual(config.get_env_int("AUTO_TOOL_SECONDS_PER_MATERIAL"), 3600)
+        self.assertEqual(config.get_env_int("AUTO_TOOL_MAX_MATERIALS"), 6)
+
     def test_required_keys_list_matches_env_example(self):
         env_example_path = os.path.join(ROOT_DIR, ".env.example")
         with open(env_example_path) as f:
