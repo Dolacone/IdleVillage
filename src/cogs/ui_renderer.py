@@ -832,7 +832,7 @@ def build_auto_tool_components(
         rows.append(
             disnake.ui.ActionRow(
                 disnake.ui.StringSelect(
-                    custom_id="auto_tool_target_select",
+                    custom_id=f"auto_tool_target_select:{selected_tool}",
                     placeholder="選擇建設目標...",
                     options=target_options,
                 )
@@ -852,7 +852,7 @@ def build_auto_tool_components(
         rows.append(
             disnake.ui.ActionRow(
                 disnake.ui.StringSelect(
-                    custom_id="auto_tool_count_select",
+                    custom_id=f"auto_tool_count_select:{selected_tool}:{selected_target or 'none'}",
                     placeholder="選擇消耗素材數量...",
                     options=count_options,
                     disabled=count_disabled,

@@ -1328,6 +1328,34 @@ class TestAffixRouteRegistration(unittest.TestCase):
         from cogs.actions import _is_own_button
         self.assertTrue(_is_own_button("back_to_gear:gathering"))
 
+
+class TestAutoToolRouteRegistration(unittest.TestCase):
+    """Auto-tool interface interaction routes are registered."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def test_open_auto_tool_is_own_button(self):
+        from cogs.actions import _is_own_button
+        self.assertTrue(_is_own_button("open_auto_tool"))
+
+    def test_auto_tool_confirm_is_own_button(self):
+        from cogs.actions import _is_own_button
+        self.assertTrue(_is_own_button("auto_tool_confirm:gathering:3:none"))
+
+    def test_auto_tool_type_select_is_own_dropdown(self):
+        from cogs.actions import _is_own_dropdown
+        self.assertTrue(_is_own_dropdown("auto_tool_type_select"))
+
+    def test_auto_tool_target_select_is_own_dropdown(self):
+        from cogs.actions import _is_own_dropdown
+        self.assertTrue(_is_own_dropdown("auto_tool_target_select:building"))
+
+    def test_auto_tool_count_select_is_own_dropdown(self):
+        from cogs.actions import _is_own_dropdown
+        self.assertTrue(_is_own_dropdown("auto_tool_count_select:gathering:none"))
+
     def test_affix_gear_select_is_own_dropdown(self):
         from cogs.actions import _is_own_dropdown
         self.assertTrue(_is_own_dropdown("affix_gear_select"))
@@ -2006,7 +2034,8 @@ class AutoToolSubInterface(unittest.TestCase):
         rows = build_auto_tool_components(
             ["gathering"], [], selected_tool="gathering", max_add=3
         )
-        select = next(c for c in self._all(rows) if getattr(c, "custom_id", None) == "auto_tool_count_select")
+        select = next(c for c in self._all(rows)
+                      if getattr(c, "custom_id", "").startswith("auto_tool_count_select"))
         values = [o.value for o in select.options]
         self.assertEqual(values, ["1", "2", "3"])
 
@@ -2032,8 +2061,8 @@ class AutoToolSubInterface(unittest.TestCase):
         rows = build_auto_tool_components(
             ["building"], [], selected_tool="building", selected_count=1, max_add=6
         )
-        ids = [getattr(c, "custom_id", None) for c in self._all(rows)]
-        self.assertIn("auto_tool_target_select", ids)
+        ids = [getattr(c, "custom_id", "") for c in self._all(rows)]
+        self.assertTrue(any(i.startswith("auto_tool_target_select") for i in ids))
         confirm = next(c for c in self._all(rows)
                        if getattr(c, "custom_id", "").startswith("auto_tool_confirm"))
         self.assertTrue(confirm.disabled)  # target not chosen
