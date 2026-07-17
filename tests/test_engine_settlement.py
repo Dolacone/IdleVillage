@@ -1288,6 +1288,93 @@ class ExplicitContextCycleTest(SettlementTestBase):
         self.assertEqual((await self._get_building("workshop"))["xp_progress"], base)
 
 
+class AutoToolSettlementTest(SettlementTestBase):
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        await self._set_resource("food", 100000)
+        await self._set_resource("wood", 100000)
+        await self._set_resource("knowledge", 100000)
+
+    async def _insert_auto_tool(self, tool_type, completion_time, expires_at, action_target=None):
+        now_str = _now().isoformat()
+        async with schema.get_connection() as db:
+            await db.execute(
+                """INSERT INTO player_auto_tools
+                   (user_id, tool_type, action_target, completion_time, last_update_time,
+                    expires_at, started_at, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (self.TEST_USER, tool_type, action_target,
+                 completion_time.isoformat(), now_str, expires_at.isoformat(), now_str, now_str),
+            )
+            await db.commit()
+
+    async def test_settles_due_cycle_and_advances_completion(self):
+        from core.settlement import settle_auto_tool_cycles
+        now = _now()
+        await self._insert_player(action=None)
+        await self._insert_auto_tool(
+            "gathering", completion_time=now - timedelta(minutes=1), expires_at=now + timedelta(hours=1)
+        )
+        with patch("random.random", return_value=1.0):
+            await settle_auto_tool_cycles(self.TEST_USER, "gathering", now)
+        base = int(os.environ["BASE_OUTPUT"])
+        food_cost = int(os.environ["FOOD_COST"])
+        self.assertEqual(await self._get_resource("wood"), 100000 + base)
+        self.assertEqual(await self._get_resource("food"), 100000 - food_cost + base)
+        # player timestamps untouched
+        player = await self._get_player()
+        self.assertIsNone(player["completion_time"])
+        # auto-tool row still present (not expired), completion advanced into the future
+        async with schema.get_connection() as db:
+            row = await self.fetchone(
+                "SELECT completion_time FROM player_auto_tools WHERE user_id=? AND tool_type=?",
+                (self.TEST_USER, "gathering"),
+            )
+        self.assertGreater(_utc(datetime.fromisoformat(row[0])), now)
+
+    async def test_material_drop_credits_the_tool_material(self):
+        from core.settlement import settle_auto_tool_cycles
+        now = _now()
+        await self._insert_player(action=None)
+        await self._insert_auto_tool(
+            "combat", completion_time=now - timedelta(minutes=1), expires_at=now + timedelta(hours=1)
+        )
+        with patch("random.random", return_value=0.0):  # force drop
+            await settle_auto_tool_cycles(self.TEST_USER, "combat", now)
+        player = await self._get_player()
+        self.assertEqual(player["materials_combat"], 1)
+        self.assertEqual(player["materials_gathering"], 0)
+
+    async def test_expired_auto_tool_is_ended_after_catch_up(self):
+        from core.settlement import settle_auto_tool_cycles
+        now = _now()
+        await self._insert_player(action=None)
+        await self._insert_auto_tool(
+            "gathering",
+            completion_time=now - timedelta(minutes=20),
+            expires_at=now - timedelta(minutes=1),  # already expired
+        )
+        with patch("random.random", return_value=1.0):
+            await settle_auto_tool_cycles(self.TEST_USER, "gathering", now)
+        row = await self.fetchone(
+            "SELECT 1 FROM player_auto_tools WHERE user_id=? AND tool_type=?",
+            (self.TEST_USER, "gathering"),
+        )
+        self.assertIsNone(row)  # freed
+
+    async def test_watcher_settles_due_auto_tool(self):
+        from core.engine import Engine
+        now = _now()
+        await self._insert_player(action=None)
+        await self._insert_auto_tool(
+            "gathering", completion_time=now - timedelta(minutes=1), expires_at=now + timedelta(hours=1)
+        )
+        with patch("random.random", return_value=1.0):
+            await Engine.process_watcher()
+        base = int(os.environ["BASE_OUTPUT"])
+        self.assertEqual(await self._get_resource("wood"), 100000 + base)
+
+
 class EffectiveCycleSecondsTest(unittest.TestCase):
     def setUp(self):
         for k, v in ALL_TEST_ENV.items():

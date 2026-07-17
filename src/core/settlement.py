@@ -270,6 +270,51 @@ async def settle_complete_cycles(user_id: str, now: datetime) -> list[dict]:
     return events
 
 
+async def settle_auto_tool_cycles(user_id: str, tool_type: str, now: datetime) -> list[dict]:
+    """
+    Catch up all overdue complete cycles for one auto-tool, up to MAX_CYCLES_PER_SETTLEMENT.
+    Each cycle reuses the action resolver with the auto-tool's own context (no player
+    timestamp writes). Only cycles whose completion falls within the paid window
+    (completion_time <= min(now, expires_at)) are settled; once the auto-tool has fully
+    expired and is caught up, its row is deleted (the tool frees up). Returns events.
+    """
+    events: list[dict] = []
+    async with get_connection() as db:
+        row = await auto_tool_manager.get(db, user_id, tool_type)
+        if row is None:
+            return events
+
+        expires_at = parse_dt(row["expires_at"])
+        action_target = row["action_target"]
+        bonuses = await affix_manager.get_affix_bonuses(db, user_id, tool_type)
+        effective_secs = effective_cycle_seconds(bonuses["cycle_time_reduce"])
+        max_cycles = get_env_int("MAX_CYCLES_PER_SETTLEMENT")
+        deadline = min(now, expires_at)
+
+        cycle_end = parse_dt(row["completion_time"])
+        cycles_done = 0
+        while cycle_end <= deadline and cycles_done < max_cycles:
+            cycle_events = await _run_one_cycle(
+                db, user_id, cycle_end,
+                action=tool_type, action_target=action_target,
+                write_player_timestamps=False, affix_bonuses=bonuses,
+            )
+            events.extend(cycle_events)
+            next_completion = cycle_end + timedelta(seconds=effective_secs)
+            await auto_tool_manager.advance_cycle(db, user_id, tool_type, cycle_end, next_completion)
+            cycle_end = next_completion
+            cycles_done += 1
+
+        # End (free the tool) once fully expired and caught up. If the cap was hit there
+        # may still be backlog within the paid window, so defer ending to a later tick.
+        if now >= expires_at and cycles_done < max_cycles:
+            await auto_tool_manager.end(db, user_id, tool_type)
+
+        await db.commit()
+
+    return events
+
+
 async def change_action(
     user_id: str, new_action: str | None, new_target: str | None, now: datetime
 ) -> list[dict]:
