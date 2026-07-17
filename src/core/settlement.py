@@ -305,9 +305,11 @@ async def settle_auto_tool_cycles(user_id: str, tool_type: str, now: datetime) -
             cycle_end = next_completion
             cycles_done += 1
 
-        # End (free the tool) once fully expired and caught up. If the cap was hit there
-        # may still be backlog within the paid window, so defer ending to a later tick.
-        if now >= expires_at and cycles_done < max_cycles:
+        # End (free the tool) once fully expired and caught up. "Caught up" means the loop
+        # stopped because the next cycle falls beyond the paid window (cycle_end > deadline),
+        # NOT because the per-tick cap was hit with backlog still inside the window.
+        caught_up = cycle_end > deadline
+        if now >= expires_at and caught_up:
             await auto_tool_manager.end(db, user_id, tool_type)
 
         await db.commit()
@@ -336,6 +338,9 @@ async def change_action(
 
     events: list[dict] = []
     async with get_connection() as db:
+        # Write lock before the guard read so a concurrent auto-tool start serializes
+        # against this action change (Architecture Decision #7).
+        await db.execute("BEGIN IMMEDIATE")
         player = await _read_player(db, user_id)
         if player is None:
             return events

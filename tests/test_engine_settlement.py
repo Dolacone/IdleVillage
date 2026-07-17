@@ -1362,6 +1362,48 @@ class AutoToolSettlementTest(SettlementTestBase):
         )
         self.assertIsNone(row)  # freed
 
+    async def test_expired_tool_ended_even_when_cap_hit_but_caught_up(self):
+        # Regression: end condition must be "caught up" (cycle_end > deadline), not
+        # cycles_done < max_cycles. With MAX=2 and exactly 2 due cycles, an expired tool
+        # is fully caught up at the cap and must be freed, not left occupying the tool.
+        from core.settlement import settle_auto_tool_cycles
+        now = _now()
+        cycle_secs = int(os.environ["ACTION_CYCLE_MINUTES"]) * 60
+        await self._insert_player(action=None)
+        await self._insert_auto_tool(
+            "gathering",
+            completion_time=now - timedelta(seconds=cycle_secs),  # 1 cycle before now
+            expires_at=now,                                        # expired (now >= expires)
+        )
+        with patch("random.random", return_value=1.0), \
+             patch.dict(os.environ, {"MAX_CYCLES_PER_SETTLEMENT": "2"}):
+            await settle_auto_tool_cycles(self.TEST_USER, "gathering", now)
+        row = await self.fetchone(
+            "SELECT 1 FROM player_auto_tools WHERE user_id=? AND tool_type=?",
+            (self.TEST_USER, "gathering"),
+        )
+        self.assertIsNone(row)
+
+    async def test_not_ended_when_cap_hit_with_backlog(self):
+        # With MAX=1 and many due cycles, the tool is NOT caught up -> must remain.
+        from core.settlement import settle_auto_tool_cycles
+        now = _now()
+        cycle_secs = int(os.environ["ACTION_CYCLE_MINUTES"]) * 60
+        await self._insert_player(action=None)
+        await self._insert_auto_tool(
+            "gathering",
+            completion_time=now - timedelta(seconds=cycle_secs * 10),
+            expires_at=now,
+        )
+        with patch("random.random", return_value=1.0), \
+             patch.dict(os.environ, {"MAX_CYCLES_PER_SETTLEMENT": "1"}):
+            await settle_auto_tool_cycles(self.TEST_USER, "gathering", now)
+        row = await self.fetchone(
+            "SELECT 1 FROM player_auto_tools WHERE user_id=? AND tool_type=?",
+            (self.TEST_USER, "gathering"),
+        )
+        self.assertIsNotNone(row)  # backlog remains -> not freed yet
+
     async def test_watcher_settles_due_auto_tool(self):
         from core.engine import Engine
         now = _now()

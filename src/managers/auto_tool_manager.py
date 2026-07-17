@@ -127,50 +127,59 @@ async def start(
     if count < 1 or count > max_add_materials(None, now):
         raise ValueError(f"Invalid material count: {count}")
 
-    effective_target = _resolve_target(tool_type, action_target)
+    effective_target = _resolve_target(tool_type, action_target)  # validates building target
     per = _seconds_per_material()
     now_str = dt_str(now)
     expires_at = dt_str(now + timedelta(seconds=count * per))
-    # cycle_time_reduce affix scoped to this tool, mirroring manual-action timing.
-    bonuses = await affix_manager.get_affix_bonuses(db, user_id, tool_type)
-    completion_time = dt_str(now + timedelta(seconds=effective_cycle_seconds(bonuses["cycle_time_reduce"])))
 
-    # Race-safe exclusion: insert only if no existing auto-tool for this tool AND the
-    # player's manual action is a different tool (or None). SQLite `IS NOT` is null-safe.
-    cur = await db.execute(
-        """
-        INSERT INTO player_auto_tools
-            (user_id, tool_type, action_target, completion_time, last_update_time,
-             expires_at, started_at, updated_at)
-        SELECT ?, ?, ?, ?, ?, ?, ?, ?
-        WHERE NOT EXISTS (
-                SELECT 1 FROM player_auto_tools WHERE user_id=? AND tool_type=?
-              )
-          AND (SELECT action FROM players WHERE user_id=?) IS NOT ?
-          AND EXISTS (SELECT 1 FROM players WHERE user_id=?)
-        """,
-        (
-            user_id, tool_type, effective_target, completion_time, now_str,
-            expires_at, now_str, now_str,
-            user_id, tool_type,
-            user_id, tool_type,
-            user_id,
-        ),
-    )
-    if cur.rowcount != 1:
-        raise ValueError(
-            f"Cannot start auto-tool {tool_type!r}: tool is in use (manual action or already auto) "
-            f"or player not found"
+    # Acquire the write lock before the guard reads so concurrent start/refuel/change_action
+    # serialize (Architecture Decision #7); the caller commits on success. On failure we roll
+    # back so the caller's connection is left clean (no dangling open transaction).
+    await db.execute("BEGIN IMMEDIATE")
+    try:
+        # cycle_time_reduce affix scoped to this tool, mirroring manual-action timing.
+        bonuses = await affix_manager.get_affix_bonuses(db, user_id, tool_type)
+        completion_time = dt_str(now + timedelta(seconds=effective_cycle_seconds(bonuses["cycle_time_reduce"])))
+
+        # Race-safe exclusion: insert only if no existing auto-tool for this tool AND the
+        # player's manual action is a different tool (or None). SQLite `IS NOT` is null-safe.
+        cur = await db.execute(
+            """
+            INSERT INTO player_auto_tools
+                (user_id, tool_type, action_target, completion_time, last_update_time,
+                 expires_at, started_at, updated_at)
+            SELECT ?, ?, ?, ?, ?, ?, ?, ?
+            WHERE NOT EXISTS (
+                    SELECT 1 FROM player_auto_tools WHERE user_id=? AND tool_type=?
+                  )
+              AND (SELECT action FROM players WHERE user_id=?) IS NOT ?
+              AND EXISTS (SELECT 1 FROM players WHERE user_id=?)
+            """,
+            (
+                user_id, tool_type, effective_target, completion_time, now_str,
+                expires_at, now_str, now_str,
+                user_id, tool_type,
+                user_id, tool_type,
+                user_id,
+            ),
         )
+        if cur.rowcount != 1:
+            raise ValueError(
+                f"Cannot start auto-tool {tool_type!r}: tool is in use (manual action or already auto) "
+                f"or player not found"
+            )
 
-    # Spend the tool's own material atomically; roll back (no commit) if insufficient.
-    col = _MATERIAL_COL[tool_type]
-    spent = await db.execute(
-        f"UPDATE players SET {col} = {col} - ?, updated_at=? WHERE user_id=? AND {col} >= ?",
-        (count, now_str, user_id, count),
-    )
-    if spent.rowcount != 1:
-        raise ValueError(f"Insufficient {tool_type} material: need {count}")
+        # Spend the tool's own material atomically.
+        col = _MATERIAL_COL[tool_type]
+        spent = await db.execute(
+            f"UPDATE players SET {col} = {col} - ?, updated_at=? WHERE user_id=? AND {col} >= ?",
+            (count, now_str, user_id, count),
+        )
+        if spent.rowcount != 1:
+            raise ValueError(f"Insufficient {tool_type} material: need {count}")
+    except Exception:
+        await db.rollback()
+        raise
 
 
 async def refuel(db, user_id: str, tool_type: str, count: int, now: datetime) -> None:
@@ -180,28 +189,36 @@ async def refuel(db, user_id: str, tool_type: str, count: int, now: datetime) ->
     Raises ValueError if the tool is not active, count is out of [1, max_add], or materials
     are insufficient. The new remaining time never exceeds the cap because count <= max_add.
     """
-    row = await get(db, user_id, tool_type)
-    if row is None:
-        raise ValueError(f"Auto-tool {tool_type!r} is not active")
-    if count < 1 or count > max_add_materials(row["expires_at"], now):
-        raise ValueError(f"Invalid refuel count: {count}")
+    # Write lock first so a concurrent refuel/start re-reads the committed expires_at and
+    # its cap check (max_add) sees the true remaining time (Architecture Decision #7). On
+    # failure roll back so the caller's connection has no dangling open transaction.
+    await db.execute("BEGIN IMMEDIATE")
+    try:
+        row = await get(db, user_id, tool_type)
+        if row is None:
+            raise ValueError(f"Auto-tool {tool_type!r} is not active")
+        if count < 1 or count > max_add_materials(row["expires_at"], now):
+            raise ValueError(f"Invalid refuel count: {count}")
 
-    now_str = dt_str(now)
-    per = _seconds_per_material()
-    new_expires = dt_str(parse_dt(row["expires_at"]) + timedelta(seconds=count * per))
+        now_str = dt_str(now)
+        per = _seconds_per_material()
+        new_expires = dt_str(parse_dt(row["expires_at"]) + timedelta(seconds=count * per))
 
-    col = _MATERIAL_COL[tool_type]
-    spent = await db.execute(
-        f"UPDATE players SET {col} = {col} - ?, updated_at=? WHERE user_id=? AND {col} >= ?",
-        (count, now_str, user_id, count),
-    )
-    if spent.rowcount != 1:
-        raise ValueError(f"Insufficient {tool_type} material: need {count}")
+        col = _MATERIAL_COL[tool_type]
+        spent = await db.execute(
+            f"UPDATE players SET {col} = {col} - ?, updated_at=? WHERE user_id=? AND {col} >= ?",
+            (count, now_str, user_id, count),
+        )
+        if spent.rowcount != 1:
+            raise ValueError(f"Insufficient {tool_type} material: need {count}")
 
-    await db.execute(
-        "UPDATE player_auto_tools SET expires_at=?, updated_at=? WHERE user_id=? AND tool_type=?",
-        (new_expires, now_str, user_id, tool_type),
-    )
+        await db.execute(
+            "UPDATE player_auto_tools SET expires_at=?, updated_at=? WHERE user_id=? AND tool_type=?",
+            (new_expires, now_str, user_id, tool_type),
+        )
+    except Exception:
+        await db.rollback()
+        raise
 
 
 async def advance_cycle(

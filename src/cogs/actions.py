@@ -263,6 +263,7 @@ class ActionsCog(commands.Cog):
         selected_tool: str | None = None,
         selected_target: str | None = None,
         selected_count: int | None = None,
+        error: str | None = None,
     ) -> None:
         user_id = str(inter.user.id)
         now = datetime.now(timezone.utc)
@@ -275,7 +276,7 @@ class ActionsCog(commands.Cog):
                 expires = row["expires_at"] if row else None
                 max_add = auto_tool_manager.max_add_materials(expires, now)
         max_materials = get_env_int("AUTO_TOOL_MAX_MATERIALS")
-        embed = build_auto_tool_embed(active_rows, max_materials)
+        embed = build_auto_tool_embed(active_rows, max_materials, error=error)
         components = build_auto_tool_components(
             idle_tools, active_rows,
             selected_tool=selected_tool, selected_target=selected_target,
@@ -357,6 +358,7 @@ class ActionsCog(commands.Cog):
             target = None if parts[3] == "none" else parts[3]
             await inter.response.defer()
             now = datetime.now(timezone.utc)
+            error: str | None = None
             async with get_connection() as db:
                 try:
                     if await auto_tool_manager.is_active(db, user_id, tool_type):
@@ -365,8 +367,8 @@ class ActionsCog(commands.Cog):
                         await auto_tool_manager.start(db, user_id, tool_type, count, target, now)
                     await db.commit()
                 except ValueError:
-                    pass
-            await self._render_auto_tool(inter)
+                    error = "⚠️ 操作失敗（素材不足、工具使用中或已達上限），請重新確認。"
+            await self._render_auto_tool(inter, error=error)
 
         elif cid == "open_trial_start":
             await inter.response.defer()

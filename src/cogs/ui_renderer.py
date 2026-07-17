@@ -757,9 +757,12 @@ def build_affix_components(
 _AUTO_TOOL_ORDER = ("gathering", "building", "combat", "research")
 
 
-def build_auto_tool_embed(active_rows: list, max_materials: int) -> disnake.Embed:
+def build_auto_tool_embed(active_rows: list, max_materials: int, error: str | None = None) -> disnake.Embed:
     """Auto-tool sub-interface embed: currently running tools + their expiry, plus the rule."""
     lines = ["⚙️ 自動工具", "─────────────────────────────"]
+    if error:
+        lines.append(error)
+        lines.append("─────────────────────────────")
     if active_rows:
         lines.append("運行中：")
         for row in active_rows:

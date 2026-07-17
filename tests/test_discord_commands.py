@@ -2019,6 +2019,11 @@ class AutoToolSubInterface(unittest.TestCase):
         embed = build_auto_tool_embed([], 6)
         self.assertIn("沒有運行中", embed.description)
 
+    def test_embed_shows_error_when_provided(self):
+        from cogs.ui_renderer import build_auto_tool_embed
+        embed = build_auto_tool_embed([], 6, error="⚠️ 操作失敗")
+        self.assertIn("⚠️ 操作失敗", embed.description)
+
     def test_tool_dropdown_lists_idle_and_running(self):
         from cogs.ui_renderer import build_auto_tool_components
         rows = build_auto_tool_components(
