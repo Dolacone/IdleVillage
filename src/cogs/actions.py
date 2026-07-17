@@ -223,7 +223,15 @@ class ActionsCog(commands.Cog):
             affixes = await affix_manager.get_affixes(db, user_id, gear_type)
 
         player_gear = _make_player_gear(row)
-        embed = build_affix_embed(gear_type, player_gear, affixes, max_slots, selected_slot=selected_slot)
+        embed = build_affix_embed(
+            gear_type,
+            player_gear,
+            affixes,
+            max_slots,
+            selected_slot=selected_slot,
+            materials=upgrade_info.get("materials", 0),
+            universal_materials=upgrade_info.get("universal_materials", 0),
+        )
         components = build_affix_components(
             gear_type, player_gear, upgrade_info["gear_cap"], affixes, max_slots, selected_slot=selected_slot
         )

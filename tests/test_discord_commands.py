@@ -1285,6 +1285,13 @@ class TestAffixComponentsBlankState(unittest.TestCase):
         embed = build_affix_embed(None, self._player_gear(), [], 0)
         self.assertIn("🔮 詞條管理", embed.description)
 
+    def test_material_holdings_displayed_when_gear_type_selected(self):
+        from cogs.ui_renderer import build_affix_embed
+        embed = build_affix_embed(
+            "gathering", self._player_gear(), [], 5, materials=7, universal_materials=12
+        )
+        self.assertIn("持有素材：7 個 ｜ 🌟 萬能素材：12 個", embed.description)
+
     def test_gear_dropdown_has_no_default_when_gear_type_is_none(self):
         from cogs.ui_renderer import build_affix_components
         rows = build_affix_components(None, self._player_gear(), gear_cap=10, affixes=[], max_slots=0)

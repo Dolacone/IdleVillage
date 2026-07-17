@@ -210,6 +210,8 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 
 ### 詞條管理畫面
 
+選定工具類型後，Embed 標題下方顯示持有素材列，格式與工具強化子選單一致：`持有素材：{該類型素材} 個 ｜ 🌟 萬能素材：{materials_universal} 個`（工具類型未選定時不顯示）。
+
 - **Dropdown**：工具類型（custom_id: `affix_gear_select`）
   - 選項描述沿用工具強化畫面的等級/效率預覽
 - **Dropdown**：詞條槽選擇（custom_id: `affix_slot_select:{gear_type}`；僅有現存詞條時出現）
@@ -264,6 +266,7 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
 
 ## Changelog
 
+- 2026-07-17: 詞條管理畫面選定工具類型後，Embed 新增持有素材列（該類型素材 + 🌟 萬能素材），格式比照工具強化子選單；`build_affix_embed` 新增 `materials`/`universal_materials` 參數。
 - 2026-07-17: 詞條操作段落補充：抽取/清除素材不足時自動用萬能素材補足差額（比照工具強化子選單），按鈕 disabled 條件不含素材判斷。
 - 2026-07-15: The 4-state `🏆 試煉` display (previously Dashboard-only, see below) now also applies to the `/idlevillage` main interface's village section, since both reuse the same `_build_village_section`/`_build_trial_line` with no distinguishing parameter. Removed the `show_trial_status_line` toggle that had scoped the new states to the Dashboard only.
 - 2026-07-15: Dashboard `🏆 試煉` line is now always shown instead of being omitted while no trial is active. Content switches between 4 states: active (unchanged progress format), cooldown (`⏳ 可於 <t:{cooldown_deadline}:t> 後開啟`, fixed time via Discord's `:t` style, not relative), insufficient resources (`⚠️ 資源不足，尚無法開啟`), and openable (`✅ 可開啟試煉`).
