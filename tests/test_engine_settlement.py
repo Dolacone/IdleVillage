@@ -1211,5 +1211,102 @@ class ResidualOfferingActionTest(SettlementTestBase):
         self.assertEqual(player["action"], "gathering")
 
 
+class ExplicitContextCycleTest(SettlementTestBase):
+    """_run_one_cycle driven by an explicit context (the auto-tool reuse path)."""
+
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        await self._set_resource("food", 10000)
+        await self._set_resource("wood", 10000)
+        await self._set_resource("knowledge", 10000)
+
+    async def test_context_gathering_matches_manual_distribution(self):
+        """Explicit gathering context deposits food+wood, same as the manual path."""
+        from core.settlement import _run_one_cycle
+        await self._insert_player(action=None)  # no manual action set
+        cycle_end = _now()
+        async with schema.get_connection() as db:
+            with patch("random.random", return_value=1.0):  # suppress material drop
+                events = await _run_one_cycle(
+                    db, self.TEST_USER, cycle_end,
+                    action="gathering", action_target=None,
+                    write_player_timestamps=False,
+                )
+            await db.commit()
+        base = int(os.environ["BASE_OUTPUT"])
+        food_cost = int(os.environ["FOOD_COST"])
+        # gathering costs FOOD_COST food, then deposits `base` to both food and wood
+        self.assertEqual(await self._get_resource("food"), 10000 - food_cost + base)
+        self.assertEqual(await self._get_resource("wood"), 10000 + base)
+        self.assertEqual(events, [])
+
+    async def test_context_does_not_touch_player_timestamps(self):
+        """write_player_timestamps=False leaves players.completion_time/last_update_time null."""
+        from core.settlement import _run_one_cycle
+        await self._insert_player(action=None)
+        async with schema.get_connection() as db:
+            with patch("random.random", return_value=1.0):
+                await _run_one_cycle(
+                    db, self.TEST_USER, _now(),
+                    action="combat", action_target=None,
+                    write_player_timestamps=False,
+                )
+            await db.commit()
+        player = await self._get_player()
+        self.assertIsNone(player["completion_time"])
+        self.assertIsNone(player["last_update_time"])
+
+    async def test_context_material_drop_targets_the_context_action(self):
+        """A drop is credited to the context action's material, not the player's action."""
+        from core.settlement import _run_one_cycle
+        await self._insert_player(action=None)
+        async with schema.get_connection() as db:
+            with patch("random.random", return_value=0.0):  # force a drop
+                await _run_one_cycle(
+                    db, self.TEST_USER, _now(),
+                    action="combat", action_target=None,
+                    write_player_timestamps=False,
+                )
+            await db.commit()
+        player = await self._get_player()
+        self.assertEqual(player["materials_combat"], 1)
+        self.assertEqual(player["materials_gathering"], 0)
+
+    async def test_context_building_uses_passed_target(self):
+        """Building context routes XP to the explicitly passed target building."""
+        from core.settlement import _run_one_cycle
+        await self._insert_player(action=None, gear_building=0)
+        async with schema.get_connection() as db:
+            with patch("random.random", return_value=1.0):
+                await _run_one_cycle(
+                    db, self.TEST_USER, _now(),
+                    action="building", action_target="workshop",
+                    write_player_timestamps=False,
+                )
+            await db.commit()
+        base = int(os.environ["BASE_OUTPUT"])
+        self.assertEqual((await self._get_building("workshop"))["xp_progress"], base)
+
+
+class EffectiveCycleSecondsTest(unittest.TestCase):
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def test_no_reduction_returns_base(self):
+        from core.formula import effective_cycle_seconds
+        expected = int(os.environ["ACTION_CYCLE_MINUTES"]) * 60
+        self.assertEqual(effective_cycle_seconds(0), expected)
+
+    def test_reduction_is_floored(self):
+        from core.formula import effective_cycle_seconds
+        base = int(os.environ["ACTION_CYCLE_MINUTES"]) * 60
+        self.assertEqual(effective_cycle_seconds(10), math.floor(base * 0.9))
+
+    def test_never_below_60_seconds(self):
+        from core.formula import effective_cycle_seconds
+        self.assertEqual(effective_cycle_seconds(100), 60)
+
+
 if __name__ == "__main__":
     unittest.main()

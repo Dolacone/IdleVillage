@@ -19,6 +19,7 @@ from core.formula import (
     VALID_ACTIONS,
     action_costs,
     compute_output,
+    effective_cycle_seconds,
 )
 from core.utils import dt_str, parse_dt
 from database.schema import get_connection
@@ -32,13 +33,6 @@ from managers import affix_manager, building_manager, player_manager, resource_m
 def _effective_material_drop_rate(base_rate: float, stage_type: str, action: str, affix_material_drop_pct: int = 0) -> float:
     rate = base_rate * 2 if (stage_type == "upgrade" or stage_type == action) else base_rate
     return min(1.0, rate + affix_material_drop_pct / 100.0)
-
-
-def _effective_cycle_seconds(cycle_time_reduce_pct: int = 0) -> int:
-    """Return effective cycle duration in seconds after applying cycle_time_reduce affix."""
-    base_secs = get_env_int("ACTION_CYCLE_MINUTES") * 60
-    reduced = math.floor(base_secs * (1 - cycle_time_reduce_pct / 100.0))
-    return max(60, reduced)
 
 
 async def _read_player(db, user_id: str) -> dict | None:
@@ -64,26 +58,33 @@ async def _read_building_levels(db) -> dict[str, int]:
 
 
 async def _run_one_cycle(
-    db, user_id: str, cycle_end_time: datetime, update_timestamps: bool = True,
+    db, user_id: str, cycle_end_time: datetime, *,
+    action: str, action_target: str | None = None,
+    write_player_timestamps: bool = True,
     affix_bonuses: dict | None = None,
 ) -> list[dict]:
     """
-    Resolve one complete cycle for user_id.
-    cycle_end_time is used as the effective timestamp for stage/overtime checks.
-    When update_timestamps=False (burst), last_update_time and completion_time are not written.
-    affix_bonuses: pre-queried bonuses dict; if None, will query internally when update_timestamps=True.
+    Resolve one complete cycle for an action stream (manual action or auto-tool).
+
+    Callers pass an explicit settlement context:
+      action                — action type driving this cycle (must be a valid action)
+      action_target         — target building for action="building" (else ignored)
+      write_player_timestamps — True for the manual action (updates players.completion_time
+                               / last_update_time); False for burst and auto-tool (the caller
+                               advances its own timing).
+    cycle_end_time is the effective timestamp for stage/overtime checks and drops.
+    affix_bonuses: pre-queried bonuses for this action's tool; queried internally only when
+    None and write_player_timestamps is True.
+    Material drops, stage progress and trial contribution are attributed to user_id.
     Returns a list of notification events emitted during this cycle.
     """
     events: list[dict] = []
     building_pre_events: list[dict] = []  # buffered until after stage events
 
-    player = await _read_player(db, user_id)
-    if player is None or player["action"] is None or player["action"] not in VALID_ACTIONS:
+    if action is None or action not in VALID_ACTIONS:
         return events
 
-    action: str = player["action"]
-
-    if affix_bonuses is None and update_timestamps:
+    if affix_bonuses is None and write_player_timestamps:
         affix_bonuses = await affix_manager.get_affix_bonuses(db, user_id, action)
     if affix_bonuses is None:
         affix_bonuses = {t: 0 for t in affix_manager.AFFIX_TYPES}
@@ -127,7 +128,7 @@ async def _run_one_cycle(
         await resource_manager.deposit(db, "knowledge", settlement_output, cycle_end_time)
     elif action in ("building", "research"):
         target_building = (
-            "research_lab" if action == "research" else player["action_target"]
+            "research_lab" if action == "research" else action_target
         )
         stages_cleared = await stage_manager.get_stages_cleared(db)
 
@@ -214,10 +215,10 @@ async def _run_one_cycle(
     if random.random() < drop_rate:
         await player_manager.add_material(db, user_id, action, 1, cycle_end_time)
 
-    # Update player cycle timestamps
-    if update_timestamps:
+    # Update player cycle timestamps (manual action only; burst/auto-tool advance elsewhere)
+    if write_player_timestamps:
         now_str = dt_str(cycle_end_time)
-        effective_secs = _effective_cycle_seconds(affix_bonuses["cycle_time_reduce"])
+        effective_secs = effective_cycle_seconds(affix_bonuses["cycle_time_reduce"])
         new_completion = dt_str(cycle_end_time + timedelta(seconds=effective_secs))
         await db.execute(
             "UPDATE players SET last_update_time=?, completion_time=?, updated_at=? WHERE user_id=?",
@@ -248,14 +249,18 @@ async def settle_complete_cycles(user_id: str, now: datetime) -> list[dict]:
             return events
 
         action = player["action"]
+        action_target = player["action_target"]
         affix_bonuses = await affix_manager.get_affix_bonuses(db, user_id, action)
-        effective_secs = _effective_cycle_seconds(affix_bonuses["cycle_time_reduce"])
+        effective_secs = effective_cycle_seconds(affix_bonuses["cycle_time_reduce"])
         max_cycles = get_env_int("MAX_CYCLES_PER_SETTLEMENT")
         cycle_end = completion_time
         cycles_done = 0
 
         while cycle_end <= now and cycles_done < max_cycles:
-            cycle_events = await _run_one_cycle(db, user_id, cycle_end, affix_bonuses=affix_bonuses)
+            cycle_events = await _run_one_cycle(
+                db, user_id, cycle_end,
+                action=action, action_target=action_target, affix_bonuses=affix_bonuses,
+            )
             events.extend(cycle_events)
             cycle_end += timedelta(seconds=effective_secs)
             cycles_done += 1
@@ -298,13 +303,17 @@ async def change_action(
         old_affix_bonuses = None
         if old_action is not None and completion_time_str is not None:
             old_affix_bonuses = await affix_manager.get_affix_bonuses(db, user_id, old_action)
-            old_effective_secs = _effective_cycle_seconds(old_affix_bonuses["cycle_time_reduce"])
+            old_effective_secs = effective_cycle_seconds(old_affix_bonuses["cycle_time_reduce"])
             completion_time = parse_dt(completion_time_str)
             max_cycles = get_env_int("MAX_CYCLES_PER_SETTLEMENT")
             cycle_end = completion_time
             cycles_done = 0
             while cycle_end <= now and cycles_done < max_cycles:
-                cycle_events = await _run_one_cycle(db, user_id, cycle_end, affix_bonuses=old_affix_bonuses)
+                cycle_events = await _run_one_cycle(
+                    db, user_id, cycle_end,
+                    action=old_action, action_target=player["action_target"],
+                    affix_bonuses=old_affix_bonuses,
+                )
                 events.extend(cycle_events)
                 cycle_end += timedelta(seconds=old_effective_secs)
                 cycles_done += 1
@@ -318,7 +327,7 @@ async def change_action(
             last_update = parse_dt(last_update_time_str)
             if old_affix_bonuses is None:
                 old_affix_bonuses = await affix_manager.get_affix_bonuses(db, user_id, old_action)
-            old_effective_secs = _effective_cycle_seconds(old_affix_bonuses["cycle_time_reduce"])
+            old_effective_secs = effective_cycle_seconds(old_affix_bonuses["cycle_time_reduce"])
             elapsed = (now - last_update).total_seconds()
             ratio = min(max(elapsed / old_effective_secs, 0.0), 1.0)
 
@@ -360,7 +369,7 @@ async def change_action(
         actual_target = new_target if new_action == "building" else None
         if new_action is not None:
             new_affix_bonuses = await affix_manager.get_affix_bonuses(db, user_id, new_action)
-            new_effective_secs = _effective_cycle_seconds(new_affix_bonuses["cycle_time_reduce"])
+            new_effective_secs = effective_cycle_seconds(new_affix_bonuses["cycle_time_reduce"])
             new_completion = dt_str(now + timedelta(seconds=new_effective_secs))
             await db.execute(
                 """UPDATE players
@@ -404,7 +413,11 @@ async def settle_burst(user_id: str, now: datetime) -> tuple[bool, list[dict]]:
 
         burst_affix_bonuses = await affix_manager.get_affix_bonuses(db, user_id, player["action"])
         for _ in range(3):
-            cycle_events = await _run_one_cycle(db, user_id, now, update_timestamps=False, affix_bonuses=burst_affix_bonuses)
+            cycle_events = await _run_one_cycle(
+                db, user_id, now,
+                action=player["action"], action_target=player["action_target"],
+                write_player_timestamps=False, affix_bonuses=burst_affix_bonuses,
+            )
             events.extend(cycle_events)
 
         await db.commit()
