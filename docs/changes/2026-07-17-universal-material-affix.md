@@ -1,6 +1,6 @@
 ---
 title: "萬能素材擴大適用：詞條抽取/清除"
-status: Refactored
+status: Done
 created: 2026-07-17
 doc_type: change
 last_reviewed: 2026-07-17
