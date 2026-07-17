@@ -109,12 +109,13 @@ async def clear_affix(db, user_id: str, gear_type: str, slot_index: int, gear_le
     """
     Clear the affix at slot_index.
 
-    Costs AFFIX_CLEAR_COST of the corresponding material.
+    Costs AFFIX_CLEAR_COST of the corresponding material; own-type material is
+    spent first, any shortfall is drawn from universal material.
     Raises ValueError if:
       - gear_type is invalid
       - slot_index is out of unlocked range
       - slot is empty
-      - insufficient materials
+      - own-type + universal materials are insufficient
     Returns {affix_type, value} of the cleared affix.
     """
     if gear_type not in GEAR_TYPES:
@@ -131,9 +132,18 @@ async def clear_affix(db, user_id: str, gear_type: str, slot_index: int, gear_le
 
     cost = get_env_int("AFFIX_CLEAR_COST")
     mats = await player_manager.get_material(db, user_id, gear_type)
-    if mats < cost:
-        raise ValueError(f"Insufficient materials: need {cost}, have {mats}")
-    await player_manager.spend_material(db, user_id, gear_type, cost, now)
+    universal = await player_manager.get_universal_material(db, user_id)
+    if mats + universal < cost:
+        raise ValueError(
+            f"Insufficient materials: need {cost}, have {mats} "
+            f"(+{universal} universal)"
+        )
+    from_type = min(cost, mats)
+    if from_type > 0:
+        await player_manager.spend_material(db, user_id, gear_type, from_type, now)
+    shortfall = cost - from_type
+    if shortfall > 0:
+        await player_manager.spend_universal_material(db, user_id, shortfall, now)
 
     await db.execute(
         "DELETE FROM gear_affixes WHERE user_id=? AND gear_type=? AND slot_index=?",

@@ -75,7 +75,7 @@ shortfall = cost - from_type
   - Depends on: 無（`get_universal_material`/`spend_universal_material` 已存在）
   - Acceptance: 前置檢查為 `mats + universal >= cost`；扣除順序 `from_type = min(cost, mats)` 先扣本類型、`shortfall = cost - from_type` 扣萬能；不足時 raise `ValueError` 且不 INSERT 詞條、不扣任何素材；回傳值結構 `{slot_index, affix_type, value}` 不變；新增與既有測試全數通過
 
-- [ ] Task 2: `clear_affix` 素材檢查/扣除改為萬能素材補足 [可與 Task 1 並行]
+- [x] Task 2: `clear_affix` 素材檢查/扣除改為萬能素材補足 [可與 Task 1 並行]
   - Files: `src/managers/affix_manager.py`
   - Tests: `tests/test_affix_manager.py` — 新增涵蓋：(a) 本類型素材足夠時不動用萬能素材、(b) 本類型不足但萬能素材補足後可清除且兩者正確扣除、(c) 兩者相加仍不足時 raise `ValueError` 且不扣除任何資源（含詞條未被刪除）
   - Depends on: 無

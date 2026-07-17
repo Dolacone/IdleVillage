@@ -216,6 +216,71 @@ class TestClearAffix(DatabaseTestCase):
             with self.assertRaises(ValueError):
                 await affix_manager.clear_affix(db, USER, "bad", 0, 10, NOW)
 
+    async def _setup_player_with_affix(self, db, user_id, materials):
+        await _insert_player(db, user_id, gear_level=10, materials=materials + int(os.environ["AFFIX_EXTRACT_COST"]))
+        await affix_manager.extract_affix(db, user_id, GEAR, 10, NOW)
+        await db.commit()
+
+    async def test_clear_own_type_sufficient_ignores_universal(self):
+        cost = int(os.environ["AFFIX_CLEAR_COST"])
+        async with schema.get_connection() as db:
+            await self._setup_player_with_affix(db, "c_own", materials=cost)
+            await player_manager.set_universal_material(db, "c_own", 5, NOW)
+            await db.commit()
+            await affix_manager.clear_affix(db, "c_own", GEAR, 0, 10, NOW)
+            await db.commit()
+            mats = await player_manager.get_material(db, "c_own", GEAR)
+            universal = await player_manager.get_universal_material(db, "c_own")
+        self.assertEqual(mats, 0)
+        self.assertEqual(universal, 5)
+
+    async def test_clear_uses_universal_for_shortfall(self):
+        cost = int(os.environ["AFFIX_CLEAR_COST"])
+        async with schema.get_connection() as db:
+            await self._setup_player_with_affix(db, "c_uni", materials=0)
+            await player_manager.set_universal_material(db, "c_uni", cost, NOW)
+            await db.commit()
+            await affix_manager.clear_affix(db, "c_uni", GEAR, 0, 10, NOW)
+            await db.commit()
+            mats = await player_manager.get_material(db, "c_uni", GEAR)
+            universal = await player_manager.get_universal_material(db, "c_uni")
+            affixes = await affix_manager.get_affixes(db, "c_uni", GEAR)
+        self.assertEqual(mats, 0)
+        self.assertEqual(universal, 0)
+        self.assertEqual(affixes, [])
+
+    async def test_clear_mixes_own_type_then_universal(self):
+        cost = int(os.environ["AFFIX_CLEAR_COST"])
+        if cost < 2:
+            self.skipTest("AFFIX_CLEAR_COST too low to split across sources")
+        async with schema.get_connection() as db:
+            await self._setup_player_with_affix(db, "c_mix", materials=1)
+            await player_manager.set_universal_material(db, "c_mix", cost, NOW)
+            await db.commit()
+            await affix_manager.clear_affix(db, "c_mix", GEAR, 0, 10, NOW)
+            await db.commit()
+            mats = await player_manager.get_material(db, "c_mix", GEAR)
+            universal = await player_manager.get_universal_material(db, "c_mix")
+        self.assertEqual(mats, 0)
+        # own-type had 1, so shortfall = cost - 1 drawn from universal (started at cost)
+        self.assertEqual(universal, cost - (cost - 1))
+
+    async def test_clear_raises_when_combined_insufficient_and_no_spend(self):
+        cost = int(os.environ["AFFIX_CLEAR_COST"])
+        async with schema.get_connection() as db:
+            await self._setup_player_with_affix(db, "c_short", materials=1)
+            await player_manager.set_universal_material(db, "c_short", 0, NOW)
+            await db.commit()
+            with self.assertRaises(ValueError):
+                await affix_manager.clear_affix(db, "c_short", GEAR, 0, 10, NOW)
+            await db.commit()
+            mats = await player_manager.get_material(db, "c_short", GEAR)
+            universal = await player_manager.get_universal_material(db, "c_short")
+            affixes = await affix_manager.get_affixes(db, "c_short", GEAR)
+        self.assertEqual(mats, 1)
+        self.assertEqual(universal, 0)
+        self.assertEqual(len(affixes), 1)
+
 
 class TestClearAllAffixes(DatabaseTestCase):
     async def test_clear_all_removes_all_affixes(self):
