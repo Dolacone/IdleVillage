@@ -69,7 +69,7 @@ shortfall = cost - from_type
 
 ## Tasks
 
-- [ ] Task 1: `extract_affix` 素材檢查/扣除改為萬能素材補足 [可與 Task 2 並行]
+- [x] Task 1: `extract_affix` 素材檢查/扣除改為萬能素材補足 [可與 Task 2 並行]
   - Files: `src/managers/affix_manager.py`
   - Tests: `tests/test_affix_manager.py` — 新增涵蓋：(a) 本類型素材足夠時不動用萬能素材、(b) 本類型不足但萬能素材補足後可抽取且兩者正確扣除、(c) 兩者相加仍不足時 raise `ValueError` 且不扣除任何資源（含詞條未寫入）；既有 `test_extract_raises_on_insufficient_materials`（本類型 0、萬能 0）需維持通過
   - Depends on: 無（`get_universal_material`/`spend_universal_material` 已存在）

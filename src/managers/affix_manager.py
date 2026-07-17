@@ -58,12 +58,13 @@ async def extract_affix(db, user_id: str, gear_type: str, gear_level: int, now: 
     """
     Extract one affix into the first empty slot.
 
-    Costs AFFIX_EXTRACT_COST of the corresponding material.
+    Costs AFFIX_EXTRACT_COST of the corresponding material; own-type material is
+    spent first, any shortfall is drawn from universal material.
     Raises ValueError if:
       - gear_type is invalid
       - no slots unlocked (gear_level < AFFIX_SLOT_INTERVAL)
       - all unlocked slots are filled
-      - insufficient materials
+      - own-type + universal materials are insufficient
     Returns {slot_index, affix_type, value}.
     """
     if gear_type not in GEAR_TYPES:
@@ -81,9 +82,18 @@ async def extract_affix(db, user_id: str, gear_type: str, gear_level: int, now: 
 
     cost = get_env_int("AFFIX_EXTRACT_COST")
     mats = await player_manager.get_material(db, user_id, gear_type)
-    if mats < cost:
-        raise ValueError(f"Insufficient materials: need {cost}, have {mats}")
-    await player_manager.spend_material(db, user_id, gear_type, cost, now)
+    universal = await player_manager.get_universal_material(db, user_id)
+    if mats + universal < cost:
+        raise ValueError(
+            f"Insufficient materials: need {cost}, have {mats} "
+            f"(+{universal} universal)"
+        )
+    from_type = min(cost, mats)
+    if from_type > 0:
+        await player_manager.spend_material(db, user_id, gear_type, from_type, now)
+    shortfall = cost - from_type
+    if shortfall > 0:
+        await player_manager.spend_universal_material(db, user_id, shortfall, now)
 
     affix_type = random.choice(AFFIX_TYPES)
     value = random.randint(AFFIX_VALUE_MIN, AFFIX_VALUE_MAX)
