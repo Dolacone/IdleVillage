@@ -146,19 +146,19 @@ class TestExtractAffix(DatabaseTestCase):
         self.assertEqual(universal, 0)
 
     async def test_extract_mixes_own_type_then_universal(self):
-        cost = int(os.environ["AFFIX_EXTRACT_COST"])
-        if cost < 2:
-            self.skipTest("AFFIX_EXTRACT_COST too low to split across sources")
-        async with schema.get_connection() as db:
-            await _insert_player(db, "u_mix", gear_level=10, materials=1)
-            await player_manager.set_universal_material(db, "u_mix", cost, NOW)
-            await db.commit()
-            await affix_manager.extract_affix(db, "u_mix", GEAR, 10, NOW)
-            await db.commit()
-            mats = await player_manager.get_material(db, "u_mix", GEAR)
-            universal = await player_manager.get_universal_material(db, "u_mix")
+        # Force cost=2 so own-type (1) and universal must split; would fail if the
+        # deduction were universal-first (universal would drop by 2, mats stay at 1).
+        with patch.dict(os.environ, {"AFFIX_EXTRACT_COST": "2"}):
+            async with schema.get_connection() as db:
+                await _insert_player(db, "u_mix", gear_level=10, materials=1)
+                await player_manager.set_universal_material(db, "u_mix", 5, NOW)
+                await db.commit()
+                await affix_manager.extract_affix(db, "u_mix", GEAR, 10, NOW)
+                await db.commit()
+                mats = await player_manager.get_material(db, "u_mix", GEAR)
+                universal = await player_manager.get_universal_material(db, "u_mix")
         self.assertEqual(mats, 0)
-        self.assertEqual(universal, cost - 1)
+        self.assertEqual(universal, 4)
 
     async def test_extract_raises_when_combined_insufficient_and_no_spend(self):
         cost = int(os.environ["AFFIX_EXTRACT_COST"])

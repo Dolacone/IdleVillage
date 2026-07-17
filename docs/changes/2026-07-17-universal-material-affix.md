@@ -1,6 +1,6 @@
 ---
 title: "萬能素材擴大適用：詞條抽取/清除"
-status: Issues-confirmed
+status: Ready-to-review
 created: 2026-07-17
 doc_type: change
 last_reviewed: 2026-07-17
@@ -101,6 +101,6 @@ shortfall = cost - from_type
 
 ## Review Issues
 
-- [ ] [Major] `extract_affix` 的「本類型優先、差額用萬能素材補足」混合扣除順序在測試套件中未被實際驗證。`tests/test_affix_manager.py:145-160` 的 `test_extract_mixes_own_type_then_universal` 以 `if cost < 2: skipTest` 開頭，而測試環境 `tests/support.py:206` 設 `AFFIX_EXTRACT_COST=1`，故此測試永遠 skip（實測 `488 passed, 1 skipped`）。剩餘的 `test_extract_uses_universal_for_shortfall`（`tests/test_affix_manager.py:132-144`）以 `materials=0` 執行，`from_type=min(cost,0)=0`，只驗證純萬能扣除、不觸及 own-first 分帳。若 `extract_affix`（`src/managers/affix_manager.py:88-92`）被改成「萬能優先」，此路徑仍會通過，缺陷不會被捕捉。Task 1 acceptance 測試 (b)「兩者正確扣除」對 extract 實際未被驗證（clear 的同名測試 `:253-267` 在 `AFFIX_CLEAR_COST=3` 下有跑，是唯一涵蓋 own+universal 分帳順序的測試）。
-- [ ] [Minor] `spend_universal_material` 回傳值被忽略（`src/managers/affix_manager.py:96`、`:146`）。若併發下該呼叫回傳 `False`（前置檢查通過但實際餘額不足），程式仍會 INSERT/DELETE 詞條，形成未付費即改動詞條的路徑。此為刻意比照 `gear_manager.attempt_upgrade`（`src/managers/gear_manager.py:227-232` 同樣忽略回傳值）的既有模式，非本次新增的回歸；依 Architecture Decision 3 的「維持相同風格」屬設計選擇，僅列為知會。
-- [ ] [Minor] `docs/managers/player-manager.md:78`（本次編輯的「萬能素材」章節內）仍寫「目前無任何掉落或產出管道可取得萬能素材，僅能由管理員透過 `/idlevillage-manager` 呼叫 `setUniversalMaterial` 設定」，與 `docs/managers/trial-manager.md:110`「試煉獎勵是 `materials_universal` 目前唯一的實際獲取管道」及 `src/managers/trial_manager.py:138` 的 `add_universal_material` 發放邏輯衝突（同章節欄位表 `:31` 亦仍稱「僅為佔位」且誤指 `setMaterial`）。屬既有過期敘述，非本次 fallback 邏輯範圍，但為 SSOT 衝突。
+- [x] [Major] `extract_affix` 的「本類型優先、差額用萬能素材補足」混合扣除順序在測試套件中未被實際驗證。`test_extract_mixes_own_type_then_universal` 以 `if cost < 2: skipTest` 開頭，而測試環境設 `AFFIX_EXTRACT_COST=1`，故永遠 skip；其餘 fallback 測試以 `materials=0` 執行，不觸及 own-first 分帳，若改成「萬能優先」仍會通過。→ 已改寫該測試：以 `patch.dict` 強制 `AFFIX_EXTRACT_COST=2`、`materials=1`、`universal=5`，斷言 own 扣至 0 且 universal 由 5 降至 4（若為萬能優先則 universal 會降 2 至 3、materials 留 1，斷言失敗）。現 own-first 分帳順序被實際驗證，`tests/test_affix_manager.py` 31 passed 無 skip。
+- [x] [Minor] `spend_universal_material` 回傳值被忽略（`src/managers/affix_manager.py`）。此為刻意比照 `gear_manager.attempt_upgrade`（同樣忽略回傳值）的既有模式，前置檢查已保證 `mats + universal >= cost`，非本次新增的回歸；依 Architecture Decision 3「維持相同風格」屬設計選擇，不修改，僅知會。
+- [x] [Minor] `docs/managers/player-manager.md` 萬能素材章節與欄位表仍寫「目前無任何獲取管道／僅為佔位」，與 `trial-manager.md` 及 `trial_manager.py` 的試煉獎勵發放衝突。→ 已將欄位表描述與章節第 4 點改為「村莊試煉獎勵發放（`addUniversalMaterial`）或管理員 `setUniversalMaterial` 設定」，SSOT 衝突消除。

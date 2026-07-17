@@ -28,7 +28,7 @@ source_paths:
 | `materials_building` | int | 0 | 建設素材（建設用） |
 | `materials_combat` | int | 0 | 戰鬥素材（狩獵工具用） |
 | `materials_research` | int | 0 | 研究素材（研究用） |
-| `materials_universal` | int | 0 | 萬能素材，可作為任意類型素材使用；目前無任何獲取管道（僅為佔位），只能由管理員透過 `setMaterial` 設定 |
+| `materials_universal` | int | 0 | 萬能素材，可作為任意類型素材使用；由村莊試煉獎勵發放（`addUniversalMaterial`）或管理員 `setUniversalMaterial` 設定 |
 | `gear_gathering` | int | 0 | 採集工具等級 |
 | `gear_building` | int | 0 | 建設工具等級 |
 | `gear_combat` | int | 0 | 狩獵工具等級 |
@@ -75,7 +75,7 @@ source_paths:
 - `materials_universal` 可作為任意類型素材使用，適用於工具強化（gear-manager `attempt_upgrade`，標準/墊檔/鐵齒三種模式）與詞條抽取/清除（affix-manager `extract_affix`/`clear_affix`）的素材消耗補足差額，詳見 `managers/gear-manager.md`、`managers/affix-manager.md`。
 - 上述動作一律先扣該類型自身素材，不足差額才由萬能素材補足；兩者相加仍不足時視為前置條件不滿足，不執行動作、不扣除任何資源。
 - 獻祭素材（`sacrifice_material`）不吃萬能素材，僅使用該類型自身素材。
-- 目前無任何掉落或產出管道可取得萬能素材，僅能由管理員透過 `/idlevillage-manager` 呼叫 `setUniversalMaterial` 設定，作為佔位驗證用途。
+- 取得管道：村莊試煉達標依貢獻度發放萬能素材（`trial-manager` 呼叫 `addUniversalMaterial`，見 `managers/trial-manager.md`）；不進入一般素材掉落表。管理員亦可透過 `/idlevillage-manager` 呼叫 `setUniversalMaterial` 直接設定。
 
 ## 操作介面（供其他模組呼叫）
 
