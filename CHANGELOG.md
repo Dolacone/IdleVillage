@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-07-17
+
+- 新增「自動工具」：主介面 `⚙️ 自動工具` 按鈕可對閒置工具掛載背景行動流。花費該工具的專屬素材啟動（不可用萬能素材），每 1 素材運行 1 小時，單一工具剩餘時間上限 6 小時，運行中可補充。
+- 自動工具效果完全等同玩家手動行動：獨立的結算週期計時，各自計算效率、資源消耗（資源不足同樣產出減半）、素材掉落、關卡進度與村莊試煉貢獻（歸於該玩家），並觸發建築升級。
+- 建設自動工具需選目標建築；研究自動工具灌研究所。
+- 互斥規則：正在自動運行的工具不能被選為手動行動，反之亦然；同一工具不能同時開兩個自動工具。行動下拉會排除運行中的自動工具。
+
 ## 2026-07-15
 
 - Village Dashboard's "🏆 試煉" line is now always shown instead of being omitted while no trial is active. It switches between the existing progress display (active), `⏳ 可於 <t:...:t> 後開啟`（fixed clock time, not a countdown）while in cooldown, `⚠️ 資源不足，尚無法開啟` when no resource type can currently afford a trial, and `✅ 可開啟試煉` when one can be started. `/idlevillage`'s Ephemeral main interface is unaffected — it keeps relying on the "🏆 開啟試煉" button's disabled state instead.
