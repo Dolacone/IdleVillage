@@ -42,9 +42,17 @@ source_paths:
 | `gear_type_select` | 選擇工具類型 | 更新強化預覽資訊（保留當前模式） |
 | `upgrade_mode_select:{gear_type}` | 選擇強化模式（標準 / 墊檔 / 鐵齒） | 更新成本預覽與成功率顯示 |
 | `attempt_upgrade:{gear_type}:{mode}` | 點擊強化 | 呼叫 `gear-manager.attempt_upgrade(db, user_id, gear_type, now, mode)`，顯示結果 |
-| `extract_affix:{gear_type}` | 點擊抽取詞條 | 消耗 `AFFIX_EXTRACT_COST` 個素材（先扣對應素材，不足由萬能素材補足），隨機填入第一個空槽；滿槽時按鈕 disabled |
-| `clear_affix:{gear_type}:{slot_index}` | 點擊清除槽 N | 消耗 `AFFIX_CLEAR_COST` 個素材（先扣對應素材，不足由萬能素材補足），清除指定槽詞條；空槽時不渲染此按鈕 |
+| `open_affix_mgmt:{gear_type}` | 點擊詞條管理 | 切到獨立詞條管理畫面；實際開啟時不預設選中工具類型 |
 | `back_to_main` | 點擊返回 | 重新渲染主介面 |
+
+### 詞條管理畫面
+| 元件 ID | 觸發條件 | 處理邏輯 |
+| :--- | :--- | :--- |
+| `affix_gear_select` | 選擇工具類型 | 重新渲染詞條管理畫面，載入該工具的槽位與現有詞條 |
+| `affix_slot_select:{gear_type}` | 選擇要清除的詞條槽 | 重新渲染詞條管理畫面，將該槽標記為待清除 |
+| `affix_extract:{gear_type}` | 點擊抽取詞條 | 消耗 `AFFIX_EXTRACT_COST` 個素材（先扣對應素材，不足由萬能素材補足），隨機填入第一個空槽 |
+| `affix_clear:{gear_type}:{slot_index}` | 點擊清除詞條 | 消耗 `AFFIX_CLEAR_COST` 個素材（先扣對應素材，不足由萬能素材補足），清除指定槽詞條 |
+| `back_to_gear:{gear_type}` | 點擊返回 | 回到工具強化子選單 |
 
 ### 管理員介面（資源管理）
 | 元件 ID | 觸發條件 | 處理邏輯 |

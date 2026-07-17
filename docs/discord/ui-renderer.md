@@ -197,24 +197,29 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 - 鐵齒：`僅消耗 1 個素材，成功 +1~+3（50/35/15%），失敗則工具等級與 pity 均歸零`
 
 初始狀態：介面開啟時，工具類型 Dropdown 與強化模式 Dropdown 均不預設選中任何選項；
-兩個按鈕（🎲 強化工具、🩸 獻祭素材）及詞條管理入口在工具類型未選定前均 disabled。
+三個按鈕（🎲 強化工具、🩸 獻祭素材、🔮 詞條管理）在工具類型未選定前均 disabled。
 
 - **Button**：`🎲 強化工具`（Green，禁用條件：素材不足 / AP 不足 / 已達上限）
 - **Button**：`🩸 獻祭素材`（Red，禁用條件：所選工具類型素材 == 0）；custom_id: `sacrifice_material:{gear_type}`；與 🎲 強化工具、← 返回 **同一 ActionRow**，不佔新列
 - **Button**：`← 返回`（Gray）
 
-### 詞條操作（`max_slots > 0` 時出現，佔一個 ActionRow）
+### 詞條管理入口
 
-> 詞條管理入口（`open_affix_mgmt:{gear_type}`）開啟時，工具類型 Dropdown（`affix_gear_select`）不預設選中任何選項；未選定工具類型前，詞條操作按鈕均 disabled。
+- **Button**：`🔮 詞條管理`（Blue，custom_id: `open_affix_mgmt:{gear_type}`，禁用條件：`max_slots == 0`）；位於工具強化子選單與 `🎲 強化工具` / `🩸 獻祭素材` / `← 返回` 同一列
+- 點擊後切到獨立的詞條管理畫面；開啟時工具類型 Dropdown（`affix_gear_select`）不預設選中任何選項
 
-- **Button**：`✨ 抽取詞條`（Blue，禁用條件：詞條槽已滿）；custom_id: `extract_affix:{gear_type}`
-- **Button**：`🗑️ 清除詞條`（Red，禁用條件：無詞條）；custom_id: `open_clear_affix:{gear_type}`
+### 詞條管理畫面
+
+- **Dropdown**：工具類型（custom_id: `affix_gear_select`）
+  - 選項描述沿用工具強化畫面的等級/效率預覽
+- **Dropdown**：詞條槽選擇（custom_id: `affix_slot_select:{gear_type}`；僅有現存詞條時出現）
+  - 選項格式：`槽 {n}: {詞條類型}`
+  - 選項描述：`{±value}%`
+- **Button**：`🗑️ 清除詞條`（Red，custom_id: `affix_clear:{gear_type}:{slot_index}`，禁用條件：尚未選定槽位）
+- **Button**：`✨ 抽取詞條`（Blue，custom_id: `affix_extract:{gear_type}`，禁用條件：詞條槽已滿）
+- **Button**：`← 返回`（Gray，custom_id: `back_to_gear:{gear_type}`）
 
 抽取/清除的素材消耗若該類型素材不足，自動用萬能素材補足差額（兩者相加仍不足時執行才報錯），比照工具強化子選單；按鈕 disabled 條件不含素材是否足夠的判斷。
-
-點擊「🗑️ 清除詞條」後，介面重繪並在下一個 ActionRow 加入詞條選擇 Dropdown：
-
-- **Dropdown**（custom_id: `clear_affix_select:{gear_type}`）：選項為現有詞條，格式 `槽 {n}: {詞條類型}`，描述 `{±value}%`；選擇後執行清除並返回正常介面。
 
 ## 管理員介面 Embed（/idlevillage-manage）
 

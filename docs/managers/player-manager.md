@@ -68,7 +68,7 @@ source_paths:
 - Burst 視為 3 次完整 cycle settlement，每次各自判定素材掉落。
 - Partial cycle 不掉落素材。
 - 素材個人持有，不進入村莊資源池。
-- 唯一用途：工具強化（呼叫 gear-manager）。
+- 用途：工具強化（呼叫 gear-manager）與詞條抽取/清除（呼叫 affix-manager）。
 
 ## 萬能素材
 
