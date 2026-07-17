@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-07-17
+
+- 萬能素材（`materials_universal`）現在也能用於詞條抽取與清除的素材消耗，不再僅限工具強化。規則與強化一致：先扣該工具類型自身素材，不足差額才由萬能素材補足；兩者相加仍不足時無法執行該動作，且不扣除任何素材。獻祭素材仍不吃萬能素材。
+
 ## 2026-07-15
 
 - Village Dashboard's "🏆 試煉" line is now always shown instead of being omitted while no trial is active. It switches between the existing progress display (active), `⏳ 可於 <t:...:t> 後開啟`（fixed clock time, not a countdown）while in cooldown, `⚠️ 資源不足，尚無法開啟` when no resource type can currently afford a trial, and `✅ 可開啟試煉` when one can be started. `/idlevillage`'s Ephemeral main interface is unaffected — it keeps relying on the "🏆 開啟試煉" button's disabled state instead.

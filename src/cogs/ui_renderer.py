@@ -630,11 +630,16 @@ def build_affix_embed(
     affixes: list,
     max_slots: int,
     selected_slot: int | None = None,
+    materials: int = 0,
+    universal_materials: int = 0,
 ) -> disnake.Embed:
     if gear_type is None:
         return disnake.Embed(description="🔮 詞條管理\n請選擇工具類型", color=disnake.Color.purple())
     label = GEAR_LABELS.get(gear_type, gear_type)
-    lines = [f"🔮 詞條管理 — {ACTION_EMOJIS.get(gear_type, '')} {label}"]
+    lines = [
+        f"🔮 詞條管理 — {ACTION_EMOJIS.get(gear_type, '')} {label}",
+        f"持有素材：{materials} 個 ｜ 🌟 萬能素材：{universal_materials} 個",
+    ]
     affix_section = _build_affix_section(affixes, max_slots)
     if affix_section:
         lines.append(affix_section)
