@@ -15,6 +15,7 @@ V2_TABLE_NAMES = {
     "gear_affixes",
     "trial_state",
     "trial_contributions",
+    "player_auto_tools",
 }
 
 
@@ -185,6 +186,40 @@ class PlayerIndexesExist(DatabaseTestCase):
     async def test_action_index_exists(self):
         row = await self.fetchone(
             "SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_players_action'"
+        )
+        self.assertIsNotNone(row)
+
+
+class PlayerAutoToolsTable(DatabaseTestCase):
+    async def test_table_exists_with_expected_columns(self):
+        rows = await self.fetchall("PRAGMA table_info(player_auto_tools)")
+        cols = {row[1] for row in rows}
+        self.assertEqual(
+            cols,
+            {"user_id", "tool_type", "action_target", "completion_time",
+             "last_update_time", "expires_at", "started_at", "updated_at"},
+        )
+
+    async def test_primary_key_is_user_id_tool_type(self):
+        rows = await self.fetchall("PRAGMA table_info(player_auto_tools)")
+        pk_cols = {row[1] for row in rows if row[5] > 0}
+        self.assertEqual(pk_cols, {"user_id", "tool_type"})
+
+    async def test_completion_index_exists(self):
+        row = await self.fetchone(
+            "SELECT 1 FROM sqlite_master WHERE type='index' AND name='idx_auto_tools_completion'"
+        )
+        self.assertIsNotNone(row)
+
+    async def test_new_table_autocreated_on_existing_db(self):
+        # Dropping then re-running init_db() (idempotent CREATE IF NOT EXISTS)
+        # recreates the table without ALTER migration.
+        async with schema.get_connection() as db:
+            await db.execute("DROP TABLE player_auto_tools")
+            await db.commit()
+        await schema.init_db()
+        row = await self.fetchone(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='player_auto_tools'"
         )
         self.assertIsNotNone(row)
 
