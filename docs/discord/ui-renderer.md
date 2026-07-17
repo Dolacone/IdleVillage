@@ -1,7 +1,7 @@
 ---
 title: "Module: ui-renderer"
 doc_type: module
-last_reviewed: 2026-07-15
+last_reviewed: 2026-07-17
 source_paths:
   - src/cogs/ui_renderer.py
 ---
@@ -210,6 +210,8 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 - **Button**：`✨ 抽取詞條`（Blue，禁用條件：詞條槽已滿）；custom_id: `extract_affix:{gear_type}`
 - **Button**：`🗑️ 清除詞條`（Red，禁用條件：無詞條）；custom_id: `open_clear_affix:{gear_type}`
 
+抽取/清除的素材消耗若該類型素材不足，自動用萬能素材補足差額（兩者相加仍不足時執行才報錯），比照工具強化子選單；按鈕 disabled 條件不含素材是否足夠的判斷。
+
 點擊「🗑️ 清除詞條」後，介面重繪並在下一個 ActionRow 加入詞條選擇 Dropdown：
 
 - **Dropdown**（custom_id: `clear_affix_select:{gear_type}`）：選項為現有詞條，格式 `槽 {n}: {詞條類型}`，描述 `{±value}%`；選擇後執行清除並返回正常介面。
@@ -257,6 +259,7 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
 
 ## Changelog
 
+- 2026-07-17: 詞條操作段落補充：抽取/清除素材不足時自動用萬能素材補足差額（比照工具強化子選單），按鈕 disabled 條件不含素材判斷。
 - 2026-07-15: The 4-state `🏆 試煉` display (previously Dashboard-only, see below) now also applies to the `/idlevillage` main interface's village section, since both reuse the same `_build_village_section`/`_build_trial_line` with no distinguishing parameter. Removed the `show_trial_status_line` toggle that had scoped the new states to the Dashboard only.
 - 2026-07-15: Dashboard `🏆 試煉` line is now always shown instead of being omitted while no trial is active. Content switches between 4 states: active (unchanged progress format), cooldown (`⏳ 可於 <t:{cooldown_deadline}:t> 後開啟`, fixed time via Discord's `:t` style, not relative), insufficient resources (`⚠️ 資源不足，尚無法開啟`), and openable (`✅ 可開啟試煉`).
 - 2026-07-14: `open_trial_start` no longer opens a Modal. Clicking it directly starts a trial with a fixed `TRIAL_TARGET_AMOUNT` and a system-chosen resource (uniformly random among affordable types) — zero player input. `build_main_components` now also takes `resources` to additionally disable the button when no resource type can afford `TRIAL_TARGET_AMOUNT`.

@@ -1,6 +1,6 @@
 ---
 title: "萬能素材擴大適用：詞條抽取/清除"
-status: Ready-to-implement
+status: Ready-to-review
 created: 2026-07-17
 doc_type: change
 last_reviewed: 2026-07-17
@@ -81,7 +81,7 @@ shortfall = cost - from_type
   - Depends on: 無
   - Acceptance: 前置檢查為 `mats + universal >= cost`；扣除順序同 Task 1；不足時 raise `ValueError` 且不 DELETE 詞條、不扣任何素材；回傳值結構 `{affix_type, value}` 不變；新增與既有測試全數通過
 
-- [ ] Task 3: 文件更新
+- [x] Task 3: 文件更新
   - Files: `docs/managers/affix-manager.md`, `docs/managers/player-manager.md`, `docs/discord/ui-renderer.md`, `docs/discord/command-handler.md`
   - Tests: 無（純文件）
   - Depends on: Task 1, Task 2

@@ -1,7 +1,7 @@
 ---
 title: "Module: command-handler"
 doc_type: module
-last_reviewed: 2026-07-14
+last_reviewed: 2026-07-17
 source_paths:
   - src/cogs/actions.py
   - src/cogs/general.py
@@ -42,8 +42,8 @@ source_paths:
 | `gear_type_select` | 選擇工具類型 | 更新強化預覽資訊（保留當前模式） |
 | `upgrade_mode_select:{gear_type}` | 選擇強化模式（標準 / 墊檔 / 鐵齒） | 更新成本預覽與成功率顯示 |
 | `attempt_upgrade:{gear_type}:{mode}` | 點擊強化 | 呼叫 `gear-manager.attempt_upgrade(db, user_id, gear_type, now, mode)`，顯示結果 |
-| `extract_affix:{gear_type}` | 點擊抽取詞條 | 消耗 `AFFIX_EXTRACT_COST` 個對應素材，隨機填入第一個空槽；滿槽時按鈕 disabled |
-| `clear_affix:{gear_type}:{slot_index}` | 點擊清除槽 N | 消耗 `AFFIX_CLEAR_COST` 個對應素材，清除指定槽詞條；空槽時不渲染此按鈕 |
+| `extract_affix:{gear_type}` | 點擊抽取詞條 | 消耗 `AFFIX_EXTRACT_COST` 個素材（先扣對應素材，不足由萬能素材補足），隨機填入第一個空槽；滿槽時按鈕 disabled |
+| `clear_affix:{gear_type}:{slot_index}` | 點擊清除槽 N | 消耗 `AFFIX_CLEAR_COST` 個素材（先扣對應素材，不足由萬能素材補足），清除指定槽詞條；空槽時不渲染此按鈕 |
 | `back_to_main` | 點擊返回 | 重新渲染主介面 |
 
 ### 管理員介面（資源管理）
@@ -78,6 +78,7 @@ source_paths:
 
 ## Changelog
 
+- 2026-07-17: `extract_affix`/`clear_affix` 素材消耗改為「先扣對應素材，不足由萬能素材補足」；路由行為不變，僅素材來源擴充。
 - 2026-07-14: `open_trial_start` no longer opens a Modal — clicking it directly starts a trial with a fixed, system-chosen amount/resource; no player input at all. Removed the `modal_start_trial` route.
 - 2026-07-14: Replaced the `/idlevillage-trial` slash command with an `open_trial_start` button on the main interface (same row as burst/gear upgrade), disabled unless a trial can currently be started; submits via `modal_start_trial` Modal (resource type + target, free-text) instead of slash command options.
 - 2026-07-14: `/idlevillage-manager` 編輯素材數量 Modal 新增第 5 個欄位（萬能素材），`mgr_modal_material` 提交流程改為呼叫 `set_material()` × 4 + `set_universal_material()` × 1。
