@@ -1,7 +1,7 @@
 ---
 title: "Module: trial-manager"
 doc_type: module
-last_reviewed: 2026-07-14
+last_reviewed: 2026-07-17
 source_paths:
   - src/managers/trial_manager.py
 ---
@@ -40,7 +40,7 @@ source_paths:
 
 ## 進度累加
 
-`add_progress(db, output, user_id, effective_time)` — 由 action-resolver 在**每次完整週期結算（含 partial cycle、burst）**後呼叫，使用**資源不足懲罰前的 output**（比照 stage-manager 對關卡進度的既有規則），不分行動類型（比照升級關「所有項目都算進度」）。
+`add_progress(db, output, user_id, effective_time)` — 由 action-resolver 在**每次完整週期結算（含 partial cycle、burst，以及自動工具的完整週期）**後呼叫，使用**資源不足懲罰前的 output**（比照 stage-manager 對關卡進度的既有規則），不分行動類型（比照升級關「所有項目都算進度」）。自動工具的貢獻歸於該自動工具的擁有者 `user_id`（見 `managers/auto-tool-manager.md`）。
 
 ```
 若 is_active == 0 → 不做任何事，回傳 None
@@ -112,6 +112,7 @@ reward_i = ceil(contribution_i / total_contribution × (target / TRIAL_REWARD_DI
 
 ## Changelog
 
+- 2026-07-17: `add_progress` 新增「自動工具完整週期」為呼叫來源，貢獻歸於自動工具擁有者（見 `managers/auto-tool-manager.md`）。
 - 2026-07-14: 試煉改為完全自動化：`start_trial()` 不再接受 `resource_type`/`target`/`user_id` 參數，目標值固定為 `TRIAL_TARGET_AMOUNT`（取代 `TRIAL_TARGET_STEP`），資源類型由系統在「可負擔 `TRIAL_TARGET_AMOUNT` 的資源類型」中均勻隨機選定（新增 `get_eligible_resource_types()`）。`TRIAL_DURATION_SECONDS` 預設由 86400（24h）改為 43200（12h）。移除 `get_invalid_target_step()`（不再需要驗證玩家輸入的目標值）。
 - 2026-07-14: 開啟試煉的呼叫端由獨立的 `trial_cog.py` slash command 改為 `actions.py` 的主介面按鈕（`open_trial_start`）+ Modal（`modal_start_trial`）流程；`get_invalid_target_step()`/`is_cooldown_active()`/`get_cooldown_deadline_unix()` 三個共用前置條件 helper 的呼叫端隨之改變，函式本身行為不變。
 - 2026-07-14: 新增模組。

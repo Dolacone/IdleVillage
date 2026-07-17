@@ -1,7 +1,7 @@
 ---
 title: "Module: db-schema"
 doc_type: reference
-last_reviewed: 2026-07-14
+last_reviewed: 2026-07-17
 source_paths:
   - src/database/schema.py
 ---
@@ -219,6 +219,27 @@ CREATE TABLE trial_contributions (
 
 No initial rows.
 
+### player_auto_tools
+
+Running auto-tools, one row per (user_id, tool_type). See `managers/auto-tool-manager.md`.
+
+```sql
+CREATE TABLE player_auto_tools (
+  user_id TEXT NOT NULL,
+  tool_type TEXT NOT NULL,
+  action_target TEXT,
+  completion_time TEXT NOT NULL,
+  last_update_time TEXT,
+  expires_at TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, tool_type)
+);
+```
+
+No initial rows. A whole new table (not a column), so an existing DB gets it via
+`CREATE TABLE IF NOT EXISTS` on `init_db()` with no ALTER migration.
+
 ### guild_installations
 
 Single supported Discord guild record.
@@ -247,4 +268,7 @@ ON players (completion_time);
 
 CREATE INDEX idx_players_action
 ON players (action);
+
+CREATE INDEX idx_auto_tools_completion
+ON player_auto_tools (completion_time);
 ```

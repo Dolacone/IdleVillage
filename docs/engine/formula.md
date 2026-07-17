@@ -1,7 +1,7 @@
 ---
 title: "Module: formula"
 doc_type: module
-last_reviewed: 2026-07-14
+last_reviewed: 2026-07-17
 source_paths:
   - src/core/formula.py
 ---
@@ -88,6 +88,8 @@ Discord UI 顯示使用繁體中文。資料庫與程式內部 enum 一律使用
 | `TRIAL_COOLDOWN_SECONDS` | `managers/trial-manager.md` |
 | `TRIAL_TARGET_AMOUNT` | `managers/trial-manager.md` |
 | `TRIAL_REWARD_DIVISOR` | `managers/trial-manager.md` |
+| `AUTO_TOOL_SECONDS_PER_MATERIAL` | `managers/auto-tool-manager.md` |
+| `AUTO_TOOL_MAX_MATERIALS` | `managers/auto-tool-manager.md` |
 
 ## Material Drop Rate
 
@@ -103,6 +105,7 @@ Discord UI 顯示使用繁體中文。資料庫與程式內部 enum 一律使用
 
 ## Changelog
 
+- 2026-07-17: Added `AUTO_TOOL_SECONDS_PER_MATERIAL`, `AUTO_TOOL_MAX_MATERIALS` (owned by auto-tool-manager). `effective_cycle_seconds(cycle_time_reduce_pct)` now lives here (moved from settlement.py) so manual actions and auto-tools share one cycle-timing formula.
 - 2026-07-14: Renamed TRIAL_TARGET_STEP to TRIAL_TARGET_AMOUNT (trial target/cost is now a fixed amount, not a player-chosen multiple of a step).
 - 2026-07-14: Added TRIAL_DURATION_SECONDS, TRIAL_COOLDOWN_SECONDS, TRIAL_TARGET_STEP, TRIAL_REWARD_DIVISOR env vars owned by trial-manager.
 - 2026-07-14: Removed offering action (stored value `offering`, action_target usage, `OFFERING_THRESHOLD_PER_PLAYER` env var).

@@ -1,7 +1,7 @@
 ---
 title: "Module: ui-renderer"
 doc_type: module
-last_reviewed: 2026-07-15
+last_reviewed: 2026-07-17
 source_paths:
   - src/cogs/ui_renderer.py
 ---
@@ -117,7 +117,7 @@ emoji 順序與 工具 欄位一致：🌾 🔨 ⚔️ 🔬；素材欄位額外
 
 ### 元件排列順序
 
-  Row 1: Button — ⚡ 消耗AP立刻完成三次行動 | 🔨 強化工具 | 🏆 開啟試煉
+  Row 1: Button — ⚡ 消耗AP立刻完成三次行動 | 🔨 強化工具 | 🏆 開啟試煉 | ⚙️ 自動工具
   Row 2: Dropdown — 選擇行動
   Row 3: Dropdown — 選擇建設目標（僅 building 時出現）
   Row 4: Button — ✅ 確認行動
@@ -154,9 +154,28 @@ Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
   - 顯示格式：`{建築名} Lv{n}（XP: {xp_progress}/{next_requirement}）`
 - **Button**：`✅ 確認行動`（Green）
 
+行動下拉排除正在作為自動工具運行的工具（見下方「自動工具子介面」與 `managers/auto-tool-manager.md`）；若四種工具皆為自動工具，下拉以停用的提示選項顯示。
+
+### 自動工具
+
+- **Button**：`⚙️ 自動工具`（Blue，custom_id: `open_auto_tool`）；點擊開啟自動工具子介面。
+
 ### 其他
 
 無額外按鈕。
+
+## 自動工具子介面 Embed（build_auto_tool_embed / build_auto_tool_components）
+
+Embed 顯示標題、運行中自動工具清單（`{工具}：到期 <t:{unix}:R>`，建設附目標建築）、以及規則說明（每 1 素材 1 小時、上限 `AUTO_TOOL_MAX_MATERIALS` 小時）。無運行中工具時顯示「目前沒有運行中的自動工具」。
+
+元件：
+- **Dropdown**（`auto_tool_type_select`）：可操作工具（閒置＝啟動、運行中＝補充；排除手動行動的工具）。皆無可用工具時以停用提示選項顯示。
+- **Dropdown**（`auto_tool_target_select:{tool}`，僅選「建設」後出現）：建設目標（採集場/加工廠/狩獵場）。
+- **Dropdown**（`auto_tool_count_select:{tool}:{target|none}`，選定工具後出現）：素材數量 `1..max_add`；`max_add == 0`（已達 6h 上限）時以停用提示選項顯示。
+- **Button**：`✅ 確認`（Green，custom_id: `auto_tool_confirm:{tool}:{count}:{target|none}`）；未選齊或超上限時 disabled。
+- **Button**：`← 返回`（Gray，custom_id: `back_to_main`）。
+
+`max_add = floor((上限秒 − 剩餘秒) / 每素材秒)`；剩餘時間依 `expires_at − now` 計，詳見 `managers/auto-tool-manager.md`。
 
 ## 工具強化子選單 Embed
 
@@ -257,6 +276,7 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
 
 ## Changelog
 
+- 2026-07-17: Added `⚙️ 自動工具` main-interface button and the auto-tool sub-interface (`build_auto_tool_embed` / `build_auto_tool_components`); the action dropdown now excludes tools running as auto-tools. See `managers/auto-tool-manager.md`.
 - 2026-07-15: The 4-state `🏆 試煉` display (previously Dashboard-only, see below) now also applies to the `/idlevillage` main interface's village section, since both reuse the same `_build_village_section`/`_build_trial_line` with no distinguishing parameter. Removed the `show_trial_status_line` toggle that had scoped the new states to the Dashboard only.
 - 2026-07-15: Dashboard `🏆 試煉` line is now always shown instead of being omitted while no trial is active. Content switches between 4 states: active (unchanged progress format), cooldown (`⏳ 可於 <t:{cooldown_deadline}:t> 後開啟`, fixed time via Discord's `:t` style, not relative), insufficient resources (`⚠️ 資源不足，尚無法開啟`), and openable (`✅ 可開啟試煉`).
 - 2026-07-14: `open_trial_start` no longer opens a Modal. Clicking it directly starts a trial with a fixed `TRIAL_TARGET_AMOUNT` and a system-chosen resource (uniformly random among affordable types) — zero player input. `build_main_components` now also takes `resources` to additionally disable the button when no resource type can afford `TRIAL_TARGET_AMOUNT`.

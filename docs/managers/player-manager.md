@@ -1,7 +1,7 @@
 ---
 title: "Module: player-manager"
 doc_type: module
-last_reviewed: 2026-07-14
+last_reviewed: 2026-07-17
 source_paths:
   - src/managers/player_manager.py
 ---
@@ -19,7 +19,7 @@ source_paths:
 
 | 欄位 | 型別 | 初始值 | 說明 |
 | :--- | :--- | :--- | :--- |
-| `action` | enum / null | null | 當前自動行動。DB 儲存英文 enum；UI 顯示繁中 |
+| `action` | enum / null | null | 當前手動行動。DB 儲存英文 enum；UI 顯示繁中。設定行動的寫入路徑是 `core/settlement.change_action`，其中含互斥守衛：正在作為自動工具運行的工具不可被選為手動行動（見 `managers/auto-tool-manager.md`） |
 | `action_target` | enum / null | null | 建設目標建築。僅 `action = building` 時使用 |
 | `completion_time` | timestamp | null | 當前週期結束時間（設定行動時寫入） |
 | `last_update_time` | timestamp | null | 上次結算時間（換行動比例產出計算用） |
