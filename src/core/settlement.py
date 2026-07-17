@@ -23,7 +23,7 @@ from core.formula import (
 )
 from core.utils import dt_str, parse_dt
 from database.schema import get_connection
-from managers import affix_manager, building_manager, player_manager, resource_manager, stage_manager, trial_manager
+from managers import affix_manager, auto_tool_manager, building_manager, player_manager, resource_manager, stage_manager, trial_manager
 
 
 # ---------------------------------------------------------------------------
@@ -295,6 +295,12 @@ async def change_action(
         if player is None:
             return events
 
+        # Mutual exclusion: a tool currently running as an auto-tool cannot be chosen as
+        # the manual action. Fail fast here; the final action UPDATE below is also made
+        # conditional on the same predicate so a concurrent auto-tool start cannot slip in.
+        if new_action is not None and await auto_tool_manager.is_active(db, user_id, new_action):
+            raise ValueError(f"Cannot set action {new_action!r}: it is running as an auto-tool")
+
         old_action = player["action"]
         completion_time_str = player["completion_time"]
         last_update_time_str = player["last_update_time"]
@@ -371,13 +377,19 @@ async def change_action(
             new_affix_bonuses = await affix_manager.get_affix_bonuses(db, user_id, new_action)
             new_effective_secs = effective_cycle_seconds(new_affix_bonuses["cycle_time_reduce"])
             new_completion = dt_str(now + timedelta(seconds=new_effective_secs))
-            await db.execute(
+            # Conditional on the auto-tool exclusion (race-safe against a concurrent start).
+            cur = await db.execute(
                 """UPDATE players
                    SET action=?, action_target=?, completion_time=?,
                        last_update_time=?, updated_at=?
-                   WHERE user_id=?""",
-                (new_action, actual_target, new_completion, now_str, now_str, user_id),
+                   WHERE user_id=?
+                     AND NOT EXISTS (
+                         SELECT 1 FROM player_auto_tools WHERE user_id=? AND tool_type=?
+                     )""",
+                (new_action, actual_target, new_completion, now_str, now_str, user_id, user_id, new_action),
             )
+            if cur.rowcount != 1:
+                raise ValueError(f"Cannot set action {new_action!r}: it is running as an auto-tool")
         else:
             await db.execute(
                 """UPDATE players
