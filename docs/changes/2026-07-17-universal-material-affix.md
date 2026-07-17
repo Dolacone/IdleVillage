@@ -1,6 +1,6 @@
 ---
 title: "萬能素材擴大適用：詞條抽取/清除"
-status: Ready-to-review
+status: Issues-confirmed
 created: 2026-07-17
 doc_type: change
 last_reviewed: 2026-07-17
@@ -98,3 +98,9 @@ shortfall = cost - from_type
 - [x] [Minor] `docs/discord/command-handler.md` 也會過時：目前互動路由表把 `extract_affix` / `clear_affix` 描述成「消耗對應素材」，未反映「先扣專屬素材，不足時由萬能素材補足」的新規則。若 Task 3 目的是把玩家互動相關文件補齊，這份模組文件也應納入更新集合。→ 已將 `command-handler.md` 納入 Task 3。
 - [x] [Minor] 計畫文件本身沿用了已過期前提：`MVP Scope / Not Doing` 仍寫「萬能素材無法透過任何管道獲得」，但 repo 內 `src/managers/trial_manager.py` 與 `docs/managers/trial-manager.md` 已經把村莊試煉獎勵實作為萬能素材的實際取得管道。這不影響本次 fallback 邏輯，但會讓設計理由建立在錯誤現況上，建議在計畫內改成「不變更既有取得管道」而不是重述錯誤事實。→ 已改為「不變更既有取得管道」。
 - [x] [Minor] `MVP Scope / Not Doing` 的「範圍內 → 對應文件更新」仍只列 `affix-manager.md`、`ui-renderer.md`，未與已擴充為四份文件的 Task 3（新增 `player-manager.md`、`command-handler.md`）同步。實作者若先看 Scope 會漏掉這兩份文件，建議把 Scope 內的文件清單補齊為四份，或改為指向 Task 3。→ 已將 Scope 文件清單補齊為四份並指向 Task 3。
+
+## Review Issues
+
+- [ ] [Major] `extract_affix` 的「本類型優先、差額用萬能素材補足」混合扣除順序在測試套件中未被實際驗證。`tests/test_affix_manager.py:145-160` 的 `test_extract_mixes_own_type_then_universal` 以 `if cost < 2: skipTest` 開頭，而測試環境 `tests/support.py:206` 設 `AFFIX_EXTRACT_COST=1`，故此測試永遠 skip（實測 `488 passed, 1 skipped`）。剩餘的 `test_extract_uses_universal_for_shortfall`（`tests/test_affix_manager.py:132-144`）以 `materials=0` 執行，`from_type=min(cost,0)=0`，只驗證純萬能扣除、不觸及 own-first 分帳。若 `extract_affix`（`src/managers/affix_manager.py:88-92`）被改成「萬能優先」，此路徑仍會通過，缺陷不會被捕捉。Task 1 acceptance 測試 (b)「兩者正確扣除」對 extract 實際未被驗證（clear 的同名測試 `:253-267` 在 `AFFIX_CLEAR_COST=3` 下有跑，是唯一涵蓋 own+universal 分帳順序的測試）。
+- [ ] [Minor] `spend_universal_material` 回傳值被忽略（`src/managers/affix_manager.py:96`、`:146`）。若併發下該呼叫回傳 `False`（前置檢查通過但實際餘額不足），程式仍會 INSERT/DELETE 詞條，形成未付費即改動詞條的路徑。此為刻意比照 `gear_manager.attempt_upgrade`（`src/managers/gear_manager.py:227-232` 同樣忽略回傳值）的既有模式，非本次新增的回歸；依 Architecture Decision 3 的「維持相同風格」屬設計選擇，僅列為知會。
+- [ ] [Minor] `docs/managers/player-manager.md:78`（本次編輯的「萬能素材」章節內）仍寫「目前無任何掉落或產出管道可取得萬能素材，僅能由管理員透過 `/idlevillage-manager` 呼叫 `setUniversalMaterial` 設定」，與 `docs/managers/trial-manager.md:110`「試煉獎勵是 `materials_universal` 目前唯一的實際獲取管道」及 `src/managers/trial_manager.py:138` 的 `add_universal_material` 發放邏輯衝突（同章節欄位表 `:31` 亦仍稱「僅為佔位」且誤指 `setMaterial`）。屬既有過期敘述，非本次 fallback 邏輯範圍，但為 SSOT 衝突。
