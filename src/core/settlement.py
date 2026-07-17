@@ -277,9 +277,15 @@ async def settle_auto_tool_cycles(user_id: str, tool_type: str, now: datetime) -
     timestamp writes). Only cycles whose completion falls within the paid window
     (completion_time <= min(now, expires_at)) are settled; once the auto-tool has fully
     expired and is caught up, its row is deleted (the tool frees up). Returns events.
+
+    Runs under BEGIN IMMEDIATE so the expires_at read and the end() decision serialize with
+    a concurrent refuel/start/change_action (Architecture Decision #7): a refuel that extends
+    expires_at either commits before this holds the lock (so we read the fresh, longer expiry
+    and do not end the tool) or waits until this transaction commits — it can never be lost.
     """
     events: list[dict] = []
     async with get_connection() as db:
+        await db.execute("BEGIN IMMEDIATE")
         row = await auto_tool_manager.get(db, user_id, tool_type)
         if row is None:
             return events

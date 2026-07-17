@@ -1404,6 +1404,35 @@ class AutoToolSettlementTest(SettlementTestBase):
         )
         self.assertIsNotNone(row)  # backlog remains -> not freed yet
 
+    async def test_settle_keeps_tool_that_was_refueled_into_future(self):
+        # An expired tool refueled (extended past now) before settle reads it must NOT be
+        # ended — settle reads the fresh expires_at (under BEGIN IMMEDIATE) so the just-added
+        # runtime is never eaten.
+        from core.settlement import settle_auto_tool_cycles
+        from managers import auto_tool_manager
+        now = _now()
+        await self._insert_player(action=None)
+        async with schema.get_connection() as db:
+            await db.execute(
+                "UPDATE players SET materials_gathering=5 WHERE user_id=?", (self.TEST_USER,)
+            )
+            await db.commit()
+        await self._insert_auto_tool(
+            "gathering",
+            completion_time=now - timedelta(minutes=20),
+            expires_at=now - timedelta(minutes=1),  # expired
+        )
+        async with schema.get_connection() as db:
+            await auto_tool_manager.refuel(db, self.TEST_USER, "gathering", 2, now)  # +2h -> future
+            await db.commit()
+        with patch("random.random", return_value=1.0):
+            await settle_auto_tool_cycles(self.TEST_USER, "gathering", now)
+        row = await self.fetchone(
+            "SELECT 1 FROM player_auto_tools WHERE user_id=? AND tool_type=?",
+            (self.TEST_USER, "gathering"),
+        )
+        self.assertIsNotNone(row)  # survived — refuel not clobbered
+
     async def test_watcher_settles_due_auto_tool(self):
         from core.engine import Engine
         now = _now()
