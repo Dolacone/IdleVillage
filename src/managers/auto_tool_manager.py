@@ -110,6 +110,21 @@ async def get_idle_tools(db, user_id: str) -> list[str]:
     return [t for t in TOOL_TYPES if t != manual and t not in active]
 
 
+async def _spend_own_material(db, user_id: str, tool_type: str, count: int, now_str: str) -> None:
+    """Atomically deduct `count` of the tool's own material; raise if insufficient.
+
+    Uses a conditional UPDATE (WHERE balance >= count) so the check and the decrement are
+    one statement. Auto-tools never draw on universal material.
+    """
+    col = _MATERIAL_COL[tool_type]
+    spent = await db.execute(
+        f"UPDATE players SET {col} = {col} - ?, updated_at=? WHERE user_id=? AND {col} >= ?",
+        (count, now_str, user_id, count),
+    )
+    if spent.rowcount != 1:
+        raise ValueError(f"Insufficient {tool_type} material: need {count}")
+
+
 async def start(
     db, user_id: str, tool_type: str, count: int, action_target: str | None, now: datetime
 ) -> None:
@@ -169,14 +184,7 @@ async def start(
                 f"or player not found"
             )
 
-        # Spend the tool's own material atomically.
-        col = _MATERIAL_COL[tool_type]
-        spent = await db.execute(
-            f"UPDATE players SET {col} = {col} - ?, updated_at=? WHERE user_id=? AND {col} >= ?",
-            (count, now_str, user_id, count),
-        )
-        if spent.rowcount != 1:
-            raise ValueError(f"Insufficient {tool_type} material: need {count}")
+        await _spend_own_material(db, user_id, tool_type, count, now_str)
     except Exception:
         await db.rollback()
         raise
@@ -204,13 +212,7 @@ async def refuel(db, user_id: str, tool_type: str, count: int, now: datetime) ->
         per = _seconds_per_material()
         new_expires = dt_str(parse_dt(row["expires_at"]) + timedelta(seconds=count * per))
 
-        col = _MATERIAL_COL[tool_type]
-        spent = await db.execute(
-            f"UPDATE players SET {col} = {col} - ?, updated_at=? WHERE user_id=? AND {col} >= ?",
-            (count, now_str, user_id, count),
-        )
-        if spent.rowcount != 1:
-            raise ValueError(f"Insufficient {tool_type} material: need {count}")
+        await _spend_own_material(db, user_id, tool_type, count, now_str)
 
         await db.execute(
             "UPDATE player_auto_tools SET expires_at=?, updated_at=? WHERE user_id=? AND tool_type=?",
