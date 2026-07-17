@@ -54,6 +54,24 @@ async def get_affix_bonuses(db, user_id: str, gear_type: str) -> dict[str, int]:
     return bonuses
 
 
+async def _spend_with_universal_fallback(
+    db, user_id: str, gear_type: str, cost: int, now: datetime
+) -> None:
+    mats = await player_manager.get_material(db, user_id, gear_type)
+    universal = await player_manager.get_universal_material(db, user_id)
+    if mats + universal < cost:
+        raise ValueError(
+            f"Insufficient materials: need {cost}, have {mats} "
+            f"(+{universal} universal)"
+        )
+    from_type = min(cost, mats)
+    if from_type > 0:
+        await player_manager.spend_material(db, user_id, gear_type, from_type, now)
+    shortfall = cost - from_type
+    if shortfall > 0:
+        await player_manager.spend_universal_material(db, user_id, shortfall, now)
+
+
 async def extract_affix(db, user_id: str, gear_type: str, gear_level: int, now: datetime) -> dict:
     """
     Extract one affix into the first empty slot.
@@ -81,19 +99,7 @@ async def extract_affix(db, user_id: str, gear_type: str, gear_level: int, now: 
         raise ValueError("All affix slots are full; clear one before extracting")
 
     cost = get_env_int("AFFIX_EXTRACT_COST")
-    mats = await player_manager.get_material(db, user_id, gear_type)
-    universal = await player_manager.get_universal_material(db, user_id)
-    if mats + universal < cost:
-        raise ValueError(
-            f"Insufficient materials: need {cost}, have {mats} "
-            f"(+{universal} universal)"
-        )
-    from_type = min(cost, mats)
-    if from_type > 0:
-        await player_manager.spend_material(db, user_id, gear_type, from_type, now)
-    shortfall = cost - from_type
-    if shortfall > 0:
-        await player_manager.spend_universal_material(db, user_id, shortfall, now)
+    await _spend_with_universal_fallback(db, user_id, gear_type, cost, now)
 
     affix_type = random.choice(AFFIX_TYPES)
     value = random.randint(AFFIX_VALUE_MIN, AFFIX_VALUE_MAX)
@@ -131,19 +137,7 @@ async def clear_affix(db, user_id: str, gear_type: str, slot_index: int, gear_le
         raise ValueError(f"Slot {slot_index} is already empty")
 
     cost = get_env_int("AFFIX_CLEAR_COST")
-    mats = await player_manager.get_material(db, user_id, gear_type)
-    universal = await player_manager.get_universal_material(db, user_id)
-    if mats + universal < cost:
-        raise ValueError(
-            f"Insufficient materials: need {cost}, have {mats} "
-            f"(+{universal} universal)"
-        )
-    from_type = min(cost, mats)
-    if from_type > 0:
-        await player_manager.spend_material(db, user_id, gear_type, from_type, now)
-    shortfall = cost - from_type
-    if shortfall > 0:
-        await player_manager.spend_universal_material(db, user_id, shortfall, now)
+    await _spend_with_universal_fallback(db, user_id, gear_type, cost, now)
 
     await db.execute(
         "DELETE FROM gear_affixes WHERE user_id=? AND gear_type=? AND slot_index=?",
