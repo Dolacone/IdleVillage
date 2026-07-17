@@ -302,6 +302,7 @@ def build_main_components(
     pending_target: str | None = None,
     trial_data: dict | None = None,
     resources: dict | None = None,
+    active_auto_tools: set | list | None = None,
 ) -> list:
     ap = player_row.get("_ap", 0)
     gear_cap = buildings.get("research_lab", {}).get("level", 0)
@@ -324,15 +325,24 @@ def build_main_components(
         trial_amount = get_env_int("TRIAL_TARGET_AMOUNT")
         can_start_trial = any(resources.get(r, 0) >= trial_amount for r in ("food", "wood", "knowledge"))
 
-    action_options = [
-        disnake.SelectOption(
-            label=f"{ACTION_EMOJIS[a]} {ACTION_LABELS[a]}",
-            value=a,
-            description=ACTION_DESCRIPTIONS[a],
-            default=(pending_action == a),
-        )
-        for a in ("gathering", "building", "combat", "research")
-    ]
+    # A tool running as an auto-tool cannot also be selected as the manual action.
+    active_auto = set(active_auto_tools or [])
+    selectable_actions = [a for a in ("gathering", "building", "combat", "research") if a not in active_auto]
+    if selectable_actions:
+        action_options = [
+            disnake.SelectOption(
+                label=f"{ACTION_EMOJIS[a]} {ACTION_LABELS[a]}",
+                value=a,
+                description=ACTION_DESCRIPTIONS[a],
+                default=(pending_action == a),
+            )
+            for a in selectable_actions
+        ]
+        action_select_disabled = False
+    else:
+        action_options = [disnake.SelectOption(label="（所有工具皆為自動工具）", value="none")]
+        action_select_disabled = True
+
     rows = [
         disnake.ui.ActionRow(
             disnake.ui.Button(
@@ -353,12 +363,18 @@ def build_main_components(
                 custom_id="open_trial_start",
                 disabled=not can_start_trial,
             ),
+            disnake.ui.Button(
+                label="⚙️ 自動工具",
+                style=disnake.ButtonStyle.primary,
+                custom_id="open_auto_tool",
+            ),
         ),
         disnake.ui.ActionRow(
             disnake.ui.StringSelect(
                 custom_id="action_select",
                 placeholder="選擇行動...",
                 options=action_options,
+                disabled=action_select_disabled,
             )
         ),
     ]
@@ -735,6 +751,142 @@ def build_affix_components(
         )
     )
 
+    return rows
+
+
+_AUTO_TOOL_ORDER = ("gathering", "building", "combat", "research")
+
+
+def build_auto_tool_embed(active_rows: list, max_materials: int) -> disnake.Embed:
+    """Auto-tool sub-interface embed: currently running tools + their expiry, plus the rule."""
+    lines = ["⚙️ 自動工具", "─────────────────────────────"]
+    if active_rows:
+        lines.append("運行中：")
+        for row in active_rows:
+            tt = row["tool_type"]
+            label = f"{ACTION_EMOJIS.get(tt, '')} {GEAR_LABELS.get(tt, tt)}"
+            deadline = _unix_from_iso(row["expires_at"])
+            line = f"{label} — 到期 <t:{deadline}:R>"
+            if tt == "building" and row.get("action_target"):
+                line += f"（{BUILDING_LABELS.get(row['action_target'], row['action_target'])}）"
+            lines.append(line)
+    else:
+        lines.append("目前沒有運行中的自動工具。")
+    lines.append("─────────────────────────────")
+    lines.append(f"每 1 個該工具素材可運行 1 小時；上限 {max_materials} 小時。運行中可補充（不超過上限）。")
+    return disnake.Embed(description="\n".join(lines), color=disnake.Color.teal())
+
+
+def build_auto_tool_components(
+    idle_tools: list,
+    active_rows: list,
+    *,
+    selected_tool: str | None = None,
+    selected_target: str | None = None,
+    selected_count: int | None = None,
+    max_add: int = 0,
+) -> list:
+    """
+    Auto-tool sub-interface components.
+
+    idle_tools: tool types that can be started (not manual action, not running).
+    active_rows: running auto-tool rows (selectable for refuel).
+    selected_tool/target/count + max_add drive the confirm button's enabled state.
+    """
+    active_types = [r["tool_type"] for r in active_rows]
+    selectable = [t for t in _AUTO_TOOL_ORDER if t in idle_tools or t in active_types]
+
+    if selectable:
+        tool_options = [
+            disnake.SelectOption(
+                label=f"{ACTION_EMOJIS.get(t, '')} {GEAR_LABELS.get(t, t)}",
+                value=t,
+                description=("運行中（補充）" if t in active_types else "啟動"),
+                default=(selected_tool == t),
+            )
+            for t in selectable
+        ]
+        tool_disabled = False
+    else:
+        tool_options = [disnake.SelectOption(label="（沒有可用的工具）", value="none")]
+        tool_disabled = True
+
+    rows = [
+        disnake.ui.ActionRow(
+            disnake.ui.StringSelect(
+                custom_id="auto_tool_type_select",
+                placeholder="選擇工具...",
+                options=tool_options,
+                disabled=tool_disabled,
+            )
+        )
+    ]
+
+    if selected_tool == "building":
+        target_options = [
+            disnake.SelectOption(
+                label=BUILDING_LABELS[b], value=b, default=(selected_target == b)
+            )
+            for b in UI_BUILDING_TARGETS
+        ]
+        rows.append(
+            disnake.ui.ActionRow(
+                disnake.ui.StringSelect(
+                    custom_id="auto_tool_target_select",
+                    placeholder="選擇建設目標...",
+                    options=target_options,
+                )
+            )
+        )
+
+    if selected_tool is not None:
+        if max_add >= 1:
+            count_options = [
+                disnake.SelectOption(label=f"{n} 個（{n} 小時）", value=str(n), default=(selected_count == n))
+                for n in range(1, max_add + 1)
+            ]
+            count_disabled = False
+        else:
+            count_options = [disnake.SelectOption(label="（已達上限，無法補充）", value="none")]
+            count_disabled = True
+        rows.append(
+            disnake.ui.ActionRow(
+                disnake.ui.StringSelect(
+                    custom_id="auto_tool_count_select",
+                    placeholder="選擇消耗素材數量...",
+                    options=count_options,
+                    disabled=count_disabled,
+                )
+            )
+        )
+
+    ready = (
+        selected_tool is not None
+        and max_add >= 1
+        and selected_count is not None
+        and 1 <= selected_count <= max_add
+        and (selected_tool != "building" or selected_target is not None)
+    )
+    confirm_id = (
+        f"auto_tool_confirm:{selected_tool}:{selected_count}:{selected_target or 'none'}"
+        if ready
+        else "auto_tool_confirm:none"
+    )
+    rows.append(
+        disnake.ui.ActionRow(
+            disnake.ui.Button(
+                label="✅ 確認",
+                style=disnake.ButtonStyle.success,
+                custom_id=confirm_id,
+                disabled=not ready,
+            ),
+            disnake.ui.Button(
+                label="← 返回",
+                style=disnake.ButtonStyle.secondary,
+                custom_id="back_to_main",
+            ),
+        )
+    )
     return rows
 
 

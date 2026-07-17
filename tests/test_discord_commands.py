@@ -865,7 +865,10 @@ class TestRendererMainComponents(unittest.TestCase):
             if getattr(component, "custom_id", None)
         ]
 
-        self.assertEqual(first_row_ids, ["burst_execute", "open_gear_upgrade", "open_trial_start"])
+        self.assertEqual(
+            first_row_ids,
+            ["burst_execute", "open_gear_upgrade", "open_trial_start", "open_auto_tool"],
+        )
         self.assertNotIn("refresh", all_ids)
         self.assertEqual(rows[0].children[0].label, "⚡ 消耗AP立刻完成三次行動")
 
@@ -1935,6 +1938,116 @@ class TestGetGearRankings(DatabaseTestCase):
         self.assertEqual(rankings["building"], [("u1", 2)])
         self.assertEqual(rankings["combat"], [("u1", 3)])
         self.assertEqual(rankings["research"], [("u1", 4)])
+
+
+class AutoToolMainInterface(unittest.TestCase):
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def _player(self):
+        return {"_ap": 1, "action": "research", "gear_gathering": 1,
+                "gear_building": 1, "gear_combat": 1, "gear_research": 1}
+
+    def _all(self, rows):
+        return [c for row in rows for c in row.children]
+
+    def test_main_has_auto_tool_button(self):
+        from cogs.ui_renderer import build_main_components
+        rows = build_main_components(self._player(), {"research_lab": {"level": 3}})
+        ids = [getattr(c, "custom_id", None) for c in self._all(rows)]
+        self.assertIn("open_auto_tool", ids)
+
+    def test_action_dropdown_excludes_active_auto_tools(self):
+        from cogs.ui_renderer import build_main_components
+        rows = build_main_components(
+            self._player(), {"research_lab": {"level": 3}}, active_auto_tools={"gathering", "combat"}
+        )
+        select = next(c for c in self._all(rows) if getattr(c, "custom_id", None) == "action_select")
+        values = {o.value for o in select.options}
+        self.assertNotIn("gathering", values)
+        self.assertNotIn("combat", values)
+        self.assertIn("building", values)
+        self.assertIn("research", values)
+
+
+class AutoToolSubInterface(unittest.TestCase):
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def _all(self, rows):
+        return [c for row in rows for c in row.children]
+
+    def test_embed_lists_running_tools_with_expiry(self):
+        from cogs.ui_renderer import build_auto_tool_embed
+        rows = [{"tool_type": "gathering", "action_target": None, "expires_at": "2025-01-01T13:00:00+00:00"}]
+        embed = build_auto_tool_embed(rows, 6)
+        self.assertIn("採集工具", embed.description)
+        self.assertIn("<t:", embed.description)
+
+    def test_embed_when_no_running_tools(self):
+        from cogs.ui_renderer import build_auto_tool_embed
+        embed = build_auto_tool_embed([], 6)
+        self.assertIn("沒有運行中", embed.description)
+
+    def test_tool_dropdown_lists_idle_and_running(self):
+        from cogs.ui_renderer import build_auto_tool_components
+        rows = build_auto_tool_components(
+            ["building", "combat"],
+            [{"tool_type": "gathering", "action_target": None, "expires_at": "2025-01-01T13:00:00+00:00"}],
+        )
+        select = next(c for c in self._all(rows) if getattr(c, "custom_id", None) == "auto_tool_type_select")
+        values = {o.value for o in select.options}
+        self.assertEqual(values, {"gathering", "building", "combat"})
+
+    def test_count_dropdown_capped_at_max_add(self):
+        from cogs.ui_renderer import build_auto_tool_components
+        rows = build_auto_tool_components(
+            ["gathering"], [], selected_tool="gathering", max_add=3
+        )
+        select = next(c for c in self._all(rows) if getattr(c, "custom_id", None) == "auto_tool_count_select")
+        values = [o.value for o in select.options]
+        self.assertEqual(values, ["1", "2", "3"])
+
+    def test_confirm_disabled_until_ready(self):
+        from cogs.ui_renderer import build_auto_tool_components
+        rows = build_auto_tool_components(["gathering"], [], selected_tool="gathering", max_add=6)
+        confirm = next(c for c in self._all(rows)
+                       if getattr(c, "custom_id", "").startswith("auto_tool_confirm"))
+        self.assertTrue(confirm.disabled)  # no count chosen yet
+
+    def test_confirm_ready_encodes_selection(self):
+        from cogs.ui_renderer import build_auto_tool_components
+        rows = build_auto_tool_components(
+            ["gathering"], [], selected_tool="gathering", selected_count=2, max_add=6
+        )
+        confirm = next(c for c in self._all(rows)
+                       if getattr(c, "custom_id", "").startswith("auto_tool_confirm"))
+        self.assertFalse(confirm.disabled)
+        self.assertEqual(confirm.custom_id, "auto_tool_confirm:gathering:2:none")
+
+    def test_building_requires_target_and_shows_target_dropdown(self):
+        from cogs.ui_renderer import build_auto_tool_components
+        rows = build_auto_tool_components(
+            ["building"], [], selected_tool="building", selected_count=1, max_add=6
+        )
+        ids = [getattr(c, "custom_id", None) for c in self._all(rows)]
+        self.assertIn("auto_tool_target_select", ids)
+        confirm = next(c for c in self._all(rows)
+                       if getattr(c, "custom_id", "").startswith("auto_tool_confirm"))
+        self.assertTrue(confirm.disabled)  # target not chosen
+
+    def test_building_ready_with_target(self):
+        from cogs.ui_renderer import build_auto_tool_components
+        rows = build_auto_tool_components(
+            ["building"], [], selected_tool="building", selected_target="workshop",
+            selected_count=1, max_add=6,
+        )
+        confirm = next(c for c in self._all(rows)
+                       if getattr(c, "custom_id", "").startswith("auto_tool_confirm"))
+        self.assertFalse(confirm.disabled)
+        self.assertEqual(confirm.custom_id, "auto_tool_confirm:building:1:workshop")
 
 
 if __name__ == "__main__":
