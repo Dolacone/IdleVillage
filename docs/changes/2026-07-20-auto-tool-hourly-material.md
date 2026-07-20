@@ -1,6 +1,6 @@
 ---
 title: "自動工具改版：隨用隨扣素材與可調剩餘時間"
-status: Reviewed
+status: Refactored
 created: 2026-07-20
 doc_type: change
 last_reviewed: 2026-07-20
@@ -176,6 +176,12 @@ codex-reviewer（背景 codex exec，唯讀 diff 審查）；完整測試套件 
 - [x] [Minor] `source_paths` 未涵蓋 `src/core/engine.py`（T4 改了 Watcher 掃描條件，屬架構決策 #6）。→ 已補入 frontmatter `source_paths`。
 
 無 Critical/Major。狀態設為 Reviewed。
+
+## Refactor
+
+- 程式碼：無零行為的簡化空間。新增函式短小、含註解、沿用既有 `start`/`refuel` 的 `BEGIN IMMEDIATE`+rollback 慣用寫法；抽取共用樣板會違反最小抽象與符合現有風格原則，故不變更。
+- doc-audit：6 份文件已於 T7 對齊實作，`docs/README.md` 已索引 auto-tool，normative 段落無殘留 `AUTO_TOOL_MAX_MATERIALS`/`refuel`/`auto_tool_count_select`（僅存於 changelog 歷史記錄與前次 change doc，屬正確保留）。
+- 測試：`uv run python -m pytest -q` 568 passed。
 
 ## Plan Review Issues
 - [x] [Critical] 舊的運行中 auto-tool 無安全遷移策略：回填 `started_at + per` 會對已預付時數重扣素材、甚至提早 `end`。→ 決策 #1 改為：舊列（`next_material_time` NULL）回填為該列 `expires_at`；因素材 tick 條件為 `next_material_time < expires_at`，回填成 `expires_at` 使其永不觸發，舊列以已付時數跑到到期、絕不二次扣素材。Task 4 測試同步。
