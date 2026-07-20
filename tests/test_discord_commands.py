@@ -2014,21 +2014,22 @@ class AutoToolSubInterface(unittest.TestCase):
     def _all(self, rows):
         return [c for row in rows for c in row.children]
 
-    def test_embed_lists_running_tools_with_expiry(self):
+    def test_embed_lists_running_tools_with_expiry_and_material_runway(self):
         from cogs.ui_renderer import build_auto_tool_embed
         rows = [{"tool_type": "gathering", "action_target": None, "expires_at": "2025-01-01T13:00:00+00:00"}]
-        embed = build_auto_tool_embed(rows, 6)
+        embed = build_auto_tool_embed(rows, 24, materials={"gathering": 3})
         self.assertIn("採集工具", embed.description)
         self.assertIn("<t:", embed.description)
+        self.assertIn("素材可撐 3 小時", embed.description)
 
     def test_embed_when_no_running_tools(self):
         from cogs.ui_renderer import build_auto_tool_embed
-        embed = build_auto_tool_embed([], 6)
+        embed = build_auto_tool_embed([], 24)
         self.assertIn("沒有運行中", embed.description)
 
     def test_embed_shows_error_when_provided(self):
         from cogs.ui_renderer import build_auto_tool_embed
-        embed = build_auto_tool_embed([], 6, error="⚠️ 操作失敗")
+        embed = build_auto_tool_embed([], 24, error="⚠️ 操作失敗")
         self.assertIn("⚠️ 操作失敗", embed.description)
 
     def test_tool_dropdown_lists_idle_and_running(self):
@@ -2041,37 +2042,65 @@ class AutoToolSubInterface(unittest.TestCase):
         values = {o.value for o in select.options}
         self.assertEqual(values, {"gathering", "building", "combat"})
 
-    def test_count_dropdown_capped_at_max_add(self):
+    def test_start_hours_dropdown_capped_at_max_add(self):
         from cogs.ui_renderer import build_auto_tool_components
         rows = build_auto_tool_components(
             ["gathering"], [], selected_tool="gathering", max_add=3
         )
         select = next(c for c in self._all(rows)
-                      if getattr(c, "custom_id", "").startswith("auto_tool_count_select"))
+                      if getattr(c, "custom_id", "").startswith("auto_tool_add_select"))
         values = [o.value for o in select.options]
         self.assertEqual(values, ["1", "2", "3"])
 
-    def test_confirm_disabled_until_ready(self):
-        from cogs.ui_renderer import build_auto_tool_components
-        rows = build_auto_tool_components(["gathering"], [], selected_tool="gathering", max_add=6)
-        confirm = next(c for c in self._all(rows)
-                       if getattr(c, "custom_id", "").startswith("auto_tool_confirm"))
-        self.assertTrue(confirm.disabled)  # no count chosen yet
-
-    def test_confirm_ready_encodes_selection(self):
+    def test_running_tool_shows_add_and_subtract_selects(self):
         from cogs.ui_renderer import build_auto_tool_components
         rows = build_auto_tool_components(
-            ["gathering"], [], selected_tool="gathering", selected_count=2, max_add=6
+            ["building", "combat"],
+            [{"tool_type": "gathering", "action_target": None, "expires_at": "2025-01-01T13:00:00+00:00"}],
+            selected_tool="gathering", max_add=23, max_subtract=2,
+        )
+        ids = [getattr(c, "custom_id", "") for c in self._all(rows)]
+        self.assertTrue(any(i.startswith("auto_tool_add_select") for i in ids))
+        sub = next(c for c in self._all(rows)
+                   if getattr(c, "custom_id", "").startswith("auto_tool_sub_select"))
+        values = [o.value for o in sub.options]
+        self.assertEqual(values, ["-1", "-2"])
+        # bottom subtract step is labelled as a stop
+        self.assertIn("停止", sub.options[-1].label)
+
+    def test_confirm_disabled_until_ready(self):
+        from cogs.ui_renderer import build_auto_tool_components
+        rows = build_auto_tool_components(["gathering"], [], selected_tool="gathering", max_add=24)
+        confirm = next(c for c in self._all(rows)
+                       if getattr(c, "custom_id", "").startswith("auto_tool_confirm"))
+        self.assertTrue(confirm.disabled)  # no hours chosen yet
+
+    def test_confirm_ready_encodes_start_hours(self):
+        from cogs.ui_renderer import build_auto_tool_components
+        rows = build_auto_tool_components(
+            ["gathering"], [], selected_tool="gathering", selected_delta=2, max_add=24
         )
         confirm = next(c for c in self._all(rows)
                        if getattr(c, "custom_id", "").startswith("auto_tool_confirm"))
         self.assertFalse(confirm.disabled)
         self.assertEqual(confirm.custom_id, "auto_tool_confirm:gathering:2:none")
 
+    def test_confirm_encodes_negative_delta_for_subtract(self):
+        from cogs.ui_renderer import build_auto_tool_components
+        rows = build_auto_tool_components(
+            ["building", "combat"],
+            [{"tool_type": "gathering", "action_target": None, "expires_at": "2025-01-01T13:00:00+00:00"}],
+            selected_tool="gathering", selected_delta=-2, max_add=23, max_subtract=2,
+        )
+        confirm = next(c for c in self._all(rows)
+                       if getattr(c, "custom_id", "").startswith("auto_tool_confirm"))
+        self.assertFalse(confirm.disabled)
+        self.assertEqual(confirm.custom_id, "auto_tool_confirm:gathering:-2:none")
+
     def test_building_requires_target_and_shows_target_dropdown(self):
         from cogs.ui_renderer import build_auto_tool_components
         rows = build_auto_tool_components(
-            ["building"], [], selected_tool="building", selected_count=1, max_add=6
+            ["building"], [], selected_tool="building", selected_delta=1, max_add=24
         )
         ids = [getattr(c, "custom_id", "") for c in self._all(rows)]
         self.assertTrue(any(i.startswith("auto_tool_target_select") for i in ids))
@@ -2083,7 +2112,7 @@ class AutoToolSubInterface(unittest.TestCase):
         from cogs.ui_renderer import build_auto_tool_components
         rows = build_auto_tool_components(
             ["building"], [], selected_tool="building", selected_target="workshop",
-            selected_count=1, max_add=6,
+            selected_delta=1, max_add=24,
         )
         confirm = next(c for c in self._all(rows)
                        if getattr(c, "custom_id", "").startswith("auto_tool_confirm"))

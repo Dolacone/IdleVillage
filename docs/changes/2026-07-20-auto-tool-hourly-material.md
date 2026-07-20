@@ -150,7 +150,7 @@ T1／T2 互相獨立可並行。T3 依賴 T1（欄位）＋T2（env）。T4 依�
   - Depends on: T1, T3
   - Acceptance: 依架構決策 #5 重寫合併迴圈；素材 tick 有效條件 `next_material_time <= now and < expires_at`；扣 1 用條件式 UPDATE，`rowcount==0` → `end` 並跳出；`end` 收尾條件延伸為含「無待處理素材 tick」；舊列 `next_material_time` NULL 回填 `expires_at`（決策 #1）；`engine.py` auto-tool 掃描條件改為 `completion_time <= ? OR next_material_time <= ? OR expires_at <= ?`（`ORDER BY user_id, tool_type` 沿用，決策 #6）
 
-- [ ] Task 5: ui_renderer — 啟動選時數、運行中加/減時間下拉、embed 顯示素材可撐時數
+- [x] Task 5: ui_renderer — 啟動選時數、運行中加/減時間下拉、embed 顯示素材可撐時數
   - Files: `src/cogs/ui_renderer.py`
   - Tests: `tests/test_discord_commands.py` — 閒置工具：單一「初始運行時數」下拉 1..MAX_HOURS，delta 正；運行中工具：兩下拉「加時間」1..max_add_hours 與「減時間」1..max_subtract_hours（最大階標示停止）；confirm custom_id `auto_tool_confirm:{tool}:{delta}:{target|none}`；embed 顯示各運行工具剩餘到期 + 手上該素材可撐時數；上限文案改 24 小時
   - Depends on: T3
