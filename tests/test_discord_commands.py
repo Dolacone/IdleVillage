@@ -1359,9 +1359,13 @@ class TestAutoToolRouteRegistration(unittest.TestCase):
         from cogs.actions import _is_own_dropdown
         self.assertTrue(_is_own_dropdown("auto_tool_target_select:building"))
 
-    def test_auto_tool_count_select_is_own_dropdown(self):
+    def test_auto_tool_add_select_is_own_dropdown(self):
         from cogs.actions import _is_own_dropdown
-        self.assertTrue(_is_own_dropdown("auto_tool_count_select:gathering:none"))
+        self.assertTrue(_is_own_dropdown("auto_tool_add_select:gathering:none"))
+
+    def test_auto_tool_sub_select_is_own_dropdown(self):
+        from cogs.actions import _is_own_dropdown
+        self.assertTrue(_is_own_dropdown("auto_tool_sub_select:gathering:none"))
 
     def test_affix_gear_select_is_own_dropdown(self):
         from cogs.actions import _is_own_dropdown
@@ -2118,6 +2122,88 @@ class AutoToolSubInterface(unittest.TestCase):
                        if getattr(c, "custom_id", "").startswith("auto_tool_confirm"))
         self.assertFalse(confirm.disabled)
         self.assertEqual(confirm.custom_id, "auto_tool_confirm:building:1:workshop")
+
+
+class TestAutoToolConfirmHandler(DatabaseTestCase):
+    """auto_tool_confirm routes signed delta to start / add_time / subtract_time."""
+
+    USER = 55566677788
+
+    def _make_inter(self, cid):
+        inter = MagicMock()
+        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+        inter.component.custom_id = cid
+        inter.user.id = self.USER
+        inter.user.display_name = "AutoUser"
+        inter.response.defer = AsyncMock()
+        inter.edit_original_response = AsyncMock()
+        return inter
+
+    async def _seed_player(self, **materials):
+        from database.schema import get_connection
+        now = datetime.now(timezone.utc).isoformat()
+        async with get_connection() as db:
+            await db.execute(
+                "INSERT OR IGNORE INTO players (user_id, ap_full_time, created_at, updated_at) VALUES (?,?,?,?)",
+                (str(self.USER), now, now, now),
+            )
+            for col, amt in materials.items():
+                await db.execute(
+                    f"UPDATE players SET {col}=? WHERE user_id=?", (amt, str(self.USER))
+                )
+            await db.commit()
+
+    async def _active(self):
+        row = await self.fetchone(
+            "SELECT expires_at FROM player_auto_tools WHERE user_id=? AND tool_type='gathering'",
+            (str(self.USER),),
+        )
+        return row
+
+    async def test_confirm_starts_idle_tool_and_spends_one_material(self):
+        from cogs.actions import ActionsCog
+        await self._seed_player(materials_gathering=3)
+        inter = self._make_inter("auto_tool_confirm:gathering:5:none")
+        cog = ActionsCog(bot=MagicMock())
+        await cog.on_button_click(inter)
+        self.assertIsNotNone(await self._active())
+        mat = await self.fetchone(
+            "SELECT materials_gathering FROM players WHERE user_id=?", (str(self.USER),)
+        )
+        self.assertEqual(mat[0], 2)  # only 1 spent up front regardless of 5 hours
+
+    async def test_confirm_positive_delta_adds_time_without_spending(self):
+        from cogs.actions import ActionsCog
+        await self._seed_player(materials_gathering=3)
+        cog = ActionsCog(bot=MagicMock())
+        await cog.on_button_click(self._make_inter("auto_tool_confirm:gathering:1:none"))
+        before = (await self._active())[0]
+        await cog.on_button_click(self._make_inter("auto_tool_confirm:gathering:2:none"))
+        after = (await self._active())[0]
+        self.assertGreater(after, before)  # extended
+        mat = await self.fetchone(
+            "SELECT materials_gathering FROM players WHERE user_id=?", (str(self.USER),)
+        )
+        self.assertEqual(mat[0], 2)  # add_time spent nothing beyond the initial start
+
+    async def test_confirm_negative_delta_to_bottom_stops_tool(self):
+        from cogs.actions import ActionsCog
+        await self._seed_player(materials_gathering=3)
+        cog = ActionsCog(bot=MagicMock())
+        await cog.on_button_click(self._make_inter("auto_tool_confirm:gathering:1:none"))
+        self.assertIsNotNone(await self._active())
+        await cog.on_button_click(self._make_inter("auto_tool_confirm:gathering:-1:none"))
+        self.assertIsNone(await self._active())  # subtract-to-bottom stopped it
+
+    async def test_confirm_start_with_no_material_shows_error(self):
+        from cogs.actions import ActionsCog
+        await self._seed_player(materials_gathering=0)
+        inter = self._make_inter("auto_tool_confirm:gathering:5:none")
+        cog = ActionsCog(bot=MagicMock())
+        await cog.on_button_click(inter)
+        self.assertIsNone(await self._active())
+        embed = inter.edit_original_response.call_args.kwargs["embed"]
+        self.assertIn("操作失敗", embed.description)
 
 
 if __name__ == "__main__":

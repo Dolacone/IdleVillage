@@ -156,7 +156,7 @@ T1／T2 互相獨立可並行。T3 依賴 T1（欄位）＋T2（env）。T4 依�
   - Depends on: T3
   - Acceptance: 依架構決策 #7；`build_auto_tool_components` 參數改以 `selected_delta`、`max_add`、`max_subtract` 驅動；`build_auto_tool_embed` 顯示素材可撐時數（傳入 materials）；ActionRow ≤ 5；既有 UI 測試調整後全通過
 
-- [ ] Task 6: actions cog — confirm delta 路由 + 開介面補算沿用
+- [x] Task 6: actions cog — confirm delta 路由 + 開介面補算沿用
   - Files: `src/cogs/actions.py`
   - Tests: `tests/test_discord_commands.py` — `auto_tool_confirm:{tool}:{delta}:{target}` 解析有號 delta；未運行 → `start(hours=delta)`、運行中 `delta>0` → `add_time`、`delta<0` → `subtract_time`；失敗顯示統一錯誤且不改狀態；`_render_auto_tool` 傳 `max_add`/`max_subtract`/materials；`_render_main` 開介面補算沿用
   - Depends on: T4, T5

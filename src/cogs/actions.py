@@ -28,7 +28,7 @@ from managers import affix_manager, auto_tool_manager, building_manager, gear_ma
 _OWN_BUTTONS = frozenset({"burst_execute", "open_gear_upgrade", "open_trial_start", "open_auto_tool", "back_to_main"})
 _OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:", "clear_affix:", "sacrifice_material:", "open_affix_mgmt:", "affix_extract:", "affix_clear:", "back_to_gear:", "auto_tool_confirm:")
 _OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "gear_type_select", "affix_gear_select", "auto_tool_type_select"})
-_OWN_DROPDOWN_PREFIXES = ("upgrade_mode_select:", "affix_slot_select:", "auto_tool_target_select:", "auto_tool_count_select:")
+_OWN_DROPDOWN_PREFIXES = ("upgrade_mode_select:", "affix_slot_select:", "auto_tool_target_select:", "auto_tool_add_select:", "auto_tool_sub_select:")
 _OWN_MODAL_PREFIXES = ("modal_sacrifice:",)
 _VALID_GEAR_TYPES = frozenset({"gathering", "building", "combat", "research"})
 _VALID_ACTIONS = frozenset({"gathering", "building", "combat", "research"})
@@ -270,7 +270,7 @@ class ActionsCog(commands.Cog):
         self, inter, *,
         selected_tool: str | None = None,
         selected_target: str | None = None,
-        selected_count: int | None = None,
+        selected_delta: int | None = None,
         error: str | None = None,
     ) -> None:
         user_id = str(inter.user.id)
@@ -278,17 +278,23 @@ class ActionsCog(commands.Cog):
         async with get_connection() as db:
             active_rows = await auto_tool_manager.list_active(db, user_id)
             idle_tools = await auto_tool_manager.get_idle_tools(db, user_id)
+            materials = {
+                r["tool_type"]: await player_manager.get_material(db, user_id, r["tool_type"])
+                for r in active_rows
+            }
             max_add = 0
+            max_subtract = 0
             if selected_tool is not None:
                 row = await auto_tool_manager.get(db, user_id, selected_tool)
                 expires = row["expires_at"] if row else None
-                max_add = auto_tool_manager.max_add_materials(expires, now)
-        max_materials = get_env_int("AUTO_TOOL_MAX_MATERIALS")
-        embed = build_auto_tool_embed(active_rows, max_materials, error=error)
+                max_add = auto_tool_manager.max_add_hours(expires, now)
+                max_subtract = auto_tool_manager.max_subtract_hours(expires, now)
+        max_hours = get_env_int("AUTO_TOOL_MAX_HOURS")
+        embed = build_auto_tool_embed(active_rows, max_hours, materials=materials, error=error)
         components = build_auto_tool_components(
             idle_tools, active_rows,
             selected_tool=selected_tool, selected_target=selected_target,
-            selected_count=selected_count, max_add=max_add,
+            selected_delta=selected_delta, max_add=max_add, max_subtract=max_subtract,
         )
         await inter.edit_original_response(embed=embed, components=components)
 
@@ -355,12 +361,13 @@ class ActionsCog(commands.Cog):
 
         elif cid.startswith("auto_tool_confirm:"):
             parts = cid.split(":")
-            # auto_tool_confirm:{tool}:{count}:{target|none}
+            # auto_tool_confirm:{tool}:{delta}:{target|none} — delta is signed hours:
+            # start (idle tool) / add_time (delta>0) / subtract_time (delta<0).
             if len(parts) < 4 or parts[1] not in _VALID_GEAR_TYPES:
                 return
             tool_type = parts[1]
             try:
-                count = int(parts[2])
+                delta = int(parts[2])
             except ValueError:
                 return
             target = None if parts[3] == "none" else parts[3]
@@ -370,9 +377,12 @@ class ActionsCog(commands.Cog):
             async with get_connection() as db:
                 try:
                     if await auto_tool_manager.is_active(db, user_id, tool_type):
-                        await auto_tool_manager.refuel(db, user_id, tool_type, count, now)
+                        if delta > 0:
+                            await auto_tool_manager.add_time(db, user_id, tool_type, delta, now)
+                        else:
+                            await auto_tool_manager.subtract_time(db, user_id, tool_type, -delta, now)
                     else:
-                        await auto_tool_manager.start(db, user_id, tool_type, count, target, now)
+                        await auto_tool_manager.start(db, user_id, tool_type, delta, target, now)
                     await db.commit()
                 except ValueError:
                     error = "⚠️ 操作失敗（素材不足、工具使用中或已達上限），請重新確認。"
@@ -662,18 +672,18 @@ class ActionsCog(commands.Cog):
             tool_type = cid.split(":", 1)[1]
             if tool_type in _VALID_GEAR_TYPES and value in UI_BUILDING_TARGETS:
                 await self._render_auto_tool(inter, selected_tool=tool_type, selected_target=value)
-        elif cid.startswith("auto_tool_count_select:"):
+        elif cid.startswith("auto_tool_add_select:") or cid.startswith("auto_tool_sub_select:"):
             parts = cid.split(":")
             if len(parts) < 3 or parts[1] not in _VALID_GEAR_TYPES:
                 return
             tool_type = parts[1]
             target = None if parts[2] == "none" else parts[2]
             try:
-                count = int(value)
+                delta = int(value)
             except ValueError:
                 return
             await self._render_auto_tool(
-                inter, selected_tool=tool_type, selected_target=target, selected_count=count
+                inter, selected_tool=tool_type, selected_target=target, selected_delta=delta
             )
 
 
