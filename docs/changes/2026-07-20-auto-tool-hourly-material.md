@@ -126,7 +126,7 @@ T2 env  ───┴─→ T3 auto_tool_manager ─→ T4 settlement ─→ T6 c
 ```
 T1／T2 互相獨立可並行。T3 依賴 T1（欄位）＋T2（env）。T4 依賴 T1、T3。T5 依賴 T3。T6 依賴 T4、T5。T7 依賴全部。
 
-- [ ] Task 1: schema — `player_auto_tools.next_material_time` 欄位 + 冪等遷移 [可與 T2 並行]
+- [x] Task 1: schema — `player_auto_tools.next_material_time` 欄位 + 冪等遷移 [可與 T2 並行]
   - Files: `src/database/schema.py`
   - Tests: `tests/test_v2_schema_initialization.py` — 新表建立含 `next_material_time`；既有 DB 經 `_migrate_v2_columns` 補欄（`PRAGMA table_info` 檢查後 ALTER）；重複呼叫 `init_db()` 冪等
   - Depends on: 無
