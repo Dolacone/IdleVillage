@@ -144,7 +144,7 @@ T1／T2 互相獨立可並行。T3 依賴 T1（欄位）＋T2（env）。T4 依�
   - Depends on: T1, T2
   - Acceptance: 依架構決策 #2/#3；`_max_hours()` 取 `AUTO_TOOL_MAX_HOURS`；`start(count→hours)` 只扣 1 素材、寫 `next_material_time`；新增 `add_time`/`subtract_time`（皆 `BEGIN IMMEDIATE` 重讀後寫、try/except rollback）、`max_add_hours`/`max_subtract_hours`/`advance_material_tick`；移除 `refuel` 與 `max_add_materials`（更名）；不 import `core.settlement`
 
-- [ ] Task 4: settlement + engine — settle_auto_tool_cycles 雙時鐘時間序合併結算 + 素材 tick + 舊列遷移；Watcher 掃描條件擴充
+- [x] Task 4: settlement + engine — settle_auto_tool_cycles 雙時鐘時間序合併結算 + 素材 tick + 舊列遷移；Watcher 掃描條件擴充
   - Files: `src/core/settlement.py`, `src/core/engine.py`
   - Tests: `tests/test_engine_settlement.py` — 素材 tick 每小時扣 1；扣不到即 `end`（進行中週期丟棄）；產出週期與素材 tick 依時間先後交錯（平手素材先）；正回饋（產出掉素材可供緊接 tick）；cap 命中留 backlog 不越過未結算產出去扣素材、不 `end`；`next_material_time` 為 NULL 的舊列回填為 `expires_at`（視為已預付、不再扣、不提早結束）；到期整點不多扣（`next<expires` 嚴格）；到期 + caught_up 才 `end`；並發 `add_time`/`subtract_time` 調整後 settle 不誤刪（沿用 `BEGIN IMMEDIATE`）；Watcher 以 `next_material_time <= now` 或 `expires_at <= now` 觸發背景結算/`end`。注意：既有 `test_engine_settlement.py` 內 raw `INSERT INTO player_auto_tools (...)` helper（約 L1298）需一併補 `next_material_time` 欄位，否則既有測試機械性失敗
   - Depends on: T1, T3

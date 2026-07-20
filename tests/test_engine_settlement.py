@@ -1295,16 +1295,18 @@ class AutoToolSettlementTest(SettlementTestBase):
         await self._set_resource("wood", 100000)
         await self._set_resource("knowledge", 100000)
 
-    async def _insert_auto_tool(self, tool_type, completion_time, expires_at, action_target=None):
+    async def _insert_auto_tool(self, tool_type, completion_time, expires_at,
+                                action_target=None, next_material_time=None):
         now_str = _now().isoformat()
+        nmt = next_material_time.isoformat() if next_material_time is not None else None
         async with schema.get_connection() as db:
             await db.execute(
                 """INSERT INTO player_auto_tools
                    (user_id, tool_type, action_target, completion_time, last_update_time,
-                    expires_at, started_at, updated_at)
-                   VALUES (?,?,?,?,?,?,?,?)""",
+                    expires_at, started_at, next_material_time, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?)""",
                 (self.TEST_USER, tool_type, action_target,
-                 completion_time.isoformat(), now_str, expires_at.isoformat(), now_str, now_str),
+                 completion_time.isoformat(), now_str, expires_at.isoformat(), now_str, nmt, now_str),
             )
             await db.commit()
 
@@ -1404,26 +1406,21 @@ class AutoToolSettlementTest(SettlementTestBase):
         )
         self.assertIsNotNone(row)  # backlog remains -> not freed yet
 
-    async def test_settle_keeps_tool_that_was_refueled_into_future(self):
-        # An expired tool refueled (extended past now) before settle reads it must NOT be
-        # ended — settle reads the fresh expires_at (under BEGIN IMMEDIATE) so the just-added
-        # runtime is never eaten.
+    async def test_settle_keeps_tool_that_was_extended_into_future(self):
+        # An expired tool whose remaining time was extended past now (add_time) before settle
+        # reads it must NOT be ended — settle reads the fresh expires_at (under BEGIN IMMEDIATE)
+        # so the just-added runtime is never eaten.
         from core.settlement import settle_auto_tool_cycles
         from managers import auto_tool_manager
         now = _now()
         await self._insert_player(action=None)
-        async with schema.get_connection() as db:
-            await db.execute(
-                "UPDATE players SET materials_gathering=5 WHERE user_id=?", (self.TEST_USER,)
-            )
-            await db.commit()
         await self._insert_auto_tool(
             "gathering",
             completion_time=now - timedelta(minutes=20),
             expires_at=now - timedelta(minutes=1),  # expired
         )
         async with schema.get_connection() as db:
-            await auto_tool_manager.refuel(db, self.TEST_USER, "gathering", 2, now)  # +2h -> future
+            await auto_tool_manager.add_time(db, self.TEST_USER, "gathering", 2, now)  # +2h -> future
             await db.commit()
         with patch("random.random", return_value=1.0):
             await settle_auto_tool_cycles(self.TEST_USER, "gathering", now)
@@ -1431,7 +1428,103 @@ class AutoToolSettlementTest(SettlementTestBase):
             "SELECT 1 FROM player_auto_tools WHERE user_id=? AND tool_type=?",
             (self.TEST_USER, "gathering"),
         )
-        self.assertIsNotNone(row)  # survived — refuel not clobbered
+        self.assertIsNotNone(row)  # survived — extension not clobbered
+
+    async def _set_material(self, tool_type, amount):
+        async with schema.get_connection() as db:
+            await db.execute(
+                f"UPDATE players SET materials_{tool_type}=? WHERE user_id=?",
+                (amount, self.TEST_USER),
+            )
+            await db.commit()
+
+    async def test_material_tick_charges_one_per_hour(self):
+        from core.settlement import settle_auto_tool_cycles
+        now = _now()
+        await self._insert_player(action=None)
+        await self._set_material("gathering", 5)
+        # No production due (completion far future); one material tick due (1 min ago).
+        await self._insert_auto_tool(
+            "gathering",
+            completion_time=now + timedelta(hours=10),
+            expires_at=now + timedelta(hours=5),
+            next_material_time=now - timedelta(minutes=1),
+        )
+        with patch("random.random", return_value=1.0):  # no drops
+            await settle_auto_tool_cycles(self.TEST_USER, "gathering", now)
+        player = await self._get_player()
+        self.assertEqual(player["materials_gathering"], 4)  # exactly one hour charged
+        row = await self.fetchone(
+            "SELECT next_material_time FROM player_auto_tools WHERE user_id=? AND tool_type=?",
+            (self.TEST_USER, "gathering"),
+        )
+        # next tick advanced ~1h into the future (was now-1min -> now+59min)
+        self.assertGreater(_utc(datetime.fromisoformat(row[0])), now)
+
+    async def test_material_exhaustion_stops_tool(self):
+        from core.settlement import settle_auto_tool_cycles
+        now = _now()
+        await self._insert_player(action=None)
+        await self._set_material("gathering", 0)
+        await self._insert_auto_tool(
+            "gathering",
+            completion_time=now + timedelta(hours=10),
+            expires_at=now + timedelta(hours=5),
+            next_material_time=now - timedelta(minutes=1),  # tick due, no material to pay it
+        )
+        with patch("random.random", return_value=1.0):
+            await settle_auto_tool_cycles(self.TEST_USER, "gathering", now)
+        row = await self.fetchone(
+            "SELECT 1 FROM player_auto_tools WHERE user_id=? AND tool_type=?",
+            (self.TEST_USER, "gathering"),
+        )
+        self.assertIsNone(row)  # stopped and freed
+
+    async def test_no_material_charge_at_expiry_boundary(self):
+        # A tick exactly at expires_at must NOT fire (validity is next_material_time < expires).
+        from core.settlement import settle_auto_tool_cycles
+        now = _now()
+        await self._insert_player(action=None)
+        await self._set_material("gathering", 5)
+        await self._insert_auto_tool(
+            "gathering",
+            completion_time=now + timedelta(hours=10),  # no production
+            expires_at=now,                              # expired now
+            next_material_time=now,                      # tick coincides with expiry
+        )
+        with patch("random.random", return_value=1.0):
+            await settle_auto_tool_cycles(self.TEST_USER, "gathering", now)
+        player = await self._get_player()
+        self.assertEqual(player["materials_gathering"], 5)  # not charged at the boundary
+        row = await self.fetchone(
+            "SELECT 1 FROM player_auto_tools WHERE user_id=? AND tool_type=?",
+            (self.TEST_USER, "gathering"),
+        )
+        self.assertIsNone(row)  # expired + caught up -> freed
+
+    async def test_production_drop_funds_next_material_tick(self):
+        # Positive feedback: a production cycle that drops the tool's own material just before
+        # a material tick funds that tick (chronological interleave). Without the drop the tick
+        # would find 0 material and stop the tool; here it survives.
+        from core.settlement import settle_auto_tool_cycles
+        now = _now()
+        await self._insert_player(action=None)
+        await self._set_material("gathering", 0)
+        await self._insert_auto_tool(
+            "gathering",
+            completion_time=now - timedelta(minutes=1),  # 1 cycle due, before the tick
+            expires_at=now + timedelta(minutes=1),        # still running after now
+            next_material_time=now,                       # tick just after the cycle
+        )
+        with patch("random.random", return_value=0.0):   # force the drop
+            await settle_auto_tool_cycles(self.TEST_USER, "gathering", now)
+        player = await self._get_player()
+        self.assertEqual(player["materials_gathering"], 0)  # dropped 1, charged 1
+        row = await self.fetchone(
+            "SELECT 1 FROM player_auto_tools WHERE user_id=? AND tool_type=?",
+            (self.TEST_USER, "gathering"),
+        )
+        self.assertIsNotNone(row)  # survived: the drop paid the tick
 
     async def test_watcher_settles_due_auto_tool(self):
         from core.engine import Engine
@@ -1444,6 +1537,26 @@ class AutoToolSettlementTest(SettlementTestBase):
             await Engine.process_watcher()
         base = int(os.environ["BASE_OUTPUT"])
         self.assertEqual(await self._get_resource("wood"), 100000 + base)
+
+    async def test_watcher_ends_expired_tool_with_future_completion(self):
+        # Watcher scan must also trigger on expires_at (not only completion_time), so an
+        # expired tool whose next production cycle is far off is still freed in the background.
+        from core.engine import Engine
+        now = _now()
+        await self._insert_player(action=None)
+        await self._insert_auto_tool(
+            "gathering",
+            completion_time=now + timedelta(hours=10),  # production not due
+            expires_at=now - timedelta(minutes=1),      # expired
+            next_material_time=now + timedelta(hours=10),
+        )
+        with patch("random.random", return_value=1.0):
+            await Engine.process_watcher()
+        row = await self.fetchone(
+            "SELECT 1 FROM player_auto_tools WHERE user_id=? AND tool_type=?",
+            (self.TEST_USER, "gathering"),
+        )
+        self.assertIsNone(row)  # freed by the watcher
 
 
 class EffectiveCycleSecondsTest(unittest.TestCase):

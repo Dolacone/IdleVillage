@@ -270,18 +270,35 @@ async def settle_complete_cycles(user_id: str, now: datetime) -> list[dict]:
     return events
 
 
+async def _charge_auto_tool_material(db, tool_type: str, user_id: str, now_str: str) -> bool:
+    """Deduct 1 of the tool's own material (conditional UPDATE); True if one was available."""
+    col = f"materials_{tool_type}"
+    cur = await db.execute(
+        f"UPDATE players SET {col} = {col} - 1, updated_at=? WHERE user_id=? AND {col} >= 1",
+        (now_str, user_id),
+    )
+    return cur.rowcount == 1
+
+
 async def settle_auto_tool_cycles(user_id: str, tool_type: str, now: datetime) -> list[dict]:
     """
-    Catch up all overdue complete cycles for one auto-tool, up to MAX_CYCLES_PER_SETTLEMENT.
-    Each cycle reuses the action resolver with the auto-tool's own context (no player
-    timestamp writes). Only cycles whose completion falls within the paid window
-    (completion_time <= min(now, expires_at)) are settled; once the auto-tool has fully
-    expired and is caught up, its row is deleted (the tool frees up). Returns events.
+    Settle one auto-tool by interleaving two independent clocks in chronological order:
+      - the production clock (`completion_time`, advancing by effective_cycle_seconds), and
+      - the material clock (`next_material_time`, advancing by AUTO_TOOL_SECONDS_PER_MATERIAL).
 
-    Runs under BEGIN IMMEDIATE so the expires_at read and the end() decision serialize with
-    a concurrent refuel/start/change_action (Architecture Decision #7): a refuel that extends
-    expires_at either commits before this holds the lock (so we read the fresh, longer expiry
-    and do not end the tool) or waits until this transaction commits — it can never be lost.
+    Each production cycle reuses the action resolver with the auto-tool's own context (no
+    player timestamp writes). At each material tick 1 of the tool's own material is charged;
+    if none is available the tool stops (row deleted) and any in-progress cycle is discarded
+    (no partial). Production cycles are bounded by MAX_CYCLES_PER_SETTLEMENT; when the earliest
+    pending event is a capped production cycle, settlement stops and leaves the backlog for the
+    next sweep rather than charging material past unsettled production. Once fully expired and
+    caught up (no production within the paid window and no pending material tick), the row is
+    deleted (the tool frees up). Returns notification events.
+
+    Runs under BEGIN IMMEDIATE so the expires_at read, the material charges and the end()
+    decision serialize with a concurrent add_time/subtract_time/start/change_action
+    (Architecture Decision #7): a concurrent time change either commits before this holds the
+    lock (so we read the fresh expiry) or waits until this transaction commits.
     """
     events: list[dict] = []
     async with get_connection() as db:
@@ -295,28 +312,53 @@ async def settle_auto_tool_cycles(user_id: str, tool_type: str, now: datetime) -
         bonuses = await affix_manager.get_affix_bonuses(db, user_id, tool_type)
         effective_secs = effective_cycle_seconds(bonuses["cycle_time_reduce"])
         max_cycles = get_env_int("MAX_CYCLES_PER_SETTLEMENT")
-        deadline = min(now, expires_at)
+        per = get_env_int("AUTO_TOOL_SECONDS_PER_MATERIAL")
+        prod_deadline = min(now, expires_at)
 
         cycle_end = parse_dt(row["completion_time"])
-        cycles_done = 0
-        while cycle_end <= deadline and cycles_done < max_cycles:
-            cycle_events = await _run_one_cycle(
-                db, user_id, cycle_end,
-                action=tool_type, action_target=action_target,
-                write_player_timestamps=False, affix_bonuses=bonuses,
-            )
-            events.extend(cycle_events)
-            next_completion = cycle_end + timedelta(seconds=effective_secs)
-            await auto_tool_manager.advance_cycle(db, user_id, tool_type, cycle_end, next_completion)
-            cycle_end = next_completion
-            cycles_done += 1
+        # Legacy rows (pre-change, prepaid) have next_material_time NULL: their remaining time
+        # was already paid, so backfill to expires_at, which makes the material tick never fire
+        # (its validity condition is next_material_time < expires_at) — no double charge, no
+        # early end (Architecture Decision #1).
+        next_mat = parse_dt(row["next_material_time"]) if row["next_material_time"] else expires_at
 
-        # End (free the tool) once fully expired and caught up. "Caught up" means the loop
-        # stopped because the next cycle falls beyond the paid window (cycle_end > deadline),
-        # NOT because the per-tick cap was hit with backlog still inside the window.
-        caught_up = cycle_end > deadline
-        if now >= expires_at and caught_up:
-            await auto_tool_manager.end(db, user_id, tool_type)
+        cycles_done = 0
+        ended = False
+        while True:
+            prod_active = cycle_end <= prod_deadline
+            mat_active = (next_mat <= now) and (next_mat < expires_at)
+            if not prod_active and not mat_active:
+                break
+            # Process the earliest event. Production goes first only when strictly earlier than
+            # the material tick; on a tie the material tick funds that hour's production first.
+            prod_first = prod_active and (not mat_active or cycle_end < next_mat)
+            if prod_first:
+                if cycles_done >= max_cycles:
+                    break  # capped: leave backlog; do not charge material past unsettled output
+                cycle_events = await _run_one_cycle(
+                    db, user_id, cycle_end,
+                    action=tool_type, action_target=action_target,
+                    write_player_timestamps=False, affix_bonuses=bonuses,
+                )
+                events.extend(cycle_events)
+                next_completion = cycle_end + timedelta(seconds=effective_secs)
+                await auto_tool_manager.advance_cycle(db, user_id, tool_type, cycle_end, next_completion)
+                cycle_end = next_completion
+                cycles_done += 1
+            else:
+                if not await _charge_auto_tool_material(db, tool_type, user_id, dt_str(next_mat)):
+                    await auto_tool_manager.end(db, user_id, tool_type)
+                    ended = True
+                    break
+                next_mat += timedelta(seconds=per)
+
+        if not ended:
+            # Caught up = no production within the paid window and no pending material tick.
+            caught_up = (cycle_end > prod_deadline) and not ((next_mat <= now) and (next_mat < expires_at))
+            if now >= expires_at and caught_up:
+                await auto_tool_manager.end(db, user_id, tool_type)
+            else:
+                await auto_tool_manager.advance_material_tick(db, user_id, tool_type, next_mat)
 
         await db.commit()
 
