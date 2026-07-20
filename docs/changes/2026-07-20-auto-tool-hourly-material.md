@@ -132,7 +132,7 @@ T1／T2 互相獨立可並行。T3 依賴 T1（欄位）＋T2（env）。T4 依�
   - Depends on: 無
   - Acceptance: `CREATE TABLE player_auto_tools` 定義新增 `next_material_time TEXT`（nullable）；`_migrate_v2_columns` 對 `player_auto_tools` 加 `PRAGMA table_info` 檢查，缺欄則 `ALTER TABLE player_auto_tools ADD COLUMN next_material_time TEXT`；既有 schema 測試全通過
 
-- [ ] Task 2: env 更名 — `AUTO_TOOL_MAX_MATERIALS` → `AUTO_TOOL_MAX_HOURS=24` [可與 T1 並行]
+- [x] Task 2: env 更名 — `AUTO_TOOL_MAX_MATERIALS` → `AUTO_TOOL_MAX_HOURS=24` [可與 T1 並行]
   - Files: `src/core/config.py`, `.env.example`
   - Tests: `tests/support.py`（`ALL_TEST_ENV`）改 key、`tests/test_v2_config_validation.py` 改涵蓋的 key
   - Depends on: 無
