@@ -1,6 +1,6 @@
 ---
 title: "自動工具改版：隨用隨扣素材與可調剩餘時間"
-status: Refactored
+status: Done
 created: 2026-07-20
 doc_type: change
 last_reviewed: 2026-07-20
