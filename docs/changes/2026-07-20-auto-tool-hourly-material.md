@@ -1,12 +1,13 @@
 ---
 title: "自動工具改版：隨用隨扣素材與可調剩餘時間"
-status: Ready-to-review
+status: Reviewed
 created: 2026-07-20
 doc_type: change
 last_reviewed: 2026-07-20
 source_paths:
   - src/managers/auto_tool_manager.py
   - src/core/settlement.py
+  - src/core/engine.py
   - src/core/config.py
   - src/cogs/ui_renderer.py
   - src/cogs/actions.py
@@ -169,7 +170,12 @@ T1／T2 互相獨立可並行。T3 依賴 T1（欄位）＋T2（env）。T4 依�
   - Acceptance: `auto-tool-manager.md` 改寫為隨用隨扣模型（`next_material_time`、start 扣 1、add/subtract_time、雙時鐘合併結算、素材耗盡中斷、24h 上限、env 更名）；`db-schema.md` 新增欄位；`cycle-engine.md` 更新自動工具結算段（雙時鐘、素材 tick、Watcher 觸發不變）；`formula.md` env 表更名；`ui-renderer.md`／`command-handler.md` 反映新 UI/路由；所有改動文件 `last_reviewed` 更新為 2026-07-20
 
 ## Review Issues
-- [ ] Issue 1: ...
+
+codex-reviewer（背景 codex exec，唯讀 diff 審查）；完整測試套件 `uv run python -m pytest -q` 568 passed, 3 subtests passed。
+
+- [x] [Minor] `source_paths` 未涵蓋 `src/core/engine.py`（T4 改了 Watcher 掃描條件，屬架構決策 #6）。→ 已補入 frontmatter `source_paths`。
+
+無 Critical/Major。狀態設為 Reviewed。
 
 ## Plan Review Issues
 - [x] [Critical] 舊的運行中 auto-tool 無安全遷移策略：回填 `started_at + per` 會對已預付時數重扣素材、甚至提早 `end`。→ 決策 #1 改為：舊列（`next_material_time` NULL）回填為該列 `expires_at`；因素材 tick 條件為 `next_material_time < expires_at`，回填成 `expires_at` 使其永不觸發，舊列以已付時數跑到到期、絕不二次扣素材。Task 4 測試同步。
