@@ -37,6 +37,17 @@ ACTION_FACILITY_BUILDING = {
 }
 
 
+def effective_cycle_seconds(cycle_time_reduce_pct: int = 0) -> int:
+    """Return effective cycle duration in seconds after applying cycle_time_reduce affix.
+
+    Floored to an integer; never below 60 seconds. Shared by manual-action settlement
+    and auto-tool settlement so both advance on the same timing formula.
+    """
+    base_secs = get_env_int("ACTION_CYCLE_MINUTES") * 60
+    reduced = math.floor(base_secs * (1 - cycle_time_reduce_pct / 100.0))
+    return max(60, reduced)
+
+
 def action_costs(action: str) -> dict[str, int]:
     """Return {resource_type: amount} consumed per complete cycle for this action."""
     costs: dict[str, int] = {"food": get_env_int("FOOD_COST")}

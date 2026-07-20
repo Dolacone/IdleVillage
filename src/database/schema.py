@@ -139,6 +139,27 @@ async def _create_v2_tables(db):
     )
     await db.execute(
         """
+        CREATE TABLE IF NOT EXISTS player_auto_tools (
+            user_id TEXT NOT NULL,
+            tool_type TEXT NOT NULL,
+            action_target TEXT,
+            completion_time TEXT NOT NULL,
+            last_update_time TEXT,
+            expires_at TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (user_id, tool_type)
+        )
+        """
+    )
+    await db.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_auto_tools_completion
+        ON player_auto_tools (completion_time)
+        """
+    )
+    await db.execute(
+        """
         CREATE INDEX IF NOT EXISTS idx_players_completion_time
         ON players (completion_time)
         """

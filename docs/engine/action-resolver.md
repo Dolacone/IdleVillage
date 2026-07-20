@@ -1,7 +1,7 @@
 ---
 title: "Module: action-resolver"
 doc_type: module
-last_reviewed: 2026-07-14
+last_reviewed: 2026-07-17
 source_paths:
   - src/core/settlement.py
 ---
@@ -12,8 +12,8 @@ source_paths:
 
 ## 輸入
 
-- 玩家當前行動類型。DB stored value: `gathering`, `building`, `combat`, `research`, or null。
-- 玩家當前建設目標。僅 `action = building` 時需要。
+- 由呼叫端傳入的明確 settlement context：`action`（`gathering`/`building`/`combat`/`research`）、`action_target`（建設目標建築，僅 `building`）、`user_id`、`write_player_timestamps`（手動行動 True，寫回 `players` 週期時間戳；burst 與自動工具 False，由呼叫端各自推進計時）。
+- 手動行動由 cycle-engine 以 `players.action`/`action_target` 組出 context；自動工具由 `settle_auto_tool_cycles` 以 `player_auto_tools` 的列組出 context（見 `managers/auto-tool-manager.md`）。兩者走同一結算路徑，產出/素材掉落/關卡/試煉貢獻皆歸於 context 的 `user_id` 與 `action`。
 - Discord UI 顯示使用繁體中文，resolver 只處理英文 stored value。
 
 ## 結算流程
@@ -77,6 +77,7 @@ This module applies the cost and output values passed by cycle-engine using the 
 
 ## Changelog
 
+- 2026-07-17: `_run_one_cycle` now takes an explicit settlement context (action/action_target/user_id/write_player_timestamps) instead of reading `players.action`, so auto-tools reuse the same resolver. Manual-action behavior unchanged. See `managers/auto-tool-manager.md`.
 - 2026-07-14: Added village trial progress accumulation (step 7.5) alongside stage progress; owned by `managers/trial-manager.md`.
 - 2026-07-14: Removed offering action settlement logic and its row from the 行動類型參考表.
 - 2026.05.08.00: Material drop step now references stage-matching effective drop rate.

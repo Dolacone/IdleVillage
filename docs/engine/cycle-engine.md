@@ -1,7 +1,7 @@
 ---
 title: "Module: cycle-engine"
 doc_type: module
-last_reviewed: 2026-07-14
+last_reviewed: 2026-07-17
 source_paths:
   - src/core/engine.py
 ---
@@ -33,6 +33,12 @@ source_paths:
 Watcher 每次心跳，除了逐一補算到期玩家的週期外，也會呼叫一次 `trial-manager.check_timeout()`
 檢查村莊試煉是否逾時（與個別玩家是否有到期行動無關，確保無人行動時試煉仍能在期限後被判定失敗）。
 詳見 `managers/trial-manager.md`。
+
+### 自動工具並行結算
+
+除玩家手動行動外，Watcher 也掃描 `player_auto_tools`（見 `managers/auto-tool-manager.md`）中 `completion_time <= now` 的列，對每列呼叫 `settlement.settle_auto_tool_cycles(user_id, tool_type, now)` 各自補算完整週期（受 `MAX_CYCLES_PER_SETTLEMENT` 限制），到期（`now >= expires_at` 且已補齊）即結束並釋放工具。開介面 / Refresh 時也對該玩家的到期自動工具補算。自動工具的 `cycle_time_reduce` 以該工具自身詞條計算，與手動行動及其他自動工具獨立。
+
+結算順序（固定、可預期，非等效保證）：一次 sweep 內先處理到期玩家手動行動（`players` 掃描加 `ORDER BY user_id`）、再處理到期自動工具（`ORDER BY user_id, tool_type`）、最後 trial timeout。因完整週期會改動共用村莊資源池、關卡/試煉進度與建築等級，順序會影響結果，故明確固定而非宣稱等效。
 
 ## 完整週期結算流程
 
@@ -125,6 +131,7 @@ ratio          = elapsed / effective_secs（0 ~ 1）
 
 ## Changelog
 
+- 2026-07-17: Watcher and open-interface catch-up now also settle due auto-tools (`settlement.settle_auto_tool_cycles`), independent per tool. Both due-scan queries are ordered (`players` by user_id, `player_auto_tools` by user_id+tool_type) for a fixed settlement order. See `managers/auto-tool-manager.md`.
 - 2026-07-14: Watcher tick now also calls `trial-manager.check_timeout()` once per heartbeat, independent of any player's `completion_time`.
 - 2026-05-22: Updated cycle timing to use `_effective_cycle_seconds(cycle_time_reduce_pct)` at all three calculation points (change_action, catch-up advance, partial ratio). `cycle_time_reduce` affix scoped to player's current action tool.
 - 2026.05.08.00: Burst material rolls now use the effective drop rate for the current stage at each settlement.

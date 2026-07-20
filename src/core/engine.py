@@ -18,7 +18,7 @@ class Engine:
     @staticmethod
     async def _process_watcher_v2(watcher_req_id: str) -> None:
         from core import notification
-        from core.settlement import settle_complete_cycles
+        from core.settlement import settle_auto_tool_cycles, settle_complete_cycles
         from managers import trial_manager
 
         log_event(watcher_req_id, "SYSTEM", "STATUS", "Watcher sweep started (v2)")
@@ -26,14 +26,28 @@ class Engine:
 
         async with get_connection() as db:
             async with db.execute(
-                "SELECT user_id FROM players WHERE completion_time <= ? AND action IS NOT NULL",
+                "SELECT user_id FROM players WHERE completion_time <= ? AND action IS NOT NULL"
+                " ORDER BY user_id",
                 (now.isoformat(),),
             ) as cursor:
                 due_players = await cursor.fetchall()
 
+            async with db.execute(
+                "SELECT user_id, tool_type FROM player_auto_tools WHERE completion_time <= ?"
+                " ORDER BY user_id, tool_type",
+                (now.isoformat(),),
+            ) as cursor:
+                due_auto_tools = await cursor.fetchall()
+
+        # Fixed, predictable settlement order (see auto-tool change doc, decision #8):
+        # manual actions first, then auto-tools, then the trial timeout backstop.
         all_events: list[dict] = []
         for (user_id,) in due_players:
             events = await settle_complete_cycles(user_id, now)
+            all_events.extend(events)
+
+        for (user_id, tool_type) in due_auto_tools:
+            events = await settle_auto_tool_cycles(user_id, tool_type, now)
             all_events.extend(events)
 
         # Trial timeout backstop: runs every heartbeat regardless of whether any

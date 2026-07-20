@@ -1211,5 +1211,260 @@ class ResidualOfferingActionTest(SettlementTestBase):
         self.assertEqual(player["action"], "gathering")
 
 
+class ExplicitContextCycleTest(SettlementTestBase):
+    """_run_one_cycle driven by an explicit context (the auto-tool reuse path)."""
+
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        await self._set_resource("food", 10000)
+        await self._set_resource("wood", 10000)
+        await self._set_resource("knowledge", 10000)
+
+    async def test_context_gathering_matches_manual_distribution(self):
+        """Explicit gathering context deposits food+wood, same as the manual path."""
+        from core.settlement import _run_one_cycle
+        await self._insert_player(action=None)  # no manual action set
+        cycle_end = _now()
+        async with schema.get_connection() as db:
+            with patch("random.random", return_value=1.0):  # suppress material drop
+                events = await _run_one_cycle(
+                    db, self.TEST_USER, cycle_end,
+                    action="gathering", action_target=None,
+                    write_player_timestamps=False,
+                )
+            await db.commit()
+        base = int(os.environ["BASE_OUTPUT"])
+        food_cost = int(os.environ["FOOD_COST"])
+        # gathering costs FOOD_COST food, then deposits `base` to both food and wood
+        self.assertEqual(await self._get_resource("food"), 10000 - food_cost + base)
+        self.assertEqual(await self._get_resource("wood"), 10000 + base)
+        self.assertEqual(events, [])
+
+    async def test_context_does_not_touch_player_timestamps(self):
+        """write_player_timestamps=False leaves players.completion_time/last_update_time null."""
+        from core.settlement import _run_one_cycle
+        await self._insert_player(action=None)
+        async with schema.get_connection() as db:
+            with patch("random.random", return_value=1.0):
+                await _run_one_cycle(
+                    db, self.TEST_USER, _now(),
+                    action="combat", action_target=None,
+                    write_player_timestamps=False,
+                )
+            await db.commit()
+        player = await self._get_player()
+        self.assertIsNone(player["completion_time"])
+        self.assertIsNone(player["last_update_time"])
+
+    async def test_context_material_drop_targets_the_context_action(self):
+        """A drop is credited to the context action's material, not the player's action."""
+        from core.settlement import _run_one_cycle
+        await self._insert_player(action=None)
+        async with schema.get_connection() as db:
+            with patch("random.random", return_value=0.0):  # force a drop
+                await _run_one_cycle(
+                    db, self.TEST_USER, _now(),
+                    action="combat", action_target=None,
+                    write_player_timestamps=False,
+                )
+            await db.commit()
+        player = await self._get_player()
+        self.assertEqual(player["materials_combat"], 1)
+        self.assertEqual(player["materials_gathering"], 0)
+
+    async def test_context_building_uses_passed_target(self):
+        """Building context routes XP to the explicitly passed target building."""
+        from core.settlement import _run_one_cycle
+        await self._insert_player(action=None, gear_building=0)
+        async with schema.get_connection() as db:
+            with patch("random.random", return_value=1.0):
+                await _run_one_cycle(
+                    db, self.TEST_USER, _now(),
+                    action="building", action_target="workshop",
+                    write_player_timestamps=False,
+                )
+            await db.commit()
+        base = int(os.environ["BASE_OUTPUT"])
+        self.assertEqual((await self._get_building("workshop"))["xp_progress"], base)
+
+
+class AutoToolSettlementTest(SettlementTestBase):
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        await self._set_resource("food", 100000)
+        await self._set_resource("wood", 100000)
+        await self._set_resource("knowledge", 100000)
+
+    async def _insert_auto_tool(self, tool_type, completion_time, expires_at, action_target=None):
+        now_str = _now().isoformat()
+        async with schema.get_connection() as db:
+            await db.execute(
+                """INSERT INTO player_auto_tools
+                   (user_id, tool_type, action_target, completion_time, last_update_time,
+                    expires_at, started_at, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (self.TEST_USER, tool_type, action_target,
+                 completion_time.isoformat(), now_str, expires_at.isoformat(), now_str, now_str),
+            )
+            await db.commit()
+
+    async def test_settles_due_cycle_and_advances_completion(self):
+        from core.settlement import settle_auto_tool_cycles
+        now = _now()
+        await self._insert_player(action=None)
+        await self._insert_auto_tool(
+            "gathering", completion_time=now - timedelta(minutes=1), expires_at=now + timedelta(hours=1)
+        )
+        with patch("random.random", return_value=1.0):
+            await settle_auto_tool_cycles(self.TEST_USER, "gathering", now)
+        base = int(os.environ["BASE_OUTPUT"])
+        food_cost = int(os.environ["FOOD_COST"])
+        self.assertEqual(await self._get_resource("wood"), 100000 + base)
+        self.assertEqual(await self._get_resource("food"), 100000 - food_cost + base)
+        # player timestamps untouched
+        player = await self._get_player()
+        self.assertIsNone(player["completion_time"])
+        # auto-tool row still present (not expired), completion advanced into the future
+        async with schema.get_connection() as db:
+            row = await self.fetchone(
+                "SELECT completion_time FROM player_auto_tools WHERE user_id=? AND tool_type=?",
+                (self.TEST_USER, "gathering"),
+            )
+        self.assertGreater(_utc(datetime.fromisoformat(row[0])), now)
+
+    async def test_material_drop_credits_the_tool_material(self):
+        from core.settlement import settle_auto_tool_cycles
+        now = _now()
+        await self._insert_player(action=None)
+        await self._insert_auto_tool(
+            "combat", completion_time=now - timedelta(minutes=1), expires_at=now + timedelta(hours=1)
+        )
+        with patch("random.random", return_value=0.0):  # force drop
+            await settle_auto_tool_cycles(self.TEST_USER, "combat", now)
+        player = await self._get_player()
+        self.assertEqual(player["materials_combat"], 1)
+        self.assertEqual(player["materials_gathering"], 0)
+
+    async def test_expired_auto_tool_is_ended_after_catch_up(self):
+        from core.settlement import settle_auto_tool_cycles
+        now = _now()
+        await self._insert_player(action=None)
+        await self._insert_auto_tool(
+            "gathering",
+            completion_time=now - timedelta(minutes=20),
+            expires_at=now - timedelta(minutes=1),  # already expired
+        )
+        with patch("random.random", return_value=1.0):
+            await settle_auto_tool_cycles(self.TEST_USER, "gathering", now)
+        row = await self.fetchone(
+            "SELECT 1 FROM player_auto_tools WHERE user_id=? AND tool_type=?",
+            (self.TEST_USER, "gathering"),
+        )
+        self.assertIsNone(row)  # freed
+
+    async def test_expired_tool_ended_even_when_cap_hit_but_caught_up(self):
+        # Regression: end condition must be "caught up" (cycle_end > deadline), not
+        # cycles_done < max_cycles. With MAX=2 and exactly 2 due cycles, an expired tool
+        # is fully caught up at the cap and must be freed, not left occupying the tool.
+        from core.settlement import settle_auto_tool_cycles
+        now = _now()
+        cycle_secs = int(os.environ["ACTION_CYCLE_MINUTES"]) * 60
+        await self._insert_player(action=None)
+        await self._insert_auto_tool(
+            "gathering",
+            completion_time=now - timedelta(seconds=cycle_secs),  # 1 cycle before now
+            expires_at=now,                                        # expired (now >= expires)
+        )
+        with patch("random.random", return_value=1.0), \
+             patch.dict(os.environ, {"MAX_CYCLES_PER_SETTLEMENT": "2"}):
+            await settle_auto_tool_cycles(self.TEST_USER, "gathering", now)
+        row = await self.fetchone(
+            "SELECT 1 FROM player_auto_tools WHERE user_id=? AND tool_type=?",
+            (self.TEST_USER, "gathering"),
+        )
+        self.assertIsNone(row)
+
+    async def test_not_ended_when_cap_hit_with_backlog(self):
+        # With MAX=1 and many due cycles, the tool is NOT caught up -> must remain.
+        from core.settlement import settle_auto_tool_cycles
+        now = _now()
+        cycle_secs = int(os.environ["ACTION_CYCLE_MINUTES"]) * 60
+        await self._insert_player(action=None)
+        await self._insert_auto_tool(
+            "gathering",
+            completion_time=now - timedelta(seconds=cycle_secs * 10),
+            expires_at=now,
+        )
+        with patch("random.random", return_value=1.0), \
+             patch.dict(os.environ, {"MAX_CYCLES_PER_SETTLEMENT": "1"}):
+            await settle_auto_tool_cycles(self.TEST_USER, "gathering", now)
+        row = await self.fetchone(
+            "SELECT 1 FROM player_auto_tools WHERE user_id=? AND tool_type=?",
+            (self.TEST_USER, "gathering"),
+        )
+        self.assertIsNotNone(row)  # backlog remains -> not freed yet
+
+    async def test_settle_keeps_tool_that_was_refueled_into_future(self):
+        # An expired tool refueled (extended past now) before settle reads it must NOT be
+        # ended — settle reads the fresh expires_at (under BEGIN IMMEDIATE) so the just-added
+        # runtime is never eaten.
+        from core.settlement import settle_auto_tool_cycles
+        from managers import auto_tool_manager
+        now = _now()
+        await self._insert_player(action=None)
+        async with schema.get_connection() as db:
+            await db.execute(
+                "UPDATE players SET materials_gathering=5 WHERE user_id=?", (self.TEST_USER,)
+            )
+            await db.commit()
+        await self._insert_auto_tool(
+            "gathering",
+            completion_time=now - timedelta(minutes=20),
+            expires_at=now - timedelta(minutes=1),  # expired
+        )
+        async with schema.get_connection() as db:
+            await auto_tool_manager.refuel(db, self.TEST_USER, "gathering", 2, now)  # +2h -> future
+            await db.commit()
+        with patch("random.random", return_value=1.0):
+            await settle_auto_tool_cycles(self.TEST_USER, "gathering", now)
+        row = await self.fetchone(
+            "SELECT 1 FROM player_auto_tools WHERE user_id=? AND tool_type=?",
+            (self.TEST_USER, "gathering"),
+        )
+        self.assertIsNotNone(row)  # survived — refuel not clobbered
+
+    async def test_watcher_settles_due_auto_tool(self):
+        from core.engine import Engine
+        now = _now()
+        await self._insert_player(action=None)
+        await self._insert_auto_tool(
+            "gathering", completion_time=now - timedelta(minutes=1), expires_at=now + timedelta(hours=1)
+        )
+        with patch("random.random", return_value=1.0):
+            await Engine.process_watcher()
+        base = int(os.environ["BASE_OUTPUT"])
+        self.assertEqual(await self._get_resource("wood"), 100000 + base)
+
+
+class EffectiveCycleSecondsTest(unittest.TestCase):
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def test_no_reduction_returns_base(self):
+        from core.formula import effective_cycle_seconds
+        expected = int(os.environ["ACTION_CYCLE_MINUTES"]) * 60
+        self.assertEqual(effective_cycle_seconds(0), expected)
+
+    def test_reduction_is_floored(self):
+        from core.formula import effective_cycle_seconds
+        base = int(os.environ["ACTION_CYCLE_MINUTES"]) * 60
+        self.assertEqual(effective_cycle_seconds(10), math.floor(base * 0.9))
+
+    def test_never_below_60_seconds(self):
+        from core.formula import effective_cycle_seconds
+        self.assertEqual(effective_cycle_seconds(100), 60)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -9,6 +9,8 @@ from cogs.ui_renderer import (
     UI_BUILDING_TARGETS,
     build_affix_components,
     build_affix_embed,
+    build_auto_tool_components,
+    build_auto_tool_embed,
     build_gear_components,
     build_gear_embed,
     build_main_components,
@@ -18,15 +20,15 @@ from cogs.ui_renderer import (
 from core import notification
 from core.config import get_discord_guild_id, get_env_int
 from core.formula import ACTION_MATERIAL_COL
-from core.settlement import change_action, settle_burst, settle_complete_cycles
+from core.settlement import change_action, settle_auto_tool_cycles, settle_burst, settle_complete_cycles
 from core.utils import dt_str
 from database.schema import get_connection
-from managers import affix_manager, building_manager, gear_manager, player_manager, trial_manager
+from managers import affix_manager, auto_tool_manager, building_manager, gear_manager, player_manager, trial_manager
 
-_OWN_BUTTONS = frozenset({"burst_execute", "open_gear_upgrade", "open_trial_start", "back_to_main"})
-_OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:", "clear_affix:", "sacrifice_material:", "open_affix_mgmt:", "affix_extract:", "affix_clear:", "back_to_gear:")
-_OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "gear_type_select", "affix_gear_select"})
-_OWN_DROPDOWN_PREFIXES = ("upgrade_mode_select:", "affix_slot_select:")
+_OWN_BUTTONS = frozenset({"burst_execute", "open_gear_upgrade", "open_trial_start", "open_auto_tool", "back_to_main"})
+_OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:", "clear_affix:", "sacrifice_material:", "open_affix_mgmt:", "affix_extract:", "affix_clear:", "back_to_gear:", "auto_tool_confirm:")
+_OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "gear_type_select", "affix_gear_select", "auto_tool_type_select"})
+_OWN_DROPDOWN_PREFIXES = ("upgrade_mode_select:", "affix_slot_select:", "auto_tool_target_select:", "auto_tool_count_select:")
 _OWN_MODAL_PREFIXES = ("modal_sacrifice:",)
 _VALID_GEAR_TYPES = frozenset({"gathering", "building", "combat", "research"})
 _VALID_ACTIONS = frozenset({"gathering", "building", "combat", "research"})
@@ -133,6 +135,11 @@ class ActionsCog(commands.Cog):
         user_id = str(inter.user.id)
         now = datetime.now(timezone.utc)
         events = await settle_complete_cycles(user_id, now)
+        # Catch up any due auto-tools for this player before rendering.
+        async with get_connection() as db:
+            due_auto = await auto_tool_manager.list_active(db, user_id)
+        for row in due_auto:
+            events.extend(await settle_auto_tool_cycles(user_id, row["tool_type"], now))
         await notification.dispatch_events(self.bot, events)
 
         async with get_connection() as db:
@@ -141,6 +148,7 @@ class ActionsCog(commands.Cog):
                 await self._fetch_all_data(db, user_id)
             )
             ap = await player_manager.get_ap(db, user_id, now)
+            active_auto_tools = await auto_tool_manager.get_active_tool_types(db, user_id)
 
         player_row["_ap"] = ap
         embed = build_main_embed(
@@ -149,7 +157,7 @@ class ActionsCog(commands.Cog):
         )
         components = build_main_components(
             player_row, buildings, pending_action=pending_action, pending_target=pending_target,
-            trial_data=trial_data, resources=resources,
+            trial_data=trial_data, resources=resources, active_auto_tools=active_auto_tools,
         )
         if respond is not None:
             await respond(embed=embed, components=components)
@@ -258,6 +266,32 @@ class ActionsCog(commands.Cog):
         if affix_event:
             await notification.dispatch_events(self.bot, [affix_event])
 
+    async def _render_auto_tool(
+        self, inter, *,
+        selected_tool: str | None = None,
+        selected_target: str | None = None,
+        selected_count: int | None = None,
+        error: str | None = None,
+    ) -> None:
+        user_id = str(inter.user.id)
+        now = datetime.now(timezone.utc)
+        async with get_connection() as db:
+            active_rows = await auto_tool_manager.list_active(db, user_id)
+            idle_tools = await auto_tool_manager.get_idle_tools(db, user_id)
+            max_add = 0
+            if selected_tool is not None:
+                row = await auto_tool_manager.get(db, user_id, selected_tool)
+                expires = row["expires_at"] if row else None
+                max_add = auto_tool_manager.max_add_materials(expires, now)
+        max_materials = get_env_int("AUTO_TOOL_MAX_MATERIALS")
+        embed = build_auto_tool_embed(active_rows, max_materials, error=error)
+        components = build_auto_tool_components(
+            idle_tools, active_rows,
+            selected_tool=selected_tool, selected_target=selected_target,
+            selected_count=selected_count, max_add=max_add,
+        )
+        await inter.edit_original_response(embed=embed, components=components)
+
     @commands.slash_command(name="idlevillage-ranking", description="查看各工具等級排行榜")
     async def idlevillage_ranking(self, inter: disnake.ApplicationCommandInteraction) -> None:
         if not self._check_guild(inter):
@@ -314,6 +348,35 @@ class ActionsCog(commands.Cog):
         elif cid == "open_gear_upgrade":
             await inter.response.defer()
             await self._render_gear(inter, None)
+
+        elif cid == "open_auto_tool":
+            await inter.response.defer()
+            await self._render_auto_tool(inter)
+
+        elif cid.startswith("auto_tool_confirm:"):
+            parts = cid.split(":")
+            # auto_tool_confirm:{tool}:{count}:{target|none}
+            if len(parts) < 4 or parts[1] not in _VALID_GEAR_TYPES:
+                return
+            tool_type = parts[1]
+            try:
+                count = int(parts[2])
+            except ValueError:
+                return
+            target = None if parts[3] == "none" else parts[3]
+            await inter.response.defer()
+            now = datetime.now(timezone.utc)
+            error: str | None = None
+            async with get_connection() as db:
+                try:
+                    if await auto_tool_manager.is_active(db, user_id, tool_type):
+                        await auto_tool_manager.refuel(db, user_id, tool_type, count, now)
+                    else:
+                        await auto_tool_manager.start(db, user_id, tool_type, count, target, now)
+                    await db.commit()
+                except ValueError:
+                    error = "⚠️ 操作失敗（素材不足、工具使用中或已達上限），請重新確認。"
+            await self._render_auto_tool(inter, error=error)
 
         elif cid == "open_trial_start":
             await inter.response.defer()
@@ -591,6 +654,27 @@ class ActionsCog(commands.Cog):
             except ValueError:
                 return
             await self._render_affix(inter, gear_type, selected_slot=slot_index)
+
+        elif cid == "auto_tool_type_select":
+            if value in _VALID_GEAR_TYPES:
+                await self._render_auto_tool(inter, selected_tool=value)
+        elif cid.startswith("auto_tool_target_select:"):
+            tool_type = cid.split(":", 1)[1]
+            if tool_type in _VALID_GEAR_TYPES and value in UI_BUILDING_TARGETS:
+                await self._render_auto_tool(inter, selected_tool=tool_type, selected_target=value)
+        elif cid.startswith("auto_tool_count_select:"):
+            parts = cid.split(":")
+            if len(parts) < 3 or parts[1] not in _VALID_GEAR_TYPES:
+                return
+            tool_type = parts[1]
+            target = None if parts[2] == "none" else parts[2]
+            try:
+                count = int(value)
+            except ValueError:
+                return
+            await self._render_auto_tool(
+                inter, selected_tool=tool_type, selected_target=target, selected_count=count
+            )
 
 
 def setup(bot: commands.Bot) -> None:
