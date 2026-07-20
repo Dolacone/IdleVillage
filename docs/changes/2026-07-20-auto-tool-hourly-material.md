@@ -1,6 +1,6 @@
 ---
 title: "自動工具改版：隨用隨扣素材與可調剩餘時間"
-status: Ready-to-implement
+status: Ready-to-review
 created: 2026-07-20
 doc_type: change
 last_reviewed: 2026-07-20
@@ -162,7 +162,7 @@ T1／T2 互相獨立可並行。T3 依賴 T1（欄位）＋T2（env）。T4 依�
   - Depends on: T4, T5
   - Acceptance: `auto_tool_confirm` 解析 delta（含負值）並路由至 start/add_time/subtract_time；`_render_auto_tool` 依選取工具是否運行計算 `max_add_hours`/`max_subtract_hours` 並傳入；`_render_auto_tool` 內 `get_env_int("AUTO_TOOL_MAX_MATERIALS")`（約 L286）改讀 `AUTO_TOOL_MAX_HOURS`（決策 #4 的 caller，勿遺漏）；own-interaction 與 guild 驗證沿用；既有 cog 測試調整後全通過
 
-- [ ] Task 7: 文件更新
+- [x] Task 7: 文件更新
   - Files: `docs/managers/auto-tool-manager.md`, `docs/db-schema.md`, `docs/engine/cycle-engine.md`, `docs/engine/formula.md`, `docs/discord/ui-renderer.md`, `docs/discord/command-handler.md`
   - Tests: 無（純文件）
   - Depends on: T1–T6

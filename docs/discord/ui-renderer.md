@@ -1,7 +1,7 @@
 ---
 title: "Module: ui-renderer"
 doc_type: module
-last_reviewed: 2026-07-17
+last_reviewed: 2026-07-20
 source_paths:
   - src/cogs/ui_renderer.py
 ---
@@ -166,16 +166,17 @@ Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
 
 ## 自動工具子介面 Embed（build_auto_tool_embed / build_auto_tool_components）
 
-Embed 顯示標題、運行中自動工具清單（`{工具}：到期 <t:{unix}:R>`，建設附目標建築）、以及規則說明（每 1 素材 1 小時、上限 `AUTO_TOOL_MAX_MATERIALS` 小時）。無運行中工具時顯示「目前沒有運行中的自動工具」。
+Embed 顯示標題、運行中自動工具清單（`{工具}：到期 <t:{unix}:R>｜素材可撐 {n} 小時`，建設附目標建築）、以及規則說明（啟動選運行時數、上限 `AUTO_TOOL_MAX_HOURS` 小時、每小時扣 1 素材、素材用完即停、運行中可加/減時間）。無運行中工具時顯示「目前沒有運行中的自動工具」。
 
 元件：
-- **Dropdown**（`auto_tool_type_select`）：可操作工具（閒置＝啟動、運行中＝補充；排除手動行動的工具）。皆無可用工具時以停用提示選項顯示。
-- **Dropdown**（`auto_tool_target_select:{tool}`，僅選「建設」後出現）：建設目標（採集場/加工廠/狩獵場）。
-- **Dropdown**（`auto_tool_count_select:{tool}:{target|none}`，選定工具後出現）：素材數量 `1..max_add`；`max_add == 0`（已達 6h 上限）時以停用提示選項顯示。
-- **Button**：`✅ 確認`（Green，custom_id: `auto_tool_confirm:{tool}:{count}:{target|none}`）；未選齊或超上限時 disabled。
+- **Dropdown**（`auto_tool_type_select`）：可操作工具（閒置＝啟動、運行中＝調整時間；排除手動行動的工具）。皆無可用工具時以停用提示選項顯示。
+- **Dropdown**（`auto_tool_target_select:{tool}`，僅「啟動建設」時出現；運行中的建設工具目標固定，不出現）：建設目標（採集場/加工廠/狩獵場）。
+- **Dropdown**（`auto_tool_add_select:{tool}:{target|none}`，選定工具後出現）：閒置工具＝初始運行時數 `1..max_add`；運行中＝加時間 `+1..+max_add`。`max_add == 0`（已達上限）時以停用提示選項顯示。
+- **Dropdown**（`auto_tool_sub_select:{tool}:{target|none}`，僅運行中工具出現）：減時間 `-1..-max_subtract`，最大階標示「停止（清空剩餘時間）」。
+- **Button**：`✅ 確認`（Green，custom_id: `auto_tool_confirm:{tool}:{delta}:{target|none}`，`delta` 為有號時數）；未選齊或超範圍時 disabled。
 - **Button**：`← 返回`（Gray，custom_id: `back_to_main`）。
 
-`max_add = floor((上限秒 − 剩餘秒) / 每素材秒)`；剩餘時間依 `expires_at − now` 計，詳見 `managers/auto-tool-manager.md`。
+`max_add = floor((上限秒 − 剩餘秒) / 每素材秒)`、`max_subtract = ceil(剩餘秒 / 每素材秒)`；剩餘時間依 `expires_at − now` 計。ActionRow：建設啟動 = 工具+目標+時數+按鈕（4）；運行中調整 = 工具+加+減+按鈕（4）。詳見 `managers/auto-tool-manager.md`。
 
 ## 工具強化子選單 Embed
 
@@ -285,6 +286,7 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
 
 ## Changelog
 
+- 2026-07-20: Auto-tool sub-interface reworked for pay-as-you-go: idle tool picks initial hours (`auto_tool_add_select`, 1..24), running tool gets add-time and subtract-time selects (`auto_tool_add_select` / `auto_tool_sub_select`, bottom subtract step stops it); confirm custom_id carries a signed hours delta (`auto_tool_confirm:{tool}:{delta}:{target|none}`); embed shows each running tool's material runway. See `managers/auto-tool-manager.md`.
 - 2026-07-17: Added `⚙️ 自動工具` main-interface button and the auto-tool sub-interface (`build_auto_tool_embed` / `build_auto_tool_components`); the action dropdown now excludes tools running as auto-tools. See `managers/auto-tool-manager.md`.
 - 2026-07-17: 詞條管理畫面選定工具類型後，Embed 新增持有素材列（該類型素材 + 🌟 萬能素材），格式比照工具強化子選單；`build_affix_embed` 新增 `materials`/`universal_materials` 參數。
 - 2026-07-17: 詞條操作段落補充：抽取/清除素材不足時自動用萬能素材補足差額（比照工具強化子選單），按鈕 disabled 條件不含素材判斷。

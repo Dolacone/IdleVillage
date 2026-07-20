@@ -1,7 +1,7 @@
 ---
 title: "Module: command-handler"
 doc_type: module
-last_reviewed: 2026-07-17
+last_reviewed: 2026-07-20
 source_paths:
   - src/cogs/actions.py
   - src/cogs/general.py
@@ -40,10 +40,11 @@ source_paths:
 ### 自動工具子介面
 | 元件 ID | 觸發條件 | 處理邏輯 |
 | :--- | :--- | :--- |
-| `auto_tool_type_select` | 選擇工具 | 重繪子介面，載入該工具可補充素材上限（`max_add`） |
-| `auto_tool_target_select:{tool}` | 選擇建設目標（僅建設） | 重繪子介面並記住目標 |
-| `auto_tool_count_select:{tool}:{target}` | 選擇素材數量 | 重繪子介面並記住數量 |
-| `auto_tool_confirm:{tool}:{count}:{target}` | 點擊確認 | 工具運行中則呼叫 `auto_tool_manager.refuel`，否則 `auto_tool_manager.start`（只扣該工具自身素材，不吃萬能）；失敗顯示統一錯誤且不扣素材；重繪子介面 |
+| `auto_tool_type_select` | 選擇工具 | 重繪子介面，載入該工具可加/可減時數上限（`max_add`／`max_subtract`） |
+| `auto_tool_target_select:{tool}` | 選擇建設目標（僅啟動建設） | 重繪子介面並記住目標 |
+| `auto_tool_add_select:{tool}:{target}` | 選擇時數（閒置＝初始時數；運行中＝加時間） | 重繪子介面並記住有號 delta（正） |
+| `auto_tool_sub_select:{tool}:{target}` | 選擇減時數（僅運行中） | 重繪子介面並記住有號 delta（負） |
+| `auto_tool_confirm:{tool}:{delta}:{target}` | 點擊確認 | `delta` 為有號時數：工具未運行 → `auto_tool_manager.start(hours=delta)`（要求 ≥1 該工具素材、只扣 1，不吃萬能）；運行中 `delta>0` → `add_time`、`delta<0` → `subtract_time`（純調時間、不碰素材，減到底即停）；失敗顯示統一錯誤且不改狀態；重繪子介面 |
 | `back_to_main` | 點擊返回 | 重新渲染主介面 |
 
 開啟主介面（`/idlevillage`、`back_to_main`）時，除補算手動行動外，也對該玩家所有到期自動工具呼叫 `settle_auto_tool_cycles`。詳見 `managers/auto-tool-manager.md`。
@@ -98,6 +99,7 @@ source_paths:
 
 ## Changelog
 
+- 2026-07-20: Auto-tool routes reworked for pay-as-you-go: `auto_tool_count_select` replaced by `auto_tool_add_select` / `auto_tool_sub_select`; `auto_tool_confirm:{tool}:{delta}:{target}` carries a signed hours delta routed to `start` / `add_time` / `subtract_time`. See `managers/auto-tool-manager.md`.
 - 2026-07-17: Added auto-tool routes (`open_auto_tool`, `auto_tool_type_select`, `auto_tool_target_select:{tool}`, `auto_tool_count_select:{tool}:{target}`, `auto_tool_confirm:{tool}:{count}:{target}`); opening the main interface now also settles due auto-tools. See `managers/auto-tool-manager.md`.
 - 2026-07-17: `affix_extract`/`affix_clear` 素材消耗改為「先扣對應素材，不足由萬能素材補足」；路由行為不變，僅素材來源擴充。
 - 2026-07-14: `open_trial_start` no longer opens a Modal — clicking it directly starts a trial with a fixed, system-chosen amount/resource; no player input at all. Removed the `modal_start_trial` route.
