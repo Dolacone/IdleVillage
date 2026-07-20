@@ -2,11 +2,15 @@
 auto_tool_manager — per-tool background action streams ("auto-tools").
 
 A player may run up to one auto-tool per tool type, provided that tool is not their
-current manual action and not already an auto-tool. Each auto-tool is activated by
-spending that tool's own material (no universal-material fallback); each material buys
-AUTO_TOOL_SECONDS_PER_MATERIAL of runtime, capped at AUTO_TOOL_MAX_MATERIALS materials'
-worth of remaining time. While active it settles on its own cycle timer, fully equivalent
-to a manual action (see core/settlement.settle_auto_tool_cycles).
+current manual action and not already an auto-tool.
+
+Material is spent pay-as-you-go, not prepaid: `start` spends exactly 1 of the tool's own
+material (no universal-material fallback) to cover the first hour, and settlement deducts
+1 more at each subsequent hour boundary (`next_material_time`). Remaining runtime is a
+player-set clock (`expires_at`), decoupled from materials and adjustable via add_time /
+subtract_time (which never touch materials); it is capped at AUTO_TOOL_MAX_HOURS hours.
+Running out of material at an hour tick stops the tool. While active it settles on its own
+cycle timer, fully equivalent to a manual action (see core/settlement.settle_auto_tool_cycles).
 
 All functions accept an open aiosqlite connection; the caller commits. This module must
 NOT import core.settlement (settlement imports this module) — cycle timing comes from
@@ -36,27 +40,41 @@ def _seconds_per_material() -> int:
     return get_env_int("AUTO_TOOL_SECONDS_PER_MATERIAL")
 
 
-def _max_materials() -> int:
-    return get_env_int("AUTO_TOOL_MAX_MATERIALS")
+def _max_hours() -> int:
+    return get_env_int("AUTO_TOOL_MAX_HOURS")
 
 
 def _cap_seconds() -> int:
-    return _seconds_per_material() * _max_materials()
+    return _seconds_per_material() * _max_hours()
 
 
-def max_add_materials(expires_at_str: str | None, now: datetime) -> int:
+def max_add_hours(expires_at_str: str | None, now: datetime) -> int:
     """
-    Number of whole materials that may still be added without exceeding the runtime cap.
+    Whole hours that may still be added to remaining time without exceeding the runtime cap.
 
     max_add = floor((cap_seconds - remaining_seconds) / seconds_per_material), floored at 0.
     remaining_seconds = max(0, expires_at - now); for a fresh activation (no row) pass None
-    -> remaining 0 -> max_add == AUTO_TOOL_MAX_MATERIALS.
+    -> remaining 0 -> max_add == AUTO_TOOL_MAX_HOURS.
     """
     per = _seconds_per_material()
     remaining = 0.0
     if expires_at_str:
         remaining = max(0.0, (parse_dt(expires_at_str) - now).total_seconds())
     return max(0, math.floor((_cap_seconds() - remaining) / per))
+
+
+def max_subtract_hours(expires_at_str: str | None, now: datetime) -> int:
+    """
+    Whole-hour steps offered for reducing remaining time; the largest step stops the tool.
+
+    max_sub = ceil(remaining_seconds / seconds_per_material). Reducing by any step whose
+    seconds >= remaining stops the tool (remaining -> 0); the top step always does.
+    """
+    if not expires_at_str:
+        return 0
+    per = _seconds_per_material()
+    remaining = max(0.0, (parse_dt(expires_at_str) - now).total_seconds())
+    return max(0, math.ceil(remaining / per))
 
 
 async def get(db, user_id: str, tool_type: str) -> dict | None:
@@ -126,30 +144,35 @@ async def _spend_own_material(db, user_id: str, tool_type: str, count: int, now_
 
 
 async def start(
-    db, user_id: str, tool_type: str, count: int, action_target: str | None, now: datetime
+    db, user_id: str, tool_type: str, hours: int, action_target: str | None, now: datetime
 ) -> None:
     """
-    Activate an auto-tool for tool_type, spending `count` of that tool's own material.
+    Activate an auto-tool for tool_type with `hours` of initial remaining time.
 
-    Raises ValueError if: tool_type invalid; count out of [1, max_add]; building target
-    invalid; tool is the player's manual action or already an auto-tool; insufficient
-    materials. The exclusion is enforced race-safely by a conditional INSERT (its
-    WHERE NOT EXISTS / action-distinct predicate is evaluated against committed state
-    after acquiring the write lock), so a concurrent manual-action change cannot double-assign.
+    Spends exactly 1 of the tool's own material up front (covers the first hour, t=0);
+    subsequent hours are charged by settlement at each `next_material_time` tick.
+
+    Raises ValueError if: tool_type invalid; hours out of [1, AUTO_TOOL_MAX_HOURS]; building
+    target invalid; tool is the player's manual action or already an auto-tool; the player
+    holds no unit of that material. The exclusion is enforced race-safely by a conditional
+    INSERT (its WHERE NOT EXISTS / action-distinct predicate is evaluated against committed
+    state after acquiring the write lock), so a concurrent manual-action change cannot
+    double-assign.
     """
     if tool_type not in TOOL_TYPES:
         raise ValueError(f"Invalid tool_type: {tool_type!r}")
-    if count < 1 or count > max_add_materials(None, now):
-        raise ValueError(f"Invalid material count: {count}")
+    if hours < 1 or hours > max_add_hours(None, now):
+        raise ValueError(f"Invalid hours: {hours}")
 
     effective_target = _resolve_target(tool_type, action_target)  # validates building target
     per = _seconds_per_material()
     now_str = dt_str(now)
-    expires_at = dt_str(now + timedelta(seconds=count * per))
+    expires_at = dt_str(now + timedelta(seconds=hours * per))
+    next_material_time = dt_str(now + timedelta(seconds=per))
 
-    # Acquire the write lock before the guard reads so concurrent start/refuel/change_action
-    # serialize (Architecture Decision #7); the caller commits on success. On failure we roll
-    # back so the caller's connection is left clean (no dangling open transaction).
+    # Acquire the write lock before the guard reads so concurrent start/add/subtract/
+    # change_action serialize (Architecture Decision #7); the caller commits on success. On
+    # failure we roll back so the caller's connection is left clean (no dangling transaction).
     await db.execute("BEGIN IMMEDIATE")
     try:
         # cycle_time_reduce affix scoped to this tool, mirroring manual-action timing.
@@ -162,8 +185,8 @@ async def start(
             """
             INSERT INTO player_auto_tools
                 (user_id, tool_type, action_target, completion_time, last_update_time,
-                 expires_at, started_at, updated_at)
-            SELECT ?, ?, ?, ?, ?, ?, ?, ?
+                 expires_at, started_at, next_material_time, updated_at)
+            SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?
             WHERE NOT EXISTS (
                     SELECT 1 FROM player_auto_tools WHERE user_id=? AND tool_type=?
                   )
@@ -172,7 +195,7 @@ async def start(
             """,
             (
                 user_id, tool_type, effective_target, completion_time, now_str,
-                expires_at, now_str, now_str,
+                expires_at, now_str, next_material_time, now_str,
                 user_id, tool_type,
                 user_id, tool_type,
                 user_id,
@@ -184,40 +207,73 @@ async def start(
                 f"or player not found"
             )
 
-        await _spend_own_material(db, user_id, tool_type, count, now_str)
+        # First hour's material (t=0). Pay-as-you-go; the rest is charged by settlement.
+        await _spend_own_material(db, user_id, tool_type, 1, now_str)
     except Exception:
         await db.rollback()
         raise
 
 
-async def refuel(db, user_id: str, tool_type: str, count: int, now: datetime) -> None:
+async def add_time(db, user_id: str, tool_type: str, hours: int, now: datetime) -> None:
     """
-    Extend a running auto-tool by `count` materials (spending `count` of its own material).
+    Extend a running auto-tool's remaining time by `hours` hours. Spends NO material
+    (material is charged hourly by settlement, not on adjustment).
 
-    Raises ValueError if the tool is not active, count is out of [1, max_add], or materials
-    are insufficient. The new remaining time never exceeds the cap because count <= max_add.
+    Raises ValueError if the tool is not active or hours is out of [1, max_add_hours].
+    New remaining time never exceeds the cap because hours <= max_add_hours.
     """
-    # Write lock first so a concurrent refuel/start re-reads the committed expires_at and
-    # its cap check (max_add) sees the true remaining time (Architecture Decision #7). On
-    # failure roll back so the caller's connection has no dangling open transaction.
+    # Write lock first so a concurrent add/subtract/start re-reads the committed expires_at
+    # and its cap check sees the true remaining time (Architecture Decision #7). On failure
+    # roll back so the caller's connection has no dangling open transaction.
     await db.execute("BEGIN IMMEDIATE")
     try:
         row = await get(db, user_id, tool_type)
         if row is None:
             raise ValueError(f"Auto-tool {tool_type!r} is not active")
-        if count < 1 or count > max_add_materials(row["expires_at"], now):
-            raise ValueError(f"Invalid refuel count: {count}")
+        if hours < 1 or hours > max_add_hours(row["expires_at"], now):
+            raise ValueError(f"Invalid add hours: {hours}")
 
         now_str = dt_str(now)
         per = _seconds_per_material()
-        new_expires = dt_str(parse_dt(row["expires_at"]) + timedelta(seconds=count * per))
-
-        await _spend_own_material(db, user_id, tool_type, count, now_str)
-
+        new_expires = dt_str(parse_dt(row["expires_at"]) + timedelta(seconds=hours * per))
         await db.execute(
             "UPDATE player_auto_tools SET expires_at=?, updated_at=? WHERE user_id=? AND tool_type=?",
             (new_expires, now_str, user_id, tool_type),
         )
+    except Exception:
+        await db.rollback()
+        raise
+
+
+async def subtract_time(db, user_id: str, tool_type: str, hours: int, now: datetime) -> None:
+    """
+    Reduce a running auto-tool's remaining time by `hours` hours. Spends/refunds NO material.
+
+    If the reduction meets or exceeds the remaining time, the tool stops (row deleted) —
+    reducing to the bottom is how a player stops an auto-tool. Raises ValueError if the tool
+    is not active or hours < 1.
+    """
+    # Write lock first so this serializes with concurrent add/subtract/start and with the
+    # settlement's expires_at read / end() decision (Architecture Decision #7).
+    await db.execute("BEGIN IMMEDIATE")
+    try:
+        if hours < 1:
+            raise ValueError(f"Invalid subtract hours: {hours}")
+        row = await get(db, user_id, tool_type)
+        if row is None:
+            raise ValueError(f"Auto-tool {tool_type!r} is not active")
+
+        per = _seconds_per_material()
+        now_str = dt_str(now)
+        remaining = (parse_dt(row["expires_at"]) - now).total_seconds()
+        if hours * per >= remaining:
+            await end(db, user_id, tool_type)  # reduce-to-bottom stops the tool
+        else:
+            new_expires = dt_str(parse_dt(row["expires_at"]) - timedelta(seconds=hours * per))
+            await db.execute(
+                "UPDATE player_auto_tools SET expires_at=?, updated_at=? WHERE user_id=? AND tool_type=?",
+                (new_expires, now_str, user_id, tool_type),
+            )
     except Exception:
         await db.rollback()
         raise
@@ -233,6 +289,19 @@ async def advance_cycle(
            SET last_update_time=?, completion_time=?, updated_at=?
            WHERE user_id=? AND tool_type=?""",
         (ts, dt_str(next_completion), ts, user_id, tool_type),
+    )
+
+
+async def advance_material_tick(
+    db, user_id: str, tool_type: str, next_material_time: datetime
+) -> None:
+    """Record the next hour boundary at which a material will be charged."""
+    ts = dt_str(next_material_time)
+    await db.execute(
+        """UPDATE player_auto_tools
+           SET next_material_time=?, updated_at=?
+           WHERE user_id=? AND tool_type=?""",
+        (ts, ts, user_id, tool_type),
     )
 
 

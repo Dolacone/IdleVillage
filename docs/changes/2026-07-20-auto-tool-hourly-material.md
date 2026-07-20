@@ -138,7 +138,7 @@ T1／T2 互相獨立可並行。T3 依賴 T1（欄位）＋T2（env）。T4 依�
   - Depends on: 無
   - Acceptance: `REQUIRED_KEYS` 以 `AUTO_TOOL_MAX_HOURS` 取代 `AUTO_TOOL_MAX_MATERIALS`；`.env.example` 改為 `AUTO_TOOL_MAX_HOURS=24`（保留 `AUTO_TOOL_SECONDS_PER_MATERIAL=3600`）；`tests/support.py` 與 config 驗證測試同步；既有 config 測試全通過
 
-- [ ] Task 3: auto_tool_manager — start 改時數/扣 1、add_time/subtract_time、max_add_hours/max_subtract_hours、advance_material_tick、移除 refuel
+- [x] Task 3: auto_tool_manager — start 改時數/扣 1、add_time/subtract_time、max_add_hours/max_subtract_hours、advance_material_tick、移除 refuel
   - Files: `src/managers/auto_tool_manager.py`
   - Tests: `tests/test_auto_tool_manager.py` — start（要求 ≥1 素材、只扣 1、`expires_at=now+hours×per`、`next_material_time=now+per`、`hours` 出界 raise）、素材為 0 raise、互斥雙向沿用；`add_time`（`1..max_add_hours`、上限 24h、不扣素材）；`subtract_time`（減不到底 → 縮短、減到底/超過 → `end`、不扣素材、不退素材）；`max_add_hours`（cap 24h：剩餘 23:01→0、剩餘 0:01→23）、`max_subtract_hours`（剩餘 01:01→2）；`advance_material_tick` 寫入
   - Depends on: T1, T2
