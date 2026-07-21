@@ -33,9 +33,10 @@ class Engine:
                 due_players = await cursor.fetchall()
 
             async with db.execute(
-                "SELECT user_id, tool_type FROM player_auto_tools WHERE completion_time <= ?"
+                "SELECT user_id, tool_type FROM player_auto_tools"
+                " WHERE completion_time <= ? OR next_material_time <= ? OR expires_at <= ?"
                 " ORDER BY user_id, tool_type",
-                (now.isoformat(),),
+                (now.isoformat(), now.isoformat(), now.isoformat()),
             ) as cursor:
                 due_auto_tools = await cursor.fetchall()
 

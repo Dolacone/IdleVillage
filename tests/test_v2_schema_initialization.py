@@ -197,7 +197,7 @@ class PlayerAutoToolsTable(DatabaseTestCase):
         self.assertEqual(
             cols,
             {"user_id", "tool_type", "action_target", "completion_time",
-             "last_update_time", "expires_at", "started_at", "updated_at"},
+             "last_update_time", "expires_at", "started_at", "next_material_time", "updated_at"},
         )
 
     async def test_primary_key_is_user_id_tool_type(self):
@@ -222,6 +222,45 @@ class PlayerAutoToolsTable(DatabaseTestCase):
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='player_auto_tools'"
         )
         self.assertIsNotNone(row)
+
+    async def test_next_material_time_column_added_to_legacy_table(self):
+        # A player_auto_tools table from before next_material_time existed must be
+        # migrated in place (ALTER ADD COLUMN), preserving its rows.
+        async with schema.get_connection() as db:
+            await db.execute("DROP TABLE player_auto_tools")
+            await db.execute(
+                """
+                CREATE TABLE player_auto_tools (
+                    user_id TEXT NOT NULL,
+                    tool_type TEXT NOT NULL,
+                    action_target TEXT,
+                    completion_time TEXT NOT NULL,
+                    last_update_time TEXT,
+                    expires_at TEXT NOT NULL,
+                    started_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (user_id, tool_type)
+                )
+                """
+            )
+            now = "2026-01-01T00:00:00+00:00"
+            await db.execute(
+                """INSERT INTO player_auto_tools
+                   (user_id, tool_type, completion_time, expires_at, started_at, updated_at)
+                   VALUES ('legacy', 'gathering', ?, ?, ?, ?)""",
+                (now, now, now, now),
+            )
+            await db.commit()
+
+        await schema.init_db()
+
+        rows = await self.fetchall("PRAGMA table_info(player_auto_tools)")
+        cols = {row[1] for row in rows}
+        self.assertIn("next_material_time", cols)
+        row = await self.fetchone(
+            "SELECT next_material_time FROM player_auto_tools WHERE user_id='legacy'"
+        )
+        self.assertIsNone(row[0])
 
 
 class WatcherTrialTimeout(DatabaseTestCase):

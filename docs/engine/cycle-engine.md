@@ -1,7 +1,7 @@
 ---
 title: "Module: cycle-engine"
 doc_type: module
-last_reviewed: 2026-07-17
+last_reviewed: 2026-07-20
 source_paths:
   - src/core/engine.py
 ---
@@ -36,7 +36,7 @@ Watcher 每次心跳，除了逐一補算到期玩家的週期外，也會呼叫
 
 ### 自動工具並行結算
 
-除玩家手動行動外，Watcher 也掃描 `player_auto_tools`（見 `managers/auto-tool-manager.md`）中 `completion_time <= now` 的列，對每列呼叫 `settlement.settle_auto_tool_cycles(user_id, tool_type, now)` 各自補算完整週期（受 `MAX_CYCLES_PER_SETTLEMENT` 限制），到期（`now >= expires_at` 且已補齊）即結束並釋放工具。開介面 / Refresh 時也對該玩家的到期自動工具補算。自動工具的 `cycle_time_reduce` 以該工具自身詞條計算，與手動行動及其他自動工具獨立。
+除玩家手動行動外，Watcher 也掃描 `player_auto_tools`（見 `managers/auto-tool-manager.md`）中 `completion_time <= now OR next_material_time <= now OR expires_at <= now` 的列，對每列呼叫 `settlement.settle_auto_tool_cycles(user_id, tool_type, now)`。結算為雙時鐘時間序合併：產出時鐘（`completion_time`，受 `MAX_CYCLES_PER_SETTLEMENT` 限制）與素材時鐘（`next_material_time`，每 `AUTO_TOOL_SECONDS_PER_MATERIAL` 扣 1 該工具素材）依時間先後交錯；素材扣不到即停止並釋放，到期（`now >= expires_at` 且已追平）即結束並釋放工具。掃描條件同時看素材與到期時鐘（不僅 `completion_time`），因 `effective_cycle_seconds` 不保證 ≤ 1h，確保素材 tick 與到期在背景也能及時觸發。開介面 / Refresh 時也對該玩家的到期自動工具補算。自動工具的 `cycle_time_reduce` 以該工具自身詞條計算，與手動行動及其他自動工具獨立。
 
 結算順序（固定、可預期，非等效保證）：一次 sweep 內先處理到期玩家手動行動（`players` 掃描加 `ORDER BY user_id`）、再處理到期自動工具（`ORDER BY user_id, tool_type`）、最後 trial timeout。因完整週期會改動共用村莊資源池、關卡/試煉進度與建築等級，順序會影響結果，故明確固定而非宣稱等效。
 
@@ -131,6 +131,7 @@ ratio          = elapsed / effective_secs（0 ~ 1）
 
 ## Changelog
 
+- 2026-07-20: Auto-tool settlement is now dual-clock (production + hourly material tick); the auto-tool watcher scan triggers on `completion_time`, `next_material_time`, or `expires_at`. Running out of material stops the tool. See `managers/auto-tool-manager.md`.
 - 2026-07-17: Watcher and open-interface catch-up now also settle due auto-tools (`settlement.settle_auto_tool_cycles`), independent per tool. Both due-scan queries are ordered (`players` by user_id, `player_auto_tools` by user_id+tool_type) for a fixed settlement order. See `managers/auto-tool-manager.md`.
 - 2026-07-14: Watcher tick now also calls `trial-manager.check_timeout()` once per heartbeat, independent of any player's `completion_time`.
 - 2026-05-22: Updated cycle timing to use `_effective_cycle_seconds(cycle_time_reduce_pct)` at all three calculation points (change_action, catch-up advance, partial ratio). `cycle_time_reduce` affix scoped to player's current action tool.

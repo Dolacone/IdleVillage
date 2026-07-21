@@ -762,8 +762,11 @@ def build_affix_components(
 _AUTO_TOOL_ORDER = ("gathering", "building", "combat", "research")
 
 
-def build_auto_tool_embed(active_rows: list, max_materials: int, error: str | None = None) -> disnake.Embed:
-    """Auto-tool sub-interface embed: currently running tools + their expiry, plus the rule."""
+def build_auto_tool_embed(
+    active_rows: list, max_hours: int, materials: dict | None = None, error: str | None = None
+) -> disnake.Embed:
+    """Auto-tool sub-interface embed: running tools with remaining time and material runway."""
+    materials = materials or {}
     lines = ["⚙️ 自動工具", "─────────────────────────────"]
     if error:
         lines.append(error)
@@ -777,11 +780,15 @@ def build_auto_tool_embed(active_rows: list, max_materials: int, error: str | No
             line = f"{label} — 到期 <t:{deadline}:R>"
             if tt == "building" and row.get("action_target"):
                 line += f"（{BUILDING_LABELS.get(row['action_target'], row['action_target'])}）"
+            line += f"｜素材可撐 {materials.get(tt, 0)} 小時"
             lines.append(line)
     else:
         lines.append("目前沒有運行中的自動工具。")
     lines.append("─────────────────────────────")
-    lines.append(f"每 1 個該工具素材可運行 1 小時；上限 {max_materials} 小時。運行中可補充（不超過上限）。")
+    lines.append(
+        f"啟動時選運行時數（上限 {max_hours} 小時），每小時開始扣 1 個該工具素材；"
+        f"素材用完即自動停止。運行中可隨時加時間（不超過上限）或減時間（減到底即停止）。"
+    )
     return disnake.Embed(description="\n".join(lines), color=disnake.Color.teal())
 
 
@@ -791,25 +798,29 @@ def build_auto_tool_components(
     *,
     selected_tool: str | None = None,
     selected_target: str | None = None,
-    selected_count: int | None = None,
+    selected_delta: int | None = None,
     max_add: int = 0,
+    max_subtract: int = 0,
 ) -> list:
     """
     Auto-tool sub-interface components.
 
     idle_tools: tool types that can be started (not manual action, not running).
-    active_rows: running auto-tool rows (selectable for refuel).
-    selected_tool/target/count + max_add drive the confirm button's enabled state.
+    active_rows: running auto-tool rows (selectable for time adjustment).
+    An idle tool shows one "initial hours" select (+1..+max_add); a running tool shows an
+    add-time select (+1..+max_add) and a subtract-time select (-1..-max_subtract, bottom step
+    stops it). The chosen signed hours is `selected_delta`, carried on the confirm custom_id.
     """
     active_types = [r["tool_type"] for r in active_rows]
     selectable = [t for t in _AUTO_TOOL_ORDER if t in idle_tools or t in active_types]
+    is_running = selected_tool in active_types
 
     if selectable:
         tool_options = [
             disnake.SelectOption(
                 label=f"{ACTION_EMOJIS.get(t, '')} {GEAR_LABELS.get(t, t)}",
                 value=t,
-                description=("運行中（補充）" if t in active_types else "啟動"),
+                description=("運行中（調整時間）" if t in active_types else "啟動"),
                 default=(selected_tool == t),
             )
             for t in selectable
@@ -830,7 +841,8 @@ def build_auto_tool_components(
         )
     ]
 
-    if selected_tool == "building":
+    # Build target only when STARTING a building auto-tool (a running one's target is fixed).
+    if selected_tool == "building" and not is_running:
         target_options = [
             disnake.SelectOption(
                 label=BUILDING_LABELS[b], value=b, default=(selected_target == b)
@@ -847,36 +859,59 @@ def build_auto_tool_components(
             )
         )
 
-    if selected_tool is not None:
-        if max_add >= 1:
-            count_options = [
-                disnake.SelectOption(label=f"{n} 個（{n} 小時）", value=str(n), default=(selected_count == n))
-                for n in range(1, max_add + 1)
+    def _hours_select(custom_id, placeholder, values, empty_label):
+        if values:
+            options = [
+                disnake.SelectOption(label=lbl, value=str(v), default=(selected_delta == v))
+                for v, lbl in values
             ]
-            count_disabled = False
+            disabled = False
         else:
-            count_options = [disnake.SelectOption(label="（已達上限，無法補充）", value="none")]
-            count_disabled = True
-        rows.append(
-            disnake.ui.ActionRow(
-                disnake.ui.StringSelect(
-                    custom_id=f"auto_tool_count_select:{selected_tool}:{selected_target or 'none'}",
-                    placeholder="選擇消耗素材數量...",
-                    options=count_options,
-                    disabled=count_disabled,
-                )
+            options = [disnake.SelectOption(label=empty_label, value="none")]
+            disabled = True
+        return disnake.ui.ActionRow(
+            disnake.ui.StringSelect(
+                custom_id=custom_id, placeholder=placeholder, options=options, disabled=disabled
             )
         )
 
-    ready = (
-        selected_tool is not None
-        and max_add >= 1
-        and selected_count is not None
-        and 1 <= selected_count <= max_add
-        and (selected_tool != "building" or selected_target is not None)
-    )
+    if selected_tool is not None:
+        target_suffix = selected_target or "none"
+        if is_running:
+            add_values = [(n, f"+{n} 小時") for n in range(1, max_add + 1)]
+            rows.append(_hours_select(
+                f"auto_tool_add_select:{selected_tool}:{target_suffix}",
+                "加時間...", add_values, "（已達上限）",
+            ))
+            sub_values = [
+                (-n, ("停止（清空剩餘時間）" if n == max_subtract else f"-{n} 小時"))
+                for n in range(1, max_subtract + 1)
+            ]
+            rows.append(_hours_select(
+                f"auto_tool_sub_select:{selected_tool}:{target_suffix}",
+                "減時間...", sub_values, "（無法減少）",
+            ))
+        else:
+            start_values = [(n, f"{n} 小時") for n in range(1, max_add + 1)]
+            rows.append(_hours_select(
+                f"auto_tool_add_select:{selected_tool}:{target_suffix}",
+                "選擇初始運行時數...", start_values, "（無法啟動）",
+            ))
+
+    if is_running:
+        ready = selected_delta is not None and (
+            (selected_delta > 0 and selected_delta <= max_add)
+            or (selected_delta < 0 and -selected_delta <= max_subtract)
+        )
+    else:
+        ready = (
+            selected_tool is not None
+            and selected_delta is not None
+            and 1 <= selected_delta <= max_add
+            and (selected_tool != "building" or selected_target is not None)
+        )
     confirm_id = (
-        f"auto_tool_confirm:{selected_tool}:{selected_count}:{selected_target or 'none'}"
+        f"auto_tool_confirm:{selected_tool}:{selected_delta}:{selected_target or 'none'}"
         if ready
         else "auto_tool_confirm:none"
     )

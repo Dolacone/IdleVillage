@@ -1,7 +1,7 @@
 ---
 title: "Module: db-schema"
 doc_type: reference
-last_reviewed: 2026-07-17
+last_reviewed: 2026-07-20
 source_paths:
   - src/database/schema.py
 ---
@@ -232,13 +232,19 @@ CREATE TABLE player_auto_tools (
   last_update_time TEXT,
   expires_at TEXT NOT NULL,
   started_at TEXT NOT NULL,
+  next_material_time TEXT,
   updated_at TEXT NOT NULL,
   PRIMARY KEY (user_id, tool_type)
 );
 ```
 
-No initial rows. A whole new table (not a column), so an existing DB gets it via
-`CREATE TABLE IF NOT EXISTS` on `init_db()` with no ALTER migration.
+`next_material_time` is the next hour boundary at which 1 of the tool's own material is
+charged (the material clock; nullable). See `managers/auto-tool-manager.md`.
+
+No initial rows. The table is created via `CREATE TABLE IF NOT EXISTS`; the additive
+`next_material_time` column is applied to an existing table by an idempotent
+`ALTER TABLE ... ADD COLUMN` in `_migrate_v2_columns` (guarded by a `PRAGMA table_info`
+check). A NULL `next_material_time` on an existing row marks a legacy prepaid row.
 
 ### guild_installations
 

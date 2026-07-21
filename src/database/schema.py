@@ -147,6 +147,7 @@ async def _create_v2_tables(db):
             last_update_time TEXT,
             expires_at TEXT NOT NULL,
             started_at TEXT NOT NULL,
+            next_material_time TEXT,
             updated_at TEXT NOT NULL,
             PRIMARY KEY (user_id, tool_type)
         )
@@ -235,6 +236,14 @@ async def _migrate_v2_columns(db):
     if "materials_universal" not in columns:
         await db.execute(
             "ALTER TABLE players ADD COLUMN materials_universal INTEGER NOT NULL DEFAULT 0"
+        )
+
+    async with db.execute("PRAGMA table_info(player_auto_tools)") as cur:
+        auto_tool_columns = {row[1] async for row in cur}
+
+    if "next_material_time" not in auto_tool_columns:
+        await db.execute(
+            "ALTER TABLE player_auto_tools ADD COLUMN next_material_time TEXT"
         )
 
 
