@@ -1,6 +1,6 @@
 ---
 title: "試煉達成通知改用玩家名稱取代 mention"
-status: Issues-confirmed
+status: Ready-to-review
 created: 2026-08-08
 doc_type: change
 last_reviewed: 2026-08-08
@@ -139,7 +139,7 @@ scope: "Tracks changing the 試煉達成 (trial_success) notification's particip
 
 ## Review Issues (Round 3)
 
-- [ ] Issue 1: [Major] `src/core/notification.py:274-282` — cache-miss fallback 的 `except (disnake.NotFound, disnake.HTTPException)` 只涵蓋 Discord API 回應層級的例外，不涵蓋傳輸層例外（例如 `OSError`／連線重置、`asyncio.TimeoutError`）。這些例外會由 disnake `HTTPClient.request` 在重試耗盡後直接拋出（`.venv/lib/python3.11/site-packages/disnake/http.py` `except OSError as e: ... raise`），不是 `HTTPException` 子類。因為 `_resolve` 沒有攔截，`asyncio.gather(*(_resolve(uid) for uid in uids))`（`src/core/notification.py:284`）會直接向上拋出例外，中止整個 `dispatch_events` 迴圈，導致該次呼叫傳入的所有事件（不只是名稱解析失敗的那個 participant）都不會送出，且試煉已完成、事件不會重播，通知永久遺失。Codex 重現：fake guild 的 `fetch_member` 以 `side_effect=OSError("connection reset")` 模擬暫時性網路錯誤，`await notification.dispatch_events(bot, [event])` 直接拋出 `OSError`，`channel.send` 完全未被呼叫。此問題並非本輪新增（`except Exception` 收斂為 `except (disnake.NotFound, disnake.HTTPException)` 是 Round 1 Issue 3 / Round 1-2 fix 的既有結果），但 Round 1、Round 2 審查皆未涵蓋此路徑，本輪新增/修改 `_resolve` 時一併發現，故列為本輪 finding。建議至少再攔截 `OSError`（或改用 `except disnake.HTTPException` 之外，額外 `except Exception` 記錄錯誤後 fallback 顯示 user_id，取捨「靜默吞掉程式錯誤」與「通知永久遺失」的優先序）。
+- [x] Issue 1: [Major] `src/core/notification.py:274-282` — cache-miss fallback 的 `except (disnake.NotFound, disnake.HTTPException)` 只涵蓋 Discord API 回應層級的例外，不涵蓋傳輸層例外（例如 `OSError`／連線重置、`asyncio.TimeoutError`）。這些例外會由 disnake `HTTPClient.request` 在重試耗盡後直接拋出（`.venv/lib/python3.11/site-packages/disnake/http.py` `except OSError as e: ... raise`），不是 `HTTPException` 子類。因為 `_resolve` 沒有攔截，`asyncio.gather(*(_resolve(uid) for uid in uids))`（`src/core/notification.py:284`）會直接向上拋出例外，中止整個 `dispatch_events` 迴圈，導致該次呼叫傳入的所有事件（不只是名稱解析失敗的那個 participant）都不會送出，且試煉已完成、事件不會重播，通知永久遺失。Codex 重現：fake guild 的 `fetch_member` 以 `side_effect=OSError("connection reset")` 模擬暫時性網路錯誤，`await notification.dispatch_events(bot, [event])` 直接拋出 `OSError`，`channel.send` 完全未被呼叫。此問題並非本輪新增（`except Exception` 收斂為 `except (disnake.NotFound, disnake.HTTPException)` 是 Round 1 Issue 3 / Round 1-2 fix 的既有結果），但 Round 1、Round 2 審查皆未涵蓋此路徑，本輪新增/修改 `_resolve` 時一併發現，故列為本輪 finding。建議至少再攔截 `OSError`（或改用 `except disnake.HTTPException` 之外，額外 `except Exception` 記錄錯誤後 fallback 顯示 user_id，取捨「靜默吞掉程式錯誤」與「通知永久遺失」的優先序）。
 
 ## Verification Notes (Round 3)
 
@@ -152,3 +152,10 @@ scope: "Tracks changing the 試煉達成 (trial_success) notification's particip
 - Tasks 與 Round 1、Round 2 Review Issues 皆已勾選 `[x]`；`last_reviewed` 為 `2026-08-08`，與今日日期一致。
 - 測試套件：`uv run python -m pytest -q` → 574 passed, 3 subtests passed，全數通過。
 
+## Post-Review Fixes Round 3 (2026-08-08)
+
+- Round 3 Issue 1（傳輸層例外會中止整批 `dispatch_events`）：`_resolve` 的 `except (disnake.NotFound, disnake.HTTPException)` 之後新增 `except Exception`，記錄 `logger.exception` 後同樣 fallback 顯示 `user_id`，不再讓單一參與者的非預期例外（例如 `OSError`）中止整個 `asyncio.gather` 呼叫、拖累同批次其他事件的發送。取捨依 Round 3 審查建議：「靜默吞掉程式錯誤」優先於「通知永久遺失」，但改用 `logger.exception` 而非完全靜默，錯誤仍留有紀錄可追查。
+- 新增測試 `test_dispatch_events_trial_success_transport_error_falls_back_without_aborting_batch`：模擬 `fetch_member` 拋出 `OSError`，驗證該參與者 fallback 顯示 user_id、其餘參與者與整個事件仍正常送出，不中止批次。
+- `docs/discord/notification.md` 補充說明非預期例外的處理方式。
+
+驗證：`uv run python -m pytest -q` → 全數通過（見下方 Round 3 重新驗證）。

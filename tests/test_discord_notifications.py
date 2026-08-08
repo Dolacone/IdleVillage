@@ -831,6 +831,42 @@ class TestDispatchEventsTrialSuccessNames(DatabaseTestCase):
         self.assertIn("111：貢獻 3000，獲得 25 個", text)
         self.assertIn("Bob：貢獻 2000，獲得 25 個", text)
 
+    async def test_dispatch_events_trial_success_transport_error_falls_back_without_aborting_batch(self):
+        """A non-disnake exception (e.g. a transport error) from fetch_member must not
+        abort the whole dispatch_events call for other participants/events."""
+        from core import notification
+
+        await self._set_announcement_channel()
+
+        async def fetch_member(uid):
+            if str(uid) == "111":
+                raise OSError("connection reset")
+            return SimpleNamespace(display_name="Bob")
+
+        guild = SimpleNamespace(
+            get_member=lambda uid: None,
+            fetch_member=AsyncMock(side_effect=fetch_member),
+        )
+        channel = SimpleNamespace(send=AsyncMock(), guild=guild)
+        bot = SimpleNamespace(get_channel=lambda channel_id: channel if channel_id == 123 else None)
+
+        event = {
+            "type": "trial_success",
+            "target": 5000,
+            "total_awarded": 50,
+            "participants": [
+                {"user_id": "111", "contribution": 3000, "reward": 25},
+                {"user_id": "222", "contribution": 2000, "reward": 25},
+            ],
+        }
+
+        await notification.dispatch_events(bot, [event])
+
+        channel.send.assert_awaited_once()
+        text = channel.send.call_args.args[0]
+        self.assertIn("111：貢獻 3000，獲得 25 個", text)
+        self.assertIn("Bob：貢獻 2000，獲得 25 個", text)
+
     async def test_dispatch_events_mixed_batch_only_resolves_trial_success_names(self):
         from core import notification
 

@@ -280,6 +280,9 @@ async def dispatch_events(bot, events: list[dict]) -> None:
                     return member.display_name
                 except (disnake.NotFound, disnake.HTTPException):
                     return uid
+                except Exception:
+                    logger.exception("Unexpected error resolving display name for %s", uid)
+                    return uid
 
             resolved = await asyncio.gather(*(_resolve(uid) for uid in uids))
             name_map = dict(zip(uids, resolved))
