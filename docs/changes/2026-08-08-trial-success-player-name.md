@@ -1,6 +1,6 @@
 ---
 title: "試煉達成通知改用玩家名稱取代 mention"
-status: Ready-to-review
+status: Issues-confirmed
 created: 2026-08-08
 doc_type: change
 last_reviewed: 2026-08-08
@@ -113,3 +113,17 @@ scope: "Tracks changing the 試煉達成 (trial_success) notification's particip
 - `docs/discord/notification.md` 同步更新說明文字（平行解析、`allowed_mentions`、例外類型收斂）。
 
 驗證：`uv run python -m pytest -q` → 全數通過（見下方重新驗證結果）。
+
+## Review Issues (Round 2)
+
+- [ ] Issue 1: [Major] `src/core/notification.py:270-283` — `asyncio.gather` 包裝的 `_resolve` 協程雖然平行 await，但 disnake 2.12 的 `HTTPClient.request` 依 `Route.bucket` 對每個 request 上鎖（`.venv/lib/python3.11/site-packages/disnake/http.py` `HTTPClient.request`：`lock = self._locks.get(bucket)` -> `await lock.acquire()`，網路請求完成才釋放）。`Route.bucket` 的定義是 `f"{channel_id}:{guild_id}:{path}"`（`disnake/http.py` `Route.bucket`），其中 `path` 是未代入參數前的樣板字串 `/guilds/{guild_id}/members/{member_id}`（`Route.__init__` 的 `self.path: str = path` 保留原始樣板，未含 `member_id` 實際值）。因此同一 guild 內所有 `fetch_member` 呼叫共用同一把 `asyncio.Lock`，即使透過 `asyncio.gather` 同時發起，底層 HTTP 請求仍會被序列化處理，實測每個請求須等前一個回應完畢才能取得鎖並發出下一個請求。Round 1 Issue 1（序列 `fetch_member` 效能風險）宣稱已用平行化解決，實際上參與者人數 N 時整體耗時仍約為 N 次序列 round-trip 的總和，與修正前的 `for` 迴圈效果相近，未達成文件宣稱的效能改善。建議改用 member cache（`guild.get_member`）優先查詢、必要時才 fallback `fetch_member`，或限制單次解析人數上限，才能真正降低序列 REST 呼叫次數。
+
+## Verification Notes (Round 2)
+
+- `asyncio.gather` 平行化（Round 1 Issue 1）：程式碼確認已改用 `asyncio.gather`（`src/core/notification.py:281`），`name_map = dict(zip(uids, resolved))` 的鍵值對應正確——`asyncio.gather` 回傳順序保證與傳入的 awaitable 順序一致，不受實際完成順序影響，故 `zip(uids, resolved)` 不會錯配 `uid`。但實測 disnake 底層 rate-limit bucket 鎖仍序列化實際 HTTP 請求，效能改善名不符實，見上方 Issue 1。
+- `allowed_mentions=disnake.AllowedMentions.none()`（Round 1 Issue 2）：`src/core/notification.py:287` 確認唯一的 `channel.send` 呼叫已加上此參數；全文搜尋 `src/core/notification.py` 未發現其餘 `<@` mention 語法或其他 `channel.send`/`message.edit` 呼叫需要同步修正。`AllowedMentions.none()` 實測回傳 `everyone=False`、`users=False`、`roles=False`，測試 `test_dispatch_events_resolves_trial_success_participant_names`、`test_dispatch_events_suppresses_mentions_from_malicious_display_name` 皆有對應斷言，且後者使用真實惡意暱稱 `@everyone` 情境，能在缺少此參數時失敗。
+- 例外收斂（Round 1 Issue 3）：`src/core/notification.py:277` 確認已改為 `except (disnake.NotFound, disnake.HTTPException)`。查 `disnake/errors.py`：`Forbidden`、`NotFound`、`DiscordServerError` 皆為 `HTTPException` 子類，`fetch_member` 文件標註的三種例外（`NotFound`/`Forbidden`/`HTTPException`）皆被涵蓋，未發現遺漏的合法「查無成員」例外類型。測試 `test_dispatch_events_trial_success_fetch_member_failure_falls_back_to_user_id` 使用真實 `disnake.NotFound` 實例，能在例外類型窄化錯誤時失敗，非空泛測試。
+- `source_paths`（Round 1 Issue 4）：frontmatter 列出 `src/core/notification.py`、`docs/discord/notification.md`、`tests/test_discord_notifications.py`，與 `git diff main...HEAD --stat` 顯示的三個原始碼/測試檔案一致（變更文件自身不需自我列舉）。
+- 新增測試檢視：`tests/test_discord_notifications.py` 本輪新增/修改的斷言（`allowed_mentions` 檢查、`disnake.NotFound` 真實例外）皆具備可證偽性，未發現空泛或恆真測試；新增 `import disnake`（第 15 行）為新增例外類型與測試所需，非未使用匯入。
+- 任務狀態：Task 1、Task 2 與所有 Review Issues（含 Round 1 四項）皆已勾選 `[x]`；`last_reviewed` 為 `2026-08-08`，與今日日期一致。
+- 測試套件：`uv run python -m pytest -q` → 573 passed, 3 subtests passed，全數通過。
