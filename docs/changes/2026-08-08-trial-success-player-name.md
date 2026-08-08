@@ -58,7 +58,7 @@ scope: "Tracks changing the 試煉達成 (trial_success) notification's particip
 
 ## Tasks
 
-- [ ] Task 1: `src/core/notification.py` — `dispatch_events` 新增 `trial_success` 事件的 `name_map` 解析；`_format_event` 新增 `name_map` 參數並套用於 `trial_success` 分支
+- [x] Task 1: `src/core/notification.py` — `dispatch_events` 新增 `trial_success` 事件的 `name_map` 解析；`_format_event` 新增 `name_map` 參數並套用於 `trial_success` 分支
   - Files: `src/core/notification.py`
   - Tests: 更新 `tests/test_discord_notifications.py`：
     - (a) `test_format_trial_success` 改傳入 `name_map={"u1": "Alice", "u2": "Bob"}`，斷言輸出含 `Alice：貢獻 3000，獲得 25 個`/`Bob：貢獻 2000，獲得 25 個`，且 `assertNotIn("<@", text)`

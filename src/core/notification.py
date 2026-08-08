@@ -97,9 +97,10 @@ def _pct(progress: int, target: int) -> int:
     return round(progress / target * 100)
 
 
-def _format_event(event: dict) -> str | None:
+def _format_event(event: dict, name_map: dict[str, str] | None = None) -> str | None:
     """Return a formatted notification string for the given event dict, or None to skip."""
     kind = event.get("type")
+    name_map = name_map or {}
 
     if kind == "stage_clear":
         cleared = event["stages_cleared"]
@@ -218,7 +219,8 @@ def _format_event(event: dict) -> str | None:
             f"共 {len(participants)} 位玩家依貢獻度瓜分了 {total_awarded} 個 🌟萬能素材：",
         ]
         for p in participants:
-            lines.append(f"<@{p['user_id']}>：貢獻 {p['contribution']}，獲得 {p['reward']} 個")
+            display_name = name_map.get(p["user_id"], p["user_id"])
+            lines.append(f"{display_name}：貢獻 {p['contribution']}，獲得 {p['reward']} 個")
         text = "\n".join(lines)
         if len(text) > 1900:
             text = text[:1900] + "\n（清單過長，部分內容已省略）"
@@ -264,7 +266,18 @@ async def dispatch_events(bot, events: list[dict]) -> None:
         return
 
     for event in events:
-        text = _format_event(event)
+        name_map = None
+        if event.get("type") == "trial_success":
+            name_map = {}
+            for p in event.get("participants", []):
+                uid = p["user_id"]
+                try:
+                    member = await channel.guild.fetch_member(int(uid))
+                    name_map[uid] = member.display_name
+                except Exception:
+                    name_map[uid] = uid
+
+        text = _format_event(event, name_map)
         if text:
             try:
                 await channel.send(text)
