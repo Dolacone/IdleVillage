@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, patch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import disnake
 from support import ALL_TEST_ENV, DatabaseTestCase
 from database.schema import get_connection
 
@@ -731,6 +732,37 @@ class TestDispatchEventsTrialSuccessNames(DatabaseTestCase):
         self.assertIn("Alice：貢獻 3000，獲得 25 個", text)
         self.assertIn("Bob：貢獻 2000，獲得 25 個", text)
         self.assertNotIn("<@", text)
+        allowed_mentions = channel.send.call_args.kwargs.get("allowed_mentions")
+        self.assertFalse(allowed_mentions.everyone)
+        self.assertFalse(allowed_mentions.users)
+        self.assertFalse(allowed_mentions.roles)
+
+    async def test_dispatch_events_suppresses_mentions_from_malicious_display_name(self):
+        from core import notification
+
+        await self._set_announcement_channel()
+
+        guild = SimpleNamespace(
+            fetch_member=AsyncMock(return_value=SimpleNamespace(display_name="@everyone"))
+        )
+        channel = SimpleNamespace(send=AsyncMock(), guild=guild)
+        bot = SimpleNamespace(get_channel=lambda channel_id: channel if channel_id == 123 else None)
+
+        event = {
+            "type": "trial_success",
+            "target": 5000,
+            "total_awarded": 50,
+            "participants": [
+                {"user_id": "111", "contribution": 3000, "reward": 25},
+            ],
+        }
+
+        await notification.dispatch_events(bot, [event])
+
+        allowed_mentions = channel.send.call_args.kwargs.get("allowed_mentions")
+        self.assertFalse(allowed_mentions.everyone)
+        self.assertFalse(allowed_mentions.users)
+        self.assertFalse(allowed_mentions.roles)
 
     async def test_dispatch_events_trial_success_fetch_member_failure_falls_back_to_user_id(self):
         from core import notification

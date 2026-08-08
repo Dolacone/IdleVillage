@@ -132,7 +132,7 @@ sign 為 `-`（reduce 類型，如 `upgrade_cost_reduce`）或 `+`（其他類�
 ```
 不顯示資源類型（同「試煉開始」的理由）。參與者列表超過 1900 字元時截斷，並附上「（清單過長，部分內容已省略）」提示，比照 `/idlevillage-ranking` 的截斷規則。
 
-`{display_name}` 由 `notification.dispatch_events` 在發送前即時解析：對每位 participant 呼叫 `await channel.guild.fetch_member(int(user_id))` 取得 `display_name`（比照 `/idlevillage-ranking` 既有的 `src/cogs/actions.py` 解析手法），組成 `name_map` 傳入 `_format_event(event, name_map)`；找不到（例如玩家已離開 guild、`fetch_member` 拋例外）時 fallback 顯示 `user_id`。此解析與貢獻來源（玩家手動行動或自動工具背景結算）無關，`trial_manager.py`/`settlement.py` 組裝的 `participants` 資料本身不含名稱欄位。
+`{display_name}` 由 `notification.dispatch_events` 在發送前即時解析：對所有 participant 平行呼叫 `await channel.guild.fetch_member(int(user_id))`（`asyncio.gather`，避免人數多時逐一序列等待拖慢通知）取得 `display_name`（比照 `/idlevillage-ranking` 既有的 `src/cogs/actions.py` 解析手法），組成 `name_map` 傳入 `_format_event(event, name_map)`；`fetch_member` 拋出 `disnake.NotFound`/`disnake.HTTPException`（例如玩家已離開 guild）時 fallback 顯示 `user_id`。此解析與貢獻來源（玩家手動行動或自動工具背景結算）無關，`trial_manager.py`/`settlement.py` 組裝的 `participants` 資料本身不含名稱欄位。發送訊息時一律帶 `allowed_mentions=disnake.AllowedMentions.none()`，即使玩家暱稱本身包含 `@everyone`/mention 語法也不會觸發實際 ping。
 
 ### 試煉失敗（逾時）
 ```
@@ -149,7 +149,7 @@ sign 為 `-`（reduce 類型，如 `upgrade_cost_reduce`）或 `+`（其他類�
 
 ## Changelog
 
-- 2026-08-08: 試煉達成通知的參與者清單改用玩家名稱取代 `<@{user_id}>` mention。名稱由 `dispatch_events` 即時呼叫 `guild.fetch_member()` 解析（比照 `/idlevillage-ranking` 既有手法），找不到時 fallback 顯示 `user_id`；不新增任何資料表欄位，`trial_manager.py`/`settlement.py`/`engine.py` 未變動。
+- 2026-08-08: 試煉達成通知的參與者清單改用玩家名稱取代 `<@{user_id}>` mention。名稱由 `dispatch_events` 平行呼叫 `guild.fetch_member()` 解析（比照 `/idlevillage-ranking` 既有手法），找不到時 fallback 顯示 `user_id`；`channel.send` 一律加上 `allowed_mentions=disnake.AllowedMentions.none()` 防止玩家暱稱觸發非預期 mention；不新增任何資料表欄位，`trial_manager.py`/`settlement.py`/`engine.py` 未變動。
 - 2026-07-14: 試煉開始通知移除發起者 mention（開啟試煉不再需要玩家輸入，也不記錄是誰點擊）。花費的資源類型改由系統自動隨機選定，`target` 固定為 `TRIAL_TARGET_AMOUNT`。
 - 2026-07-14: 試煉開始由 `open_trial_start` 按鈕 + `modal_start_trial` Modal 觸發（取代 slash command）。三種試煉訊息移除「目標 {target} {resource_label}」措辭，改為「目標：{target} 點行動產出」，資源類型只保留在試煉開始訊息的「花費」措辭中，避免讓人誤以為試煉目標是收集單一資源。
 - 2026-07-14: 新增村莊試煉事件（試煉開始、達成、失敗）與訊息範本；「同一 settlement 內的通知順序」新增第 4 項試煉達成/失敗通知並重新編號。試煉相關訊息一律使用 `<@{user_id}>` mention 呈現使用者，不需額外解析 display name。

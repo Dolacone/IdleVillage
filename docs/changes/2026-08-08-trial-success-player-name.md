@@ -1,12 +1,13 @@
 ---
 title: "試煉達成通知改用玩家名稱取代 mention"
-status: Issues-confirmed
+status: Ready-to-review
 created: 2026-08-08
 doc_type: change
 last_reviewed: 2026-08-08
 source_paths:
   - src/core/notification.py
   - docs/discord/notification.md
+  - tests/test_discord_notifications.py
 scope: "Tracks changing the 試煉達成 (trial_success) notification's participant list from Discord `<@{user_id}>` mentions to resolved display names."
 ---
 
@@ -89,10 +90,10 @@ scope: "Tracks changing the 試煉達成 (trial_success) notification's particip
 
 ## Review Issues
 
-- [ ] Issue 1: [Major] `src/core/notification.py:270-278` — `dispatch_events` 對 `trial_success` 的每位參與者串行 `await channel.guild.fetch_member(int(uid))`，且截斷後不會顯示的參與者也照樣被查詢。人數多時（`_format_event` 截斷測試已驗證清單可到 200 人）會在送出通知前累積成數十次串行 REST 呼叫，可能觸發 Discord rate limit 或拖慢 watcher/settlement 流程。Codex 重現：20 位參與者、每次 `fetch_member` 延遲 10ms 的 fake guild，`dispatch_events` 耗時 0.220s（串行），遠高於平行執行應有的 ~0.01s。change document 的 Key Assumptions 已承認此取捨，但未設參與者人數上限或平行化，仍構成可觀測的效能風險，列為 finding。
-- [ ] Issue 2: [Major] `src/core/notification.py:222-223` — `display_name = name_map.get(...)` 直接嵌入訊息文字且未跳脫，`channel.send` 呼叫未帶 `allowed_mentions` 限制。若參與者的伺服器暱稱本身是 `@everyone`／`@here`／身分組 mention 字串，且 bot 有對應權限，訊息會被 Discord 解析成一次主動 mention（mention injection）。舊版 `<@{user_id}>` 只會 mention 該固定 snowflake，不受暱稱內容影響；新版把使用者可控的自由文字直接寫進訊息本文，擴大了此路徑的攻擊面。Codex 重現：`name_map={"111": "@everyone"}` 傳入 `_format_event` 後，輸出文字仍原樣包含 `@everyone`。註：`src/cogs/ui_renderer.py` 的 `build_ranking_text`／`src/cogs/actions.py` 既有 ranking 功能已有相同的未跳脫模式，本次比照複製了既有缺口，非本次獨有引入的新設計，但風險已隨這次改動擴散到 trial_success 路徑，建議兩處一併修正（跳脫或設定 `allowed_mentions=disnake.AllowedMentions.none()`）。
-- [ ] Issue 3: [Minor] `src/core/notification.py:274,277` — `except Exception` 完整比照 `src/cogs/actions.py:318-320` 既有 ranking 前例，屬有意的一致性選擇（change document Architecture Decisions #3 已明確記錄），但兩處都會把 `AttributeError`／`TypeError` 等非「玩家已離開 guild」的程式錯誤一併吞掉並 fallback 顯示 user_id，不會留下任何錯誤紀錄。建議未來一併收斂為只捕捉 `disnake.NotFound`／`disnake.HTTPException`，但不阻擋本次合併。
-- [ ] Issue 4: [Minor] `source_paths`（frontmatter）只列出 `src/core/notification.py`、`docs/discord/notification.md`，未列出同一批次實際修改的 `tests/test_discord_notifications.py`（`git diff main...HEAD --stat` 顯示該檔 +142/-11）。建議補上以符合「source_paths 對應實際建立/修改檔案」的要求。
+- [x] Issue 1: [Major] `src/core/notification.py:270-278` — `dispatch_events` 對 `trial_success` 的每位參與者串行 `await channel.guild.fetch_member(int(uid))`，且截斷後不會顯示的參與者也照樣被查詢。人數多時（`_format_event` 截斷測試已驗證清單可到 200 人）會在送出通知前累積成數十次串行 REST 呼叫，可能觸發 Discord rate limit 或拖慢 watcher/settlement 流程。Codex 重現：20 位參與者、每次 `fetch_member` 延遲 10ms 的 fake guild，`dispatch_events` 耗時 0.220s（串行），遠高於平行執行應有的 ~0.01s。change document 的 Key Assumptions 已承認此取捨，但未設參與者人數上限或平行化，仍構成可觀測的效能風險，列為 finding。
+- [x] Issue 2: [Major] `src/core/notification.py:222-223` — `display_name = name_map.get(...)` 直接嵌入訊息文字且未跳脫，`channel.send` 呼叫未帶 `allowed_mentions` 限制。若參與者的伺服器暱稱本身是 `@everyone`／`@here`／身分組 mention 字串，且 bot 有對應權限，訊息會被 Discord 解析成一次主動 mention（mention injection）。舊版 `<@{user_id}>` 只會 mention 該固定 snowflake，不受暱稱內容影響；新版把使用者可控的自由文字直接寫進訊息本文，擴大了此路徑的攻擊面。Codex 重現：`name_map={"111": "@everyone"}` 傳入 `_format_event` 後，輸出文字仍原樣包含 `@everyone`。註：`src/cogs/ui_renderer.py` 的 `build_ranking_text`／`src/cogs/actions.py` 既有 ranking 功能已有相同的未跳脫模式，本次比照複製了既有缺口，非本次獨有引入的新設計，但風險已隨這次改動擴散到 trial_success 路徑，建議兩處一併修正（跳脫或設定 `allowed_mentions=disnake.AllowedMentions.none()`）。
+- [x] Issue 3: [Minor] `src/core/notification.py:274,277` — `except Exception` 完整比照 `src/cogs/actions.py:318-320` 既有 ranking 前例，屬有意的一致性選擇（change document Architecture Decisions #3 已明確記錄），但兩處都會把 `AttributeError`／`TypeError` 等非「玩家已離開 guild」的程式錯誤一併吞掉並 fallback 顯示 user_id，不會留下任何錯誤紀錄。建議未來一併收斂為只捕捉 `disnake.NotFound`／`disnake.HTTPException`，但不阻擋本次合併。
+- [x] Issue 4: [Minor] `source_paths`（frontmatter）只列出 `src/core/notification.py`、`docs/discord/notification.md`，未列出同一批次實際修改的 `tests/test_discord_notifications.py`（`git diff main...HEAD --stat` 顯示該檔 +142/-11）。建議補上以符合「source_paths 對應實際建立/修改檔案」的要求。
 
 ## Verification Notes
 
@@ -102,3 +103,13 @@ scope: "Tracks changing the 試煉達成 (trial_success) notification's particip
 - `int(uid)` 安全性：`src/managers/trial_manager.py` 的 `participants` 資料來源與既有 ranking 功能一致，皆為 Discord snowflake 數字字串，未發現非數字格式的 `user_id`，`int(uid)` 對現有資料不會拋例外。
 - `_format_event` 簽章相容性：全文搜尋確認呼叫端只有 `dispatch_events`（傳入 `name_map`）與既有測試（未傳或明確傳入 `name_map`），`name_map` 預設 `None`，其餘 8 種事件分支未讀取 `name_map`，未發現回歸。
 - `source_paths` 對照 `git diff main...HEAD --stat`：實際變更 4 檔（`src/core/notification.py`、`docs/discord/notification.md`、`tests/test_discord_notifications.py`、本文件自身），frontmatter 缺 `tests/test_discord_notifications.py`（見 Issue 4）。
+
+## Post-Review Fixes (2026-08-08)
+
+- Issue 1（序列 `fetch_member` 效能風險）：改用 `asyncio.gather` 平行呼叫所有參與者的 `fetch_member`，取代原本逐一 `await` 的迴圈。
+- Issue 2（mention injection）：`dispatch_events` 的 `channel.send` 一律加上 `allowed_mentions=disnake.AllowedMentions.none()`，玩家暱稱即使包含 `@everyone`/mention 語法也不會觸發實際 ping；全文搜尋確認其餘事件分支皆未使用 `<@...>` mention 語法，套用此參數對其餘 8 種事件無副作用。新增測試 `test_dispatch_events_suppresses_mentions_from_malicious_display_name` 與既有測試補上 `allowed_mentions` 斷言。
+- Issue 3（`except Exception` 過寬）：改為只捕捉 `disnake.NotFound`/`disnake.HTTPException`，其餘例外（例如程式錯誤）不再被靜默吞掉。
+- Issue 4（`source_paths` 缺漏）：補上 `tests/test_discord_notifications.py`。
+- `docs/discord/notification.md` 同步更新說明文字（平行解析、`allowed_mentions`、例外類型收斂）。
+
+驗證：`uv run python -m pytest -q` → 全數通過（見下方重新驗證結果）。

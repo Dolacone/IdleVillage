@@ -10,6 +10,7 @@ Usage:
     await notification.update_dashboard(bot)
 """
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -268,19 +269,22 @@ async def dispatch_events(bot, events: list[dict]) -> None:
     for event in events:
         name_map = None
         if event.get("type") == "trial_success":
-            name_map = {}
-            for p in event.get("participants", []):
-                uid = p["user_id"]
+            uids = [p["user_id"] for p in event.get("participants", [])]
+
+            async def _resolve(uid):
                 try:
                     member = await channel.guild.fetch_member(int(uid))
-                    name_map[uid] = member.display_name
-                except Exception:
-                    name_map[uid] = uid
+                    return member.display_name
+                except (disnake.NotFound, disnake.HTTPException):
+                    return uid
+
+            resolved = await asyncio.gather(*(_resolve(uid) for uid in uids))
+            name_map = dict(zip(uids, resolved))
 
         text = _format_event(event, name_map)
         if text:
             try:
-                await channel.send(text)
+                await channel.send(text, allowed_mentions=disnake.AllowedMentions.none())
             except Exception as exc:
                 logger.error("Failed to send notification for event %s: %s", event.get("type"), exc)
 
