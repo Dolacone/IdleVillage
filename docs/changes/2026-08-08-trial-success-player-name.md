@@ -1,6 +1,6 @@
 ---
 title: "試煉達成通知改用玩家名稱取代 mention"
-status: Ready-to-review
+status: Issues-confirmed
 created: 2026-08-08
 doc_type: change
 last_reviewed: 2026-08-08
@@ -136,3 +136,19 @@ scope: "Tracks changing the 試煉達成 (trial_success) notification's particip
 - `docs/discord/notification.md` 同步更新說明文字，明確區分「`get_member` 快取命中＝零成本」與「`fetch_member` 序列化限制」。
 
 驗證：`uv run python -m pytest -q` → 全數通過（見下方 Round 2 重新驗證）。
+
+## Review Issues (Round 3)
+
+- [ ] Issue 1: [Major] `src/core/notification.py:274-282` — cache-miss fallback 的 `except (disnake.NotFound, disnake.HTTPException)` 只涵蓋 Discord API 回應層級的例外，不涵蓋傳輸層例外（例如 `OSError`／連線重置、`asyncio.TimeoutError`）。這些例外會由 disnake `HTTPClient.request` 在重試耗盡後直接拋出（`.venv/lib/python3.11/site-packages/disnake/http.py` `except OSError as e: ... raise`），不是 `HTTPException` 子類。因為 `_resolve` 沒有攔截，`asyncio.gather(*(_resolve(uid) for uid in uids))`（`src/core/notification.py:284`）會直接向上拋出例外，中止整個 `dispatch_events` 迴圈，導致該次呼叫傳入的所有事件（不只是名稱解析失敗的那個 participant）都不會送出，且試煉已完成、事件不會重播，通知永久遺失。Codex 重現：fake guild 的 `fetch_member` 以 `side_effect=OSError("connection reset")` 模擬暫時性網路錯誤，`await notification.dispatch_events(bot, [event])` 直接拋出 `OSError`，`channel.send` 完全未被呼叫。此問題並非本輪新增（`except Exception` 收斂為 `except (disnake.NotFound, disnake.HTTPException)` 是 Round 1 Issue 3 / Round 1-2 fix 的既有結果），但 Round 1、Round 2 審查皆未涵蓋此路徑，本輪新增/修改 `_resolve` 時一併發現，故列為本輪 finding。建議至少再攔截 `OSError`（或改用 `except disnake.HTTPException` 之外，額外 `except Exception` 記錄錯誤後 fallback 顯示 user_id，取捨「靜默吞掉程式錯誤」與「通知永久遺失」的優先序）。
+
+## Verification Notes (Round 3)
+
+- Cache-first 邏輯核對：`src/core/notification.py:275-282` 確認 `channel.guild.get_member(int(uid))` 先於 `fetch_member` 執行，`if cached is not None` 使用身分判斷而非真值判斷，`display_name` 為空字串等 falsy-but-valid 值不會被誤判為未命中；`fetch_member` 僅在 `get_member` 回傳 `None`（快取未命中）時才被呼叫。`allowed_mentions=disnake.AllowedMentions.none()`（`src/core/notification.py:290`）與窄化例外類型（`disnake.NotFound`／`disnake.HTTPException`，`src/core/notification.py:281`）皆維持不變，`name_map = dict(zip(uids, resolved))`（`src/core/notification.py:285`）鍵值對應正確，未發現錯位。
+- 測試核對：`test_dispatch_events_uses_member_cache_without_network_call`（`tests/test_discord_notifications.py:700`）以 `fetch_member=AsyncMock(side_effect=AssertionError(...))` 確保命中快取時完全不觸發網路呼叫，並以 `guild.fetch_member.assert_not_awaited()` 佐證；`test_dispatch_events_resolves_trial_success_participant_names`、`test_dispatch_events_suppresses_mentions_from_malicious_display_name`、`test_dispatch_events_trial_success_fetch_member_failure_falls_back_to_user_id`、`test_dispatch_events_mixed_batch_only_resolves_trial_success_names` 皆補上 `get_member=lambda uid: None` 強制快取未命中，實際測試路徑仍會走到 `fetch_member` fallback，未被新邏輯繞過（以 `test_dispatch_events_mixed_batch_only_resolves_trial_success_names` 的 `guild.fetch_member.assert_awaited_once_with(int("111"))` 為證）。未發現恆真或未實際驗證行為的測試。
+- 本輪 diff 新增程式碼僅 `src/core/notification.py:275-278`（4 行），未發現死碼或未使用變數。
+- Round 1/2 既有修正未回歸：mention injection 防護（`allowed_mentions`）、窄化例外類型、`zip` 鍵值對應皆維持正確，見上方核對。
+- `codex exec review --base main` 另回報 `docs/changes/` 目錄與 `AGENTS.md` 所述 `docs/changelogs/` 不一致；但檢視 `docs/changes/` 目錄下已有 11 份既有變更文件（如 `2026-07-20-auto-tool-hourly-material.md`），本文件路徑與既有慣例一致，非本次引入的問題，不列為 finding。
+- `source_paths`：`src/core/notification.py`、`docs/discord/notification.md`、`tests/test_discord_notifications.py` 與 `git diff main...HEAD --stat` 一致。
+- Tasks 與 Round 1、Round 2 Review Issues 皆已勾選 `[x]`；`last_reviewed` 為 `2026-08-08`，與今日日期一致。
+- 測試套件：`uv run python -m pytest -q` → 574 passed, 3 subtests passed，全數通過。
+
