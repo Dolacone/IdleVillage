@@ -1,6 +1,6 @@
 ---
 title: "試煉達成通知改用玩家名稱取代 mention"
-status: Ready-to-review
+status: Reviewed
 created: 2026-08-08
 doc_type: change
 last_reviewed: 2026-08-08
@@ -159,3 +159,24 @@ scope: "Tracks changing the 試煉達成 (trial_success) notification's particip
 - `docs/discord/notification.md` 補充說明非預期例外的處理方式。
 
 驗證：`uv run python -m pytest -q` → 全數通過（見下方 Round 3 重新驗證）。
+
+## Review Issues (Round 4)
+
+No new issues found.
+
+## Verification Notes (Round 4)
+
+- 例外順序核對：`src/core/notification.py:274-281` 確認 `except (disnake.NotFound, disnake.HTTPException)` 位於 `except Exception:` 之前；Python 依序比對 except 子句，特定例外類別必須排在 `Exception` 之前才會生效，此排序正確，`except Exception` 未使前者變成無法觸及的死碼。
+- 新測試核對：`tests/test_discord_notifications.py:834` 的 `test_dispatch_events_trial_success_transport_error_falls_back_without_aborting_batch` 以 `fetch_member` 的 `side_effect` 對 `uid == "111"` 拋出真正的 `OSError("connection reset")`（非 `disnake.NotFound`/`disnake.HTTPException`，不會被窄化的 except 子句攔截）；斷言 `channel.send.assert_awaited_once()` 且文字同時含 `111：貢獻 3000，獲得 25 個`（fallback 顯示 user_id）與 `Bob：貢獻 2000，獲得 25 個`（另一位參與者正常解析）。若移除本輪新增的 `except Exception:` 子句，`OSError` 會直接從 `_resolve` 拋出，經 `asyncio.gather`（`src/core/notification.py:284`，預設 `return_exceptions=False`）向上傳播，導致 `dispatch_events` 對整批事件的迴圈中止、`channel.send` 完全不會被呼叫，測試會失敗（`assert_awaited_once` 落空且例外向上拋出中止整個 test coroutine）。確認非恆真測試。
+- `dispatch_events`（`src/core/notification.py:255-291`）內 `asyncio.gather(*(_resolve(uid) for uid in uids))` 前後沒有額外 try/except 包裹，`_resolve` 是唯一的例外防線；此點與 Round 3 finding 描述的風險位置一致，本輪修正確實補上該防線。
+- `BaseException` 子類（例如 `asyncio.CancelledError`、`KeyboardInterrupt`）不會被 `except Exception:` 攔截（`asyncio.CancelledError.__mro__` 確認繼承 `BaseException` 而非 `Exception`，disnake 2.12.0 環境下核對）；`CancelledError` 向上傳播是 asyncio task 取消的正常語意（例如 bot shutdown 或外部呼叫方主動取消整個 `dispatch_events` 呼叫），任由其傳播是預期行為，非本次需要修正的缺口，維持 out of scope。
+- 全 diff 重新核對（`git diff main...HEAD`）：
+  - mention injection 防護：`channel.send(text, allowed_mentions=disnake.AllowedMentions.none())`（`src/core/notification.py:293`）維持不變，唯一的 `channel.send` 呼叫點。
+  - 例外窄化：`except (disnake.NotFound, disnake.HTTPException)`（`src/core/notification.py:274`）維持 Round 2 修正結果，本輪只在其後新增 `except Exception:`，未改動窄化範圍本身。
+  - cache-first 邏輯：`channel.guild.get_member(int(uid))` 使用 `is not None` 身分判斷（`src/core/notification.py:272-273`）維持不變，未發現回歸。
+  - dict 鍵值對應：`name_map = dict(zip(uids, resolved))`（`src/core/notification.py:285`）維持 `asyncio.gather` 回傳順序與輸入順序一致的既有結論，未發現錯位風險。
+  - 文件核對：`docs/discord/notification.md` 已於 Round 3 fix 補充非預期例外的處理說明（「其他非預期例外（例如底層連線錯誤）同樣 fallback 顯示 `user_id`，但會記錄 log」），與本輪程式碼行為（`logger.exception` + fallback `user_id`）一致，未發現文件與程式碼不符之處。
+- 使用 `codex exec` 進行第二意見審查（因 codex-cli 0.146.1 的 `--base` 與自訂 prompt 參數無法併用，改為要求 codex 自行於 repo 內執行 `git diff main...HEAD` 取得變更範圍）：結論為「沒有發現新的問題」，涵蓋例外順序、測試有效性、`CancelledError` 不受影響、mention 防護/快取優先/字典鍵值/文件一致性等項目，與本輪自行核對結果一致。
+- `source_paths`：`src/core/notification.py`、`docs/discord/notification.md`、`tests/test_discord_notifications.py`，與 `git diff main...HEAD --stat` 一致（本文件自身不需自我列舉）。
+- Tasks（Task 1、Task 2）與 Round 1-3 所有 Review Issues 皆已勾選 `[x]`；`last_reviewed` 為 `2026-08-08`，與今日日期一致。
+- 測試套件：`uv run python -m pytest -q` → 575 passed, 3 subtests passed，全數通過。
