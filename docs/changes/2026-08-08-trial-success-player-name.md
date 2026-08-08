@@ -1,10 +1,12 @@
 ---
 title: "試煉達成通知改用玩家名稱取代 mention"
-status: Draft
+status: Ready-to-implement
 created: 2026-08-08
 doc_type: change
 last_reviewed: 2026-08-08
-source_paths: []
+source_paths:
+  - src/core/notification.py
+  - docs/discord/notification.md
 scope: "Tracks changing the 試煉達成 (trial_success) notification's participant list from Discord `<@{user_id}>` mentions to resolved display names."
 ---
 
@@ -16,7 +18,7 @@ scope: "Tracks changing the 試煉達成 (trial_success) notification's particip
 
 在 `notification.dispatch_events(bot, events)` 內（此函式已是 async，且已透過 `channel = bot.get_channel(channel_id)` 取得 channel/guild 物件），對 `trial_success` 事件的每位 `participant`，用 `channel.guild.fetch_member(int(user_id))` 即時解析出 `display_name`，組成 `name_map: dict[str, str]`；找不到（`fetch_member` 拋例外，例如玩家已離開 guild）時 fallback 顯示 `user_id`。組好的 `name_map` 傳入 `_format_event(event, name_map)`，`_format_event` 維持同步、可單元測試，`trial_success` 分支改用 `name_map.get(p['user_id'], p['user_id'])` 取代 `<@{p['user_id']}>`。
 
-此手法完全比照現有 `/idlevillage-ranking` 指令已經在用的機制（`src/cogs/actions.py:315-322`）：`await inter.guild.fetch_member(int(uid))`，成功取 `display_name`，`except Exception` fallback 成 `uid`，並透過 `name_map: dict[str, str]` 傳給純渲染函式（ranking 是 `build_ranking_text(sliced, name_map)`；此處對應 `_format_event(event, name_map)`）。不新增任何資料表欄位，不改變 `trial_manager.py`/`settlement.py`/`engine.py` 的資料結構（`participants` 仍只含 `user_id`/`contribution`/`reward`）。
+此手法完全比照現有 `/idlevillage-ranking` 指令已經在用的機制（`src/cogs/actions.py:316-321`）：`await inter.guild.fetch_member(int(uid))`，成功取 `display_name`，`except Exception` fallback 成 `uid`，並透過 `name_map: dict[str, str]` 傳給純渲染函式（ranking 是 `build_ranking_text(sliced, name_map)`；此處對應 `_format_event(event, name_map)`）。不新增任何資料表欄位，不改變 `trial_manager.py`/`settlement.py`/`engine.py` 的資料結構（`participants` 仍只含 `user_id`/`contribution`/`reward`）。
 
 ### 排除的替代方案
 
@@ -49,8 +51,38 @@ scope: "Tracks changing the 試煉達成 (trial_success) notification's particip
 
 ## Architecture Decisions
 
-<!-- 於 plan 階段補充 -->
+1. **名稱解析發生在 `dispatch_events`，不改 `_format_event` 以外的組裝層**：`trial_success` 事件本身（由 `trial_manager.py`/`settlement.py` 組裝）維持只含 `user_id`/`contribution`/`reward`，不夾帶名稱。名稱解析屬於「呈現層」關注點，而 `dispatch_events` 是唯一同時擁有 `bot`（可 `get_channel`/取得 `guild`）與事件清單的函式，因此在此組出 `name_map` 後傳給純渲染函式 `_format_event`，維持 `trial_manager`/`settlement`/`engine` 完全不變（比照 Recommended Direction 排除的替代方案理由）。
+2. **`_format_event` 簽章新增 `name_map: dict[str, str] | None = None`，預設值維持向後相容**：其餘 8 種既有事件（`gear_success` 等）不使用 `name_map`，呼叫端不傳入時行為不變；只有 `trial_success` 分支讀取 `name_map`。現有測試呼叫 `_format_event(ev)`（不帶 `name_map`）需要改為明確傳入 `name_map` 才能驗證新行為，`trial_success` 分支在 `name_map` 為 `None` 時 fallback 使用 `p['user_id']`（等同「查無此人」的 fallback 路徑），不得拋錯。
+3. **`name_map` 的組裝邏輯獨立成 `dispatch_events` 內的一個迴圈，只在事件類型為 `trial_success` 時執行**：其餘事件類型不需要 guild 查詢，避免不必要的 API 呼叫。`fetch_member` 的例外處理比照 `src/cogs/actions.py:315-322` 既有 ranking 邏輯：`try: member = await channel.guild.fetch_member(int(uid)); name_map[uid] = member.display_name; except Exception: name_map[uid] = uid`。
+4. **不新增 guild-none 的專屬防呆分支**：`channel.guild` 在現行系統設計下恆為非 None（通知頻道固定是 guild text channel，見 Key Assumptions），若未來需要支援 DM 頻道應在該功能自己的 change document 處理，本次不做超出範圍的防禦式程式碼。
 
 ## Tasks
 
-<!-- 於 plan 階段補充 -->
+- [ ] Task 1: `src/core/notification.py` — `dispatch_events` 新增 `trial_success` 事件的 `name_map` 解析；`_format_event` 新增 `name_map` 參數並套用於 `trial_success` 分支
+  - Files: `src/core/notification.py`
+  - Tests: 更新 `tests/test_discord_notifications.py`：
+    - (a) `test_format_trial_success` 改傳入 `name_map={"u1": "Alice", "u2": "Bob"}`，斷言輸出含 `Alice：貢獻 3000，獲得 25 個`/`Bob：貢獻 2000，獲得 25 個`，且 `assertNotIn("<@", text)`
+    - (b) 新增 `test_format_trial_success_without_name_map_falls_back_to_user_id`：不傳 `name_map`（或傳 `None`），斷言輸出含 `u1：貢獻 ...`（純 user_id，非 mention）
+    - (c) `test_format_trial_success_truncates_long_participant_list` 改傳入對應 `name_map`（可全部 fallback 成 user_id 或給定簡單名稱），確認截斷邏輯不受影響
+    - (d) 新增 `test_dispatch_events_resolves_trial_success_participant_names`：mock `bot.get_channel()` 回傳一個帶 `guild.fetch_member`（`AsyncMock`）的假 channel，驗證 `dispatch_events` 對 `trial_success` 事件會呼叫 `fetch_member` 並將解析出的名稱正確傳入最終發送的訊息文字
+    - (e) 新增 `test_dispatch_events_trial_success_fetch_member_failure_falls_back_to_user_id`：`fetch_member` 對其中一位參與者拋例外（模擬已離開 guild），驗證該員在最終訊息顯示 user_id 而非中斷整個通知
+    - (f) 新增 `test_dispatch_events_mixed_batch_only_resolves_trial_success_names`：`events` 同時包含 `building_upgrade` 與 `trial_success` 兩種事件（比照 `docs/discord/notification.md`「同一 settlement 內的通知順序」實際會混合發送的情境），斷言 `fetch_member` 只被呼叫於 `trial_success` 的參與者、`building_upgrade` 訊息內容與呼叫次數不受影響、兩則訊息皆正確送出
+  - Depends on: 無
+  - Acceptance: `trial_success` 訊息不再包含 `<@`；`name_map` 命中時顯示解析出的 `display_name`，未命中或 `fetch_member` 拋例外時 fallback 顯示 `user_id`；其餘 8 種既有事件格式與既有測試不受影響且全數通過；`trial_manager.py`/`settlement.py`/`engine.py` 完全未變動（`git diff` 確認）
+
+- [ ] Task 2: `docs/discord/notification.md` 更新試煉達成範本與說明
+  - Files: `docs/discord/notification.md`
+  - Tests: 無（文件變更）
+  - Depends on: Task 1（需與實作後的實際格式一致）
+  - Acceptance: 試煉達成範本改為 `{display_name}：貢獻 {contribution}，獲得 {reward} 個`（移除 `<@{user_id}>`）；新增一段說明名稱解析機制（比照 ranking 的 `fetch_member` + fallback user_id，不新增資料表欄位、與貢獻來源（手動/自動工具）無關）；`last_reviewed` 更新為實作當日日期；新增 Changelog 條目說明此次變更與理由
+
+### 平行任務標記（僅供未來參考，目前循序執行）
+
+- 無可平行任務：Task 2 依賴 Task 1 完成後的實際格式。
+
+## Plan Review Issues
+
+- [x] Issue 1: Recommended Direction 引用 ranking 前例的行號有誤（已修正為 `src/cogs/actions.py:316-321`）。
+- [x] Issue 2: Task 1 測試清單缺少「混合事件批次」情境（已新增 (f) `test_dispatch_events_mixed_batch_only_resolves_trial_success_names`）。
+- [x] Issue 3: `source_paths` 已補上 `src/core/notification.py`、`docs/discord/notification.md`。
+- [x] Issue 4: 無阻擋性邏輯錯誤，`status` 於本次 plan 階段結束時更新為 `Ready-to-implement`。
