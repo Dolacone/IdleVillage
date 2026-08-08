@@ -1,6 +1,6 @@
 ---
 title: "試煉達成通知改用玩家名稱取代 mention"
-status: Ready-to-implement
+status: Ready-to-review
 created: 2026-08-08
 doc_type: change
 last_reviewed: 2026-08-08
@@ -70,7 +70,7 @@ scope: "Tracks changing the 試煉達成 (trial_success) notification's particip
   - Depends on: 無
   - Acceptance: `trial_success` 訊息不再包含 `<@`；`name_map` 命中時顯示解析出的 `display_name`，未命中或 `fetch_member` 拋例外時 fallback 顯示 `user_id`；其餘 8 種既有事件格式與既有測試不受影響且全數通過；`trial_manager.py`/`settlement.py`/`engine.py` 完全未變動（`git diff` 確認）
 
-- [ ] Task 2: `docs/discord/notification.md` 更新試煉達成範本與說明
+- [x] Task 2: `docs/discord/notification.md` 更新試煉達成範本與說明
   - Files: `docs/discord/notification.md`
   - Tests: 無（文件變更）
   - Depends on: Task 1（需與實作後的實際格式一致）
