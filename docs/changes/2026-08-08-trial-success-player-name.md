@@ -1,6 +1,6 @@
 ---
 title: "試煉達成通知改用玩家名稱取代 mention"
-status: Issues-confirmed
+status: Ready-to-review
 created: 2026-08-08
 doc_type: change
 last_reviewed: 2026-08-08
@@ -116,7 +116,7 @@ scope: "Tracks changing the 試煉達成 (trial_success) notification's particip
 
 ## Review Issues (Round 2)
 
-- [ ] Issue 1: [Major] `src/core/notification.py:270-283` — `asyncio.gather` 包裝的 `_resolve` 協程雖然平行 await，但 disnake 2.12 的 `HTTPClient.request` 依 `Route.bucket` 對每個 request 上鎖（`.venv/lib/python3.11/site-packages/disnake/http.py` `HTTPClient.request`：`lock = self._locks.get(bucket)` -> `await lock.acquire()`，網路請求完成才釋放）。`Route.bucket` 的定義是 `f"{channel_id}:{guild_id}:{path}"`（`disnake/http.py` `Route.bucket`），其中 `path` 是未代入參數前的樣板字串 `/guilds/{guild_id}/members/{member_id}`（`Route.__init__` 的 `self.path: str = path` 保留原始樣板，未含 `member_id` 實際值）。因此同一 guild 內所有 `fetch_member` 呼叫共用同一把 `asyncio.Lock`，即使透過 `asyncio.gather` 同時發起，底層 HTTP 請求仍會被序列化處理，實測每個請求須等前一個回應完畢才能取得鎖並發出下一個請求。Round 1 Issue 1（序列 `fetch_member` 效能風險）宣稱已用平行化解決，實際上參與者人數 N 時整體耗時仍約為 N 次序列 round-trip 的總和，與修正前的 `for` 迴圈效果相近，未達成文件宣稱的效能改善。建議改用 member cache（`guild.get_member`）優先查詢、必要時才 fallback `fetch_member`，或限制單次解析人數上限，才能真正降低序列 REST 呼叫次數。
+- [x] Issue 1: [Major] `src/core/notification.py:270-283` — `asyncio.gather` 包裝的 `_resolve` 協程雖然平行 await，但 disnake 2.12 的 `HTTPClient.request` 依 `Route.bucket` 對每個 request 上鎖（`.venv/lib/python3.11/site-packages/disnake/http.py` `HTTPClient.request`：`lock = self._locks.get(bucket)` -> `await lock.acquire()`，網路請求完成才釋放）。`Route.bucket` 的定義是 `f"{channel_id}:{guild_id}:{path}"`（`disnake/http.py` `Route.bucket`），其中 `path` 是未代入參數前的樣板字串 `/guilds/{guild_id}/members/{member_id}`（`Route.__init__` 的 `self.path: str = path` 保留原始樣板，未含 `member_id` 實際值）。因此同一 guild 內所有 `fetch_member` 呼叫共用同一把 `asyncio.Lock`，即使透過 `asyncio.gather` 同時發起，底層 HTTP 請求仍會被序列化處理，實測每個請求須等前一個回應完畢才能取得鎖並發出下一個請求。Round 1 Issue 1（序列 `fetch_member` 效能風險）宣稱已用平行化解決，實際上參與者人數 N 時整體耗時仍約為 N 次序列 round-trip 的總和，與修正前的 `for` 迴圈效果相近，未達成文件宣稱的效能改善。建議改用 member cache（`guild.get_member`）優先查詢、必要時才 fallback `fetch_member`，或限制單次解析人數上限，才能真正降低序列 REST 呼叫次數。
 
 ## Verification Notes (Round 2)
 
@@ -127,3 +127,12 @@ scope: "Tracks changing the 試煉達成 (trial_success) notification's particip
 - 新增測試檢視：`tests/test_discord_notifications.py` 本輪新增/修改的斷言（`allowed_mentions` 檢查、`disnake.NotFound` 真實例外）皆具備可證偽性，未發現空泛或恆真測試；新增 `import disnake`（第 15 行）為新增例外類型與測試所需，非未使用匯入。
 - 任務狀態：Task 1、Task 2 與所有 Review Issues（含 Round 1 四項）皆已勾選 `[x]`；`last_reviewed` 為 `2026-08-08`，與今日日期一致。
 - 測試套件：`uv run python -m pytest -q` → 573 passed, 3 subtests passed，全數通過。
+
+## Post-Review Fixes Round 2 (2026-08-08)
+
+- Round 2 Issue 1（`asyncio.gather` 未真正解決序列化問題）：改為「快取優先」策略——每位 participant 先呼叫同步、零網路成本的 `channel.guild.get_member(int(uid))`（走 gateway member cache），命中直接取 `display_name`；只有未命中時才 fallback `await channel.guild.fetch_member(int(uid))`。`asyncio.gather` 保留（讓多個 fallback 呼叫至少能併發啟動，即使底層仍受 disnake rate-limit bucket 限制），但實際降低延遲與 REST 呼叫次數的手段是 `get_member` 快取命中路徑，而非平行化本身。文件與程式碼註解已更正先前對 `asyncio.gather` 效能改善的誇大宣稱。
+- 新增測試 `test_dispatch_events_uses_member_cache_without_network_call`：驗證命中 member cache 時完全不呼叫 `fetch_member`（`AsyncMock(side_effect=AssertionError(...))` 若被呼叫會讓測試失敗）。
+- 既有 `dispatch_events` 相關測試（`test_dispatch_events_resolves_trial_success_participant_names`、`test_dispatch_events_suppresses_mentions_from_malicious_display_name`、`test_dispatch_events_trial_success_fetch_member_failure_falls_back_to_user_id`、`test_dispatch_events_mixed_batch_only_resolves_trial_success_names`）的假 guild 物件補上 `get_member=lambda uid: None`（模擬快取未命中），確保這些測試仍實際驗證 `fetch_member` fallback 路徑，而非被新的快取優先邏輯繞過。
+- `docs/discord/notification.md` 同步更新說明文字，明確區分「`get_member` 快取命中＝零成本」與「`fetch_member` 序列化限制」。
+
+驗證：`uv run python -m pytest -q` → 全數通過（見下方 Round 2 重新驗證）。

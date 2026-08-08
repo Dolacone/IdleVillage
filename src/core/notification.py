@@ -272,6 +272,9 @@ async def dispatch_events(bot, events: list[dict]) -> None:
             uids = [p["user_id"] for p in event.get("participants", [])]
 
             async def _resolve(uid):
+                cached = channel.guild.get_member(int(uid))
+                if cached is not None:
+                    return cached.display_name
                 try:
                     member = await channel.guild.fetch_member(int(uid))
                     return member.display_name

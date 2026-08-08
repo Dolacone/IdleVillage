@@ -698,6 +698,36 @@ class TestDispatchEventsTrialSuccessNames(DatabaseTestCase):
             )
             await db.commit()
 
+    async def test_dispatch_events_uses_member_cache_without_network_call(self):
+        from core import notification
+
+        await self._set_announcement_channel()
+
+        cached_members = {
+            "111": SimpleNamespace(display_name="Alice"),
+        }
+        guild = SimpleNamespace(
+            get_member=lambda uid: cached_members.get(str(uid)),
+            fetch_member=AsyncMock(side_effect=AssertionError("should not call fetch_member")),
+        )
+        channel = SimpleNamespace(send=AsyncMock(), guild=guild)
+        bot = SimpleNamespace(get_channel=lambda channel_id: channel if channel_id == 123 else None)
+
+        event = {
+            "type": "trial_success",
+            "target": 5000,
+            "total_awarded": 50,
+            "participants": [
+                {"user_id": "111", "contribution": 3000, "reward": 25},
+            ],
+        }
+
+        await notification.dispatch_events(bot, [event])
+
+        guild.fetch_member.assert_not_awaited()
+        text = channel.send.call_args.args[0]
+        self.assertIn("Alice：貢獻 3000，獲得 25 個", text)
+
     async def test_dispatch_events_resolves_trial_success_participant_names(self):
         from core import notification
 
@@ -711,7 +741,10 @@ class TestDispatchEventsTrialSuccessNames(DatabaseTestCase):
         async def fetch_member(uid):
             return members[str(uid)]
 
-        guild = SimpleNamespace(fetch_member=AsyncMock(side_effect=fetch_member))
+        guild = SimpleNamespace(
+            get_member=lambda uid: None,
+            fetch_member=AsyncMock(side_effect=fetch_member),
+        )
         channel = SimpleNamespace(send=AsyncMock(), guild=guild)
         bot = SimpleNamespace(get_channel=lambda channel_id: channel if channel_id == 123 else None)
 
@@ -743,7 +776,8 @@ class TestDispatchEventsTrialSuccessNames(DatabaseTestCase):
         await self._set_announcement_channel()
 
         guild = SimpleNamespace(
-            fetch_member=AsyncMock(return_value=SimpleNamespace(display_name="@everyone"))
+            get_member=lambda uid: None,
+            fetch_member=AsyncMock(return_value=SimpleNamespace(display_name="@everyone")),
         )
         channel = SimpleNamespace(send=AsyncMock(), guild=guild)
         bot = SimpleNamespace(get_channel=lambda channel_id: channel if channel_id == 123 else None)
@@ -774,7 +808,10 @@ class TestDispatchEventsTrialSuccessNames(DatabaseTestCase):
                 raise disnake.NotFound(SimpleNamespace(status=404, reason=""), "Unknown Member")
             return SimpleNamespace(display_name="Bob")
 
-        guild = SimpleNamespace(fetch_member=AsyncMock(side_effect=fetch_member))
+        guild = SimpleNamespace(
+            get_member=lambda uid: None,
+            fetch_member=AsyncMock(side_effect=fetch_member),
+        )
         channel = SimpleNamespace(send=AsyncMock(), guild=guild)
         bot = SimpleNamespace(get_channel=lambda channel_id: channel if channel_id == 123 else None)
 
@@ -800,7 +837,8 @@ class TestDispatchEventsTrialSuccessNames(DatabaseTestCase):
         await self._set_announcement_channel()
 
         guild = SimpleNamespace(
-            fetch_member=AsyncMock(side_effect=lambda uid: SimpleNamespace(display_name="Alice"))
+            get_member=lambda uid: None,
+            fetch_member=AsyncMock(side_effect=lambda uid: SimpleNamespace(display_name="Alice")),
         )
         channel = SimpleNamespace(send=AsyncMock(), guild=guild)
         bot = SimpleNamespace(get_channel=lambda channel_id: channel if channel_id == 123 else None)
