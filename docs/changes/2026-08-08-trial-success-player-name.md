@@ -1,6 +1,6 @@
 ---
 title: "試煉達成通知改用玩家名稱取代 mention"
-status: Refactored
+status: Done
 created: 2026-08-08
 doc_type: change
 last_reviewed: 2026-08-08
