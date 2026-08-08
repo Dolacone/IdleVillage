@@ -243,6 +243,26 @@ def _format_event(event: dict, name_map: dict[str, str] | None = None) -> str | 
 # Public API
 # ---------------------------------------------------------------------------
 
+
+async def _resolve_display_name(guild, uid: str) -> str:
+    """Resolve a Discord display name for uid, preferring the member cache.
+
+    Falls back to uid itself if the member cannot be found or an API error
+    occurs (e.g. the player has since left the guild).
+    """
+    cached = guild.get_member(int(uid))
+    if cached is not None:
+        return cached.display_name
+    try:
+        member = await guild.fetch_member(int(uid))
+        return member.display_name
+    except (disnake.NotFound, disnake.HTTPException):
+        return uid
+    except Exception:
+        logger.exception("Unexpected error resolving display name for %s", uid)
+        return uid
+
+
 async def dispatch_events(bot, events: list[dict]) -> None:
     """
     Send formatted notification messages to the announcement channel.
@@ -270,21 +290,9 @@ async def dispatch_events(bot, events: list[dict]) -> None:
         name_map = None
         if event.get("type") == "trial_success":
             uids = [p["user_id"] for p in event.get("participants", [])]
-
-            async def _resolve(uid):
-                cached = channel.guild.get_member(int(uid))
-                if cached is not None:
-                    return cached.display_name
-                try:
-                    member = await channel.guild.fetch_member(int(uid))
-                    return member.display_name
-                except (disnake.NotFound, disnake.HTTPException):
-                    return uid
-                except Exception:
-                    logger.exception("Unexpected error resolving display name for %s", uid)
-                    return uid
-
-            resolved = await asyncio.gather(*(_resolve(uid) for uid in uids))
+            resolved = await asyncio.gather(
+                *(_resolve_display_name(channel.guild, uid) for uid in uids)
+            )
             name_map = dict(zip(uids, resolved))
 
         text = _format_event(event, name_map)
