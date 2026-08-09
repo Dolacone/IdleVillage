@@ -10,6 +10,7 @@ Usage:
     await notification.update_dashboard(bot)
 """
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 
@@ -97,9 +98,10 @@ def _pct(progress: int, target: int) -> int:
     return round(progress / target * 100)
 
 
-def _format_event(event: dict) -> str | None:
+def _format_event(event: dict, name_map: dict[str, str] | None = None) -> str | None:
     """Return a formatted notification string for the given event dict, or None to skip."""
     kind = event.get("type")
+    name_map = name_map or {}
 
     if kind == "stage_clear":
         cleared = event["stages_cleared"]
@@ -218,7 +220,8 @@ def _format_event(event: dict) -> str | None:
             f"共 {len(participants)} 位玩家依貢獻度瓜分了 {total_awarded} 個 🌟萬能素材：",
         ]
         for p in participants:
-            lines.append(f"<@{p['user_id']}>：貢獻 {p['contribution']}，獲得 {p['reward']} 個")
+            display_name = name_map.get(p["user_id"], p["user_id"])
+            lines.append(f"{display_name}：貢獻 {p['contribution']}，獲得 {p['reward']} 個")
         text = "\n".join(lines)
         if len(text) > 1900:
             text = text[:1900] + "\n（清單過長，部分內容已省略）"
@@ -239,6 +242,26 @@ def _format_event(event: dict) -> str | None:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
+
+async def _resolve_display_name(guild, uid: str) -> str:
+    """Resolve a Discord display name for uid, preferring the member cache.
+
+    Falls back to uid itself if the member cannot be found or an API error
+    occurs (e.g. the player has since left the guild).
+    """
+    cached = guild.get_member(int(uid))
+    if cached is not None:
+        return cached.display_name
+    try:
+        member = await guild.fetch_member(int(uid))
+        return member.display_name
+    except (disnake.NotFound, disnake.HTTPException):
+        return uid
+    except Exception:
+        logger.exception("Unexpected error resolving display name for %s", uid)
+        return uid
+
 
 async def dispatch_events(bot, events: list[dict]) -> None:
     """
@@ -264,10 +287,18 @@ async def dispatch_events(bot, events: list[dict]) -> None:
         return
 
     for event in events:
-        text = _format_event(event)
+        name_map = None
+        if event.get("type") == "trial_success":
+            uids = [p["user_id"] for p in event.get("participants", [])]
+            resolved = await asyncio.gather(
+                *(_resolve_display_name(channel.guild, uid) for uid in uids)
+            )
+            name_map = dict(zip(uids, resolved))
+
+        text = _format_event(event, name_map)
         if text:
             try:
-                await channel.send(text)
+                await channel.send(text, allowed_mentions=disnake.AllowedMentions.none())
             except Exception as exc:
                 logger.error("Failed to send notification for event %s: %s", event.get("type"), exc)
 

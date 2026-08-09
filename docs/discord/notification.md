@@ -1,7 +1,7 @@
 ---
 title: "Module: notification"
 doc_type: module
-last_reviewed: 2026-07-14
+last_reviewed: 2026-08-08
 source_paths:
   - src/core/notification.py
   - src/cogs/actions.py
@@ -127,10 +127,12 @@ sign 為 `-`（reduce 類型，如 `upgrade_cost_reduce`）或 `+`（其他類�
 ```
 🎉 村莊試煉達成！目標 {target} 點行動產出已完成
 共 {participant_count} 位玩家依貢獻度瓜分了 {total_awarded} 個 🌟萬能素材：
-<@{user_id}>：貢獻 {contribution}，獲得 {reward} 個
+{display_name}：貢獻 {contribution}，獲得 {reward} 個
 ...（依貢獻降冪排序）
 ```
 不顯示資源類型（同「試煉開始」的理由）。參與者列表超過 1900 字元時截斷，並附上「（清單過長，部分內容已省略）」提示，比照 `/idlevillage-ranking` 的截斷規則。
+
+`{display_name}` 由 `notification.dispatch_events` 在發送前即時解析：對每位 participant 先查 `channel.guild.get_member(int(user_id))`（同步、走 gateway member cache，零網路成本），命中則直接取 `display_name`；未命中才 fallback 呼叫 `await channel.guild.fetch_member(int(user_id))`（比照 `/idlevillage-ranking` 既有的 `src/cogs/actions.py` 解析手法）。多位 participant 的解析協程以 `asyncio.gather` 併發啟動，但 disnake 對同一 guild 的 member REST 請求共用同一個 rate-limit bucket 鎖，實際 HTTP round-trip 仍會被序列化；`get_member` 快取命中的路徑完全不受此限制，是實際降低延遲與 API 呼叫次數的手段，而非 `asyncio.gather` 本身。`fetch_member` 拋出 `disnake.NotFound`/`disnake.HTTPException`（例如玩家已離開 guild）時 fallback 顯示 `user_id`；其他非預期例外（例如底層連線錯誤）同樣 fallback 顯示 `user_id`，但會記錄 log，避免單一參與者解析失敗導致整批 `dispatch_events` 呼叫中斷、拖累同批次的其他通知。此解析與貢獻來源（玩家手動行動或自動工具背景結算）無關，`trial_manager.py`/`settlement.py` 組裝的 `participants` 資料本身不含名稱欄位。發送訊息時一律帶 `allowed_mentions=disnake.AllowedMentions.none()`，即使玩家暱稱本身包含 `@everyone`/mention 語法也不會觸發實際 ping。
 
 ### 試煉失敗（逾時）
 ```
@@ -147,6 +149,7 @@ sign 為 `-`（reduce 類型，如 `upgrade_cost_reduce`）或 `+`（其他類�
 
 ## Changelog
 
+- 2026-08-08: 試煉達成通知的參與者清單改用玩家名稱取代 `<@{user_id}>` mention。名稱由 `dispatch_events` 優先查 `guild.get_member()` 快取，未命中才 fallback `guild.fetch_member()`（比照 `/idlevillage-ranking` 既有手法），找不到時再 fallback 顯示 `user_id`；`channel.send` 一律加上 `allowed_mentions=disnake.AllowedMentions.none()` 防止玩家暱稱觸發非預期 mention；不新增任何資料表欄位，`trial_manager.py`/`settlement.py`/`engine.py` 未變動。
 - 2026-07-14: 試煉開始通知移除發起者 mention（開啟試煉不再需要玩家輸入，也不記錄是誰點擊）。花費的資源類型改由系統自動隨機選定，`target` 固定為 `TRIAL_TARGET_AMOUNT`。
 - 2026-07-14: 試煉開始由 `open_trial_start` 按鈕 + `modal_start_trial` Modal 觸發（取代 slash command）。三種試煉訊息移除「目標 {target} {resource_label}」措辭，改為「目標：{target} 點行動產出」，資源類型只保留在試煉開始訊息的「花費」措辭中，避免讓人誤以為試煉目標是收集單一資源。
 - 2026-07-14: 新增村莊試煉事件（試煉開始、達成、失敗）與訊息範本；「同一 settlement 內的通知順序」新增第 4 項試煉達成/失敗通知並重新編號。試煉相關訊息一律使用 `<@{user_id}>` mention 呈現使用者，不需額外解析 display name。

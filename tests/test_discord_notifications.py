@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, patch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import disnake
 from support import ALL_TEST_ENV, DatabaseTestCase
 from database.schema import get_connection
 
@@ -402,17 +403,33 @@ class TestNotificationFormatting(unittest.TestCase):
             "resource_type": "food",
             "total_awarded": 50,
             "participants": [
-                {"user_id": "u1", "contribution": 3000, "reward": 25},
-                {"user_id": "u2", "contribution": 2000, "reward": 25},
+                {"user_id": "111", "contribution": 3000, "reward": 25},
+                {"user_id": "222", "contribution": 2000, "reward": 25},
             ],
         }
-        text = _format_event(ev)
+        text = _format_event(ev, name_map={"111": "Alice", "222": "Bob"})
         self.assertIn("🎉 村莊試煉達成", text)
         self.assertIn("5000", text)
         self.assertNotIn("食物", text)
         self.assertIn("50 個 🌟萬能素材", text)
-        self.assertIn("<@u1>：貢獻 3000，獲得 25 個", text)
-        self.assertIn("<@u2>：貢獻 2000，獲得 25 個", text)
+        self.assertNotIn("<@", text)
+        self.assertIn("Alice：貢獻 3000，獲得 25 個", text)
+        self.assertIn("Bob：貢獻 2000，獲得 25 個", text)
+
+    def test_format_trial_success_without_name_map_falls_back_to_user_id(self):
+        from core.notification import _format_event
+        ev = {
+            "type": "trial_success",
+            "target": 5000,
+            "resource_type": "food",
+            "total_awarded": 50,
+            "participants": [
+                {"user_id": "111", "contribution": 3000, "reward": 25},
+            ],
+        }
+        text = _format_event(ev)
+        self.assertNotIn("<@", text)
+        self.assertIn("111：貢獻 3000，獲得 25 個", text)
 
     def test_format_trial_success_truncates_long_participant_list(self):
         from core.notification import _format_event
@@ -426,7 +443,8 @@ class TestNotificationFormatting(unittest.TestCase):
             "total_awarded": 200,
             "participants": participants,
         }
-        text = _format_event(ev)
+        name_map = {f"user_{i}": f"Player{i}" for i in range(200)}
+        text = _format_event(ev, name_map=name_map)
         self.assertLessEqual(len(text), 1900 + len("\n（清單過長，部分內容已省略）"))
         self.assertIn("清單過長，部分內容已省略", text)
 
@@ -668,6 +686,224 @@ class TestDashboardUpdate(DatabaseTestCase):
             "SELECT dashboard_channel_id, dashboard_message_id FROM village_state WHERE id=1"
         )
         self.assertEqual(row, (None, None))
+
+
+class TestDispatchEventsTrialSuccessNames(DatabaseTestCase):
+    """dispatch_events resolves trial_success participant names via guild.fetch_member."""
+
+    async def _set_announcement_channel(self, channel_id="123"):
+        async with get_connection() as db:
+            await db.execute(
+                "UPDATE village_state SET announcement_channel_id=? WHERE id=1", (channel_id,)
+            )
+            await db.commit()
+
+    async def test_dispatch_events_uses_member_cache_without_network_call(self):
+        from core import notification
+
+        await self._set_announcement_channel()
+
+        cached_members = {
+            "111": SimpleNamespace(display_name="Alice"),
+        }
+        guild = SimpleNamespace(
+            get_member=lambda uid: cached_members.get(str(uid)),
+            fetch_member=AsyncMock(side_effect=AssertionError("should not call fetch_member")),
+        )
+        channel = SimpleNamespace(send=AsyncMock(), guild=guild)
+        bot = SimpleNamespace(get_channel=lambda channel_id: channel if channel_id == 123 else None)
+
+        event = {
+            "type": "trial_success",
+            "target": 5000,
+            "total_awarded": 50,
+            "participants": [
+                {"user_id": "111", "contribution": 3000, "reward": 25},
+            ],
+        }
+
+        await notification.dispatch_events(bot, [event])
+
+        guild.fetch_member.assert_not_awaited()
+        text = channel.send.call_args.args[0]
+        self.assertIn("Alice：貢獻 3000，獲得 25 個", text)
+
+    async def test_dispatch_events_resolves_trial_success_participant_names(self):
+        from core import notification
+
+        await self._set_announcement_channel()
+
+        members = {
+            "111": SimpleNamespace(display_name="Alice"),
+            "222": SimpleNamespace(display_name="Bob"),
+        }
+
+        async def fetch_member(uid):
+            return members[str(uid)]
+
+        guild = SimpleNamespace(
+            get_member=lambda uid: None,
+            fetch_member=AsyncMock(side_effect=fetch_member),
+        )
+        channel = SimpleNamespace(send=AsyncMock(), guild=guild)
+        bot = SimpleNamespace(get_channel=lambda channel_id: channel if channel_id == 123 else None)
+
+        event = {
+            "type": "trial_success",
+            "target": 5000,
+            "total_awarded": 50,
+            "participants": [
+                {"user_id": "111", "contribution": 3000, "reward": 25},
+                {"user_id": "222", "contribution": 2000, "reward": 25},
+            ],
+        }
+
+        await notification.dispatch_events(bot, [event])
+
+        channel.send.assert_awaited_once()
+        text = channel.send.call_args.args[0]
+        self.assertIn("Alice：貢獻 3000，獲得 25 個", text)
+        self.assertIn("Bob：貢獻 2000，獲得 25 個", text)
+        self.assertNotIn("<@", text)
+        allowed_mentions = channel.send.call_args.kwargs.get("allowed_mentions")
+        self.assertFalse(allowed_mentions.everyone)
+        self.assertFalse(allowed_mentions.users)
+        self.assertFalse(allowed_mentions.roles)
+
+    async def test_dispatch_events_suppresses_mentions_from_malicious_display_name(self):
+        from core import notification
+
+        await self._set_announcement_channel()
+
+        guild = SimpleNamespace(
+            get_member=lambda uid: None,
+            fetch_member=AsyncMock(return_value=SimpleNamespace(display_name="@everyone")),
+        )
+        channel = SimpleNamespace(send=AsyncMock(), guild=guild)
+        bot = SimpleNamespace(get_channel=lambda channel_id: channel if channel_id == 123 else None)
+
+        event = {
+            "type": "trial_success",
+            "target": 5000,
+            "total_awarded": 50,
+            "participants": [
+                {"user_id": "111", "contribution": 3000, "reward": 25},
+            ],
+        }
+
+        await notification.dispatch_events(bot, [event])
+
+        allowed_mentions = channel.send.call_args.kwargs.get("allowed_mentions")
+        self.assertFalse(allowed_mentions.everyone)
+        self.assertFalse(allowed_mentions.users)
+        self.assertFalse(allowed_mentions.roles)
+
+    async def test_dispatch_events_trial_success_fetch_member_failure_falls_back_to_user_id(self):
+        from core import notification
+
+        await self._set_announcement_channel()
+
+        async def fetch_member(uid):
+            if str(uid) == "111":
+                raise disnake.NotFound(SimpleNamespace(status=404, reason=""), "Unknown Member")
+            return SimpleNamespace(display_name="Bob")
+
+        guild = SimpleNamespace(
+            get_member=lambda uid: None,
+            fetch_member=AsyncMock(side_effect=fetch_member),
+        )
+        channel = SimpleNamespace(send=AsyncMock(), guild=guild)
+        bot = SimpleNamespace(get_channel=lambda channel_id: channel if channel_id == 123 else None)
+
+        event = {
+            "type": "trial_success",
+            "target": 5000,
+            "total_awarded": 50,
+            "participants": [
+                {"user_id": "111", "contribution": 3000, "reward": 25},
+                {"user_id": "222", "contribution": 2000, "reward": 25},
+            ],
+        }
+
+        await notification.dispatch_events(bot, [event])
+
+        text = channel.send.call_args.args[0]
+        self.assertIn("111：貢獻 3000，獲得 25 個", text)
+        self.assertIn("Bob：貢獻 2000，獲得 25 個", text)
+
+    async def test_dispatch_events_trial_success_transport_error_falls_back_without_aborting_batch(self):
+        """A non-disnake exception (e.g. a transport error) from fetch_member must not
+        abort the whole dispatch_events call for other participants/events."""
+        from core import notification
+
+        await self._set_announcement_channel()
+
+        async def fetch_member(uid):
+            if str(uid) == "111":
+                raise OSError("connection reset")
+            return SimpleNamespace(display_name="Bob")
+
+        guild = SimpleNamespace(
+            get_member=lambda uid: None,
+            fetch_member=AsyncMock(side_effect=fetch_member),
+        )
+        channel = SimpleNamespace(send=AsyncMock(), guild=guild)
+        bot = SimpleNamespace(get_channel=lambda channel_id: channel if channel_id == 123 else None)
+
+        event = {
+            "type": "trial_success",
+            "target": 5000,
+            "total_awarded": 50,
+            "participants": [
+                {"user_id": "111", "contribution": 3000, "reward": 25},
+                {"user_id": "222", "contribution": 2000, "reward": 25},
+            ],
+        }
+
+        await notification.dispatch_events(bot, [event])
+
+        channel.send.assert_awaited_once()
+        text = channel.send.call_args.args[0]
+        self.assertIn("111：貢獻 3000，獲得 25 個", text)
+        self.assertIn("Bob：貢獻 2000，獲得 25 個", text)
+
+    async def test_dispatch_events_mixed_batch_only_resolves_trial_success_names(self):
+        from core import notification
+
+        await self._set_announcement_channel()
+
+        guild = SimpleNamespace(
+            get_member=lambda uid: None,
+            fetch_member=AsyncMock(side_effect=lambda uid: SimpleNamespace(display_name="Alice")),
+        )
+        channel = SimpleNamespace(send=AsyncMock(), guild=guild)
+        bot = SimpleNamespace(get_channel=lambda channel_id: channel if channel_id == 123 else None)
+
+        events = [
+            {
+                "type": "building_upgrade",
+                "building_type": "farm",
+                "old_level": 1,
+                "new_level": 2,
+                "next_xp_req": 100,
+            },
+            {
+                "type": "trial_success",
+                "target": 5000,
+                "total_awarded": 50,
+                "participants": [
+                    {"user_id": "111", "contribution": 5000, "reward": 50},
+                ],
+            },
+        ]
+
+        await notification.dispatch_events(bot, events)
+
+        guild.fetch_member.assert_awaited_once_with(int("111"))
+        self.assertEqual(channel.send.await_count, 2)
+        texts = [call.args[0] for call in channel.send.await_args_list]
+        self.assertTrue(any("Alice：貢獻 5000，獲得 50 個" in t for t in texts))
+        self.assertTrue(any("farm" in t or "Lv1" in t or "Lv2" in t for t in texts))
 
 
 class TestGearUpgradeEventDispatch(unittest.TestCase):
