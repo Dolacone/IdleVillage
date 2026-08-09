@@ -60,8 +60,26 @@ scope: "Tracks reordering each participant line in the 試煉達成 (trial_succe
 
 ## Architecture Decisions
 
-<!-- 於 plan 階段補充 -->
+1. **只改字串樣板，不動迴圈與資料結構**：`for p in participants:` 迴圈、`name_map.get(...)` 解析呼叫、`lines.append(...)` 的位置全部不變，只改 `lines.append()` 內的 f-string 內容本身，將 `f"{display_name}：貢獻 {p['contribution']}，獲得 {p['reward']} 個"` 改為 `f"貢獻 {p['contribution']} ({p['reward']} 素材)：{display_name}"`。維持最小 diff。
 
 ## Tasks
 
-<!-- 於 plan 階段補充 -->
+- [ ] Task 1: `src/core/notification.py` — 調整 `_format_event` 的 `trial_success` 分支參與者行格式
+  - Files: `src/core/notification.py`
+  - Tests: 更新 `tests/test_discord_notifications.py`：
+    - `test_format_trial_success` 斷言改為 `貢獻 3000 (25 素材)：Alice`／`貢獻 2000 (25 素材)：Bob`
+    - `test_format_trial_success_without_name_map_falls_back_to_user_id` 斷言改為 `貢獻 3000 (25 素材)：111`
+    - `test_format_trial_success_truncates_long_participant_list` 沿用新格式產生的行文字，確認截斷邏輯（1900 字元 + 提示文字）仍正確觸發
+    - `test_dispatch_events_resolves_trial_success_participant_names`、`test_dispatch_events_trial_success_fetch_member_failure_falls_back_to_user_id`、`test_dispatch_events_mixed_batch_only_resolves_trial_success_names`、`test_dispatch_events_uses_member_cache_without_network_call`、`test_dispatch_events_trial_success_transport_error_falls_back_without_aborting_batch` 等既有 `dispatch_events` 測試的文字斷言同步改為新格式（僅調整斷言字串順序，不改測試邏輯本身）
+  - Depends on: 無
+  - Acceptance: 每行格式為 `貢獻 {contribution} ({reward} 素材)：{display_name}`；跨行排序（依貢獻降冪）、截斷規則、`name_map` 解析（cache/fetch_member/user_id fallback）、`allowed_mentions` 皆不受影響；全數測試通過
+
+- [ ] Task 2: `docs/discord/notification.md` 更新試煉達成範本
+  - Files: `docs/discord/notification.md`
+  - Tests: 無（文件變更）
+  - Depends on: Task 1（需與實作後的實際格式一致）
+  - Acceptance: 範本改為 `貢獻 {contribution} ({reward} 素材)：{display_name}`；`last_reviewed` 更新為實作當日日期；新增 Changelog 條目說明此次格式調整
+
+### 平行任務標記（僅供未來參考，目前循序執行）
+
+- 無可平行任務：Task 2 依賴 Task 1 完成後的實際格式。
