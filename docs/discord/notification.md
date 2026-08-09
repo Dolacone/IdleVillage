@@ -1,7 +1,7 @@
 ---
 title: "Module: notification"
 doc_type: module
-last_reviewed: 2026-08-08
+last_reviewed: 2026-08-09
 source_paths:
   - src/core/notification.py
   - src/cogs/actions.py
@@ -127,7 +127,7 @@ sign 為 `-`（reduce 類型，如 `upgrade_cost_reduce`）或 `+`（其他類�
 ```
 🎉 村莊試煉達成！目標 {target} 點行動產出已完成
 共 {participant_count} 位玩家依貢獻度瓜分了 {total_awarded} 個 🌟萬能素材：
-{display_name}：貢獻 {contribution}，獲得 {reward} 個
+貢獻 {contribution} ({reward} 素材)：{display_name}
 ...（依貢獻降冪排序）
 ```
 不顯示資源類型（同「試煉開始」的理由）。參與者列表超過 1900 字元時截斷，並附上「（清單過長，部分內容已省略）」提示，比照 `/idlevillage-ranking` 的截斷規則。
@@ -149,6 +149,7 @@ sign 為 `-`（reduce 類型，如 `upgrade_cost_reduce`）或 `+`（其他類�
 
 ## Changelog
 
+- 2026-08-09: 試煉達成通知每行欄位順序調整，由 `{display_name}：貢獻 {contribution}，獲得 {reward} 個` 改為 `貢獻 {contribution} ({reward} 素材)：{display_name}`。純顯示格式調整，跨行排序（依貢獻降冪）、截斷規則、名稱解析機制皆未變動。
 - 2026-08-08: 試煉達成通知的參與者清單改用玩家名稱取代 `<@{user_id}>` mention。名稱由 `dispatch_events` 優先查 `guild.get_member()` 快取，未命中才 fallback `guild.fetch_member()`（比照 `/idlevillage-ranking` 既有手法），找不到時再 fallback 顯示 `user_id`；`channel.send` 一律加上 `allowed_mentions=disnake.AllowedMentions.none()` 防止玩家暱稱觸發非預期 mention；不新增任何資料表欄位，`trial_manager.py`/`settlement.py`/`engine.py` 未變動。
 - 2026-07-14: 試煉開始通知移除發起者 mention（開啟試煉不再需要玩家輸入，也不記錄是誰點擊）。花費的資源類型改由系統自動隨機選定，`target` 固定為 `TRIAL_TARGET_AMOUNT`。
 - 2026-07-14: 試煉開始由 `open_trial_start` 按鈕 + `modal_start_trial` Modal 觸發（取代 slash command）。三種試煉訊息移除「目標 {target} {resource_label}」措辭，改為「目標：{target} 點行動產出」，資源類型只保留在試煉開始訊息的「花費」措辭中，避免讓人誤以為試煉目標是收集單一資源。

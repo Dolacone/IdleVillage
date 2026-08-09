@@ -1,6 +1,6 @@
 ---
 title: "試煉達成通知每行格式順序調整"
-status: Ready-to-implement
+status: Ready-to-review
 created: 2026-08-09
 doc_type: change
 last_reviewed: 2026-08-09
@@ -77,7 +77,7 @@ scope: "Tracks reordering each participant line in the 試煉達成 (trial_succe
   - Depends on: 無
   - Acceptance: 每行格式為 `貢獻 {contribution} ({reward} 素材)：{display_name}`；跨行排序（依貢獻降冪）、截斷規則、`name_map` 解析（cache/fetch_member/user_id fallback）、`allowed_mentions` 皆不受影響；全數測試通過
 
-- [ ] Task 2: `docs/discord/notification.md` 更新試煉達成範本
+- [x] Task 2: `docs/discord/notification.md` 更新試煉達成範本
   - Files: `docs/discord/notification.md`
   - Tests: 無（文件變更）
   - Depends on: Task 1（需與實作後的實際格式一致）
