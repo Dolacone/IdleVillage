@@ -413,8 +413,8 @@ class TestNotificationFormatting(unittest.TestCase):
         self.assertNotIn("食物", text)
         self.assertIn("50 個 🌟萬能素材", text)
         self.assertNotIn("<@", text)
-        self.assertIn("Alice：貢獻 3000，獲得 25 個", text)
-        self.assertIn("Bob：貢獻 2000，獲得 25 個", text)
+        self.assertIn("貢獻 3000 (25 素材)：Alice", text)
+        self.assertIn("貢獻 2000 (25 素材)：Bob", text)
 
     def test_format_trial_success_without_name_map_falls_back_to_user_id(self):
         from core.notification import _format_event
@@ -429,7 +429,7 @@ class TestNotificationFormatting(unittest.TestCase):
         }
         text = _format_event(ev)
         self.assertNotIn("<@", text)
-        self.assertIn("111：貢獻 3000，獲得 25 個", text)
+        self.assertIn("貢獻 3000 (25 素材)：111", text)
 
     def test_format_trial_success_truncates_long_participant_list(self):
         from core.notification import _format_event
@@ -726,7 +726,7 @@ class TestDispatchEventsTrialSuccessNames(DatabaseTestCase):
 
         guild.fetch_member.assert_not_awaited()
         text = channel.send.call_args.args[0]
-        self.assertIn("Alice：貢獻 3000，獲得 25 個", text)
+        self.assertIn("貢獻 3000 (25 素材)：Alice", text)
 
     async def test_dispatch_events_resolves_trial_success_participant_names(self):
         from core import notification
@@ -762,8 +762,8 @@ class TestDispatchEventsTrialSuccessNames(DatabaseTestCase):
 
         channel.send.assert_awaited_once()
         text = channel.send.call_args.args[0]
-        self.assertIn("Alice：貢獻 3000，獲得 25 個", text)
-        self.assertIn("Bob：貢獻 2000，獲得 25 個", text)
+        self.assertIn("貢獻 3000 (25 素材)：Alice", text)
+        self.assertIn("貢獻 2000 (25 素材)：Bob", text)
         self.assertNotIn("<@", text)
         allowed_mentions = channel.send.call_args.kwargs.get("allowed_mentions")
         self.assertFalse(allowed_mentions.everyone)
@@ -828,8 +828,8 @@ class TestDispatchEventsTrialSuccessNames(DatabaseTestCase):
         await notification.dispatch_events(bot, [event])
 
         text = channel.send.call_args.args[0]
-        self.assertIn("111：貢獻 3000，獲得 25 個", text)
-        self.assertIn("Bob：貢獻 2000，獲得 25 個", text)
+        self.assertIn("貢獻 3000 (25 素材)：111", text)
+        self.assertIn("貢獻 2000 (25 素材)：Bob", text)
 
     async def test_dispatch_events_trial_success_transport_error_falls_back_without_aborting_batch(self):
         """A non-disnake exception (e.g. a transport error) from fetch_member must not
@@ -864,8 +864,8 @@ class TestDispatchEventsTrialSuccessNames(DatabaseTestCase):
 
         channel.send.assert_awaited_once()
         text = channel.send.call_args.args[0]
-        self.assertIn("111：貢獻 3000，獲得 25 個", text)
-        self.assertIn("Bob：貢獻 2000，獲得 25 個", text)
+        self.assertIn("貢獻 3000 (25 素材)：111", text)
+        self.assertIn("貢獻 2000 (25 素材)：Bob", text)
 
     async def test_dispatch_events_mixed_batch_only_resolves_trial_success_names(self):
         from core import notification
@@ -902,7 +902,7 @@ class TestDispatchEventsTrialSuccessNames(DatabaseTestCase):
         guild.fetch_member.assert_awaited_once_with(int("111"))
         self.assertEqual(channel.send.await_count, 2)
         texts = [call.args[0] for call in channel.send.await_args_list]
-        self.assertTrue(any("Alice：貢獻 5000，獲得 50 個" in t for t in texts))
+        self.assertTrue(any("貢獻 5000 (50 素材)：Alice" in t for t in texts))
         self.assertTrue(any("farm" in t or "Lv1" in t or "Lv2" in t for t in texts))
 
 

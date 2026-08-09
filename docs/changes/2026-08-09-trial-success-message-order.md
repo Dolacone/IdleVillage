@@ -67,7 +67,7 @@ scope: "Tracks reordering each participant line in the 試煉達成 (trial_succe
 
 ## Tasks
 
-- [ ] Task 1: `src/core/notification.py` — 調整 `_format_event` 的 `trial_success` 分支參與者行格式
+- [x] Task 1: `src/core/notification.py` — 調整 `_format_event` 的 `trial_success` 分支參與者行格式
   - Files: `src/core/notification.py`
   - Tests: 更新 `tests/test_discord_notifications.py`：
     - `test_format_trial_success` 斷言改為 `貢獻 3000 (25 素材)：Alice`／`貢獻 2000 (25 素材)：Bob`

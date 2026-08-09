@@ -221,7 +221,7 @@ def _format_event(event: dict, name_map: dict[str, str] | None = None) -> str | 
         ]
         for p in participants:
             display_name = name_map.get(p["user_id"], p["user_id"])
-            lines.append(f"{display_name}：貢獻 {p['contribution']}，獲得 {p['reward']} 個")
+            lines.append(f"貢獻 {p['contribution']} ({p['reward']} 素材)：{display_name}")
         text = "\n".join(lines)
         if len(text) > 1900:
             text = text[:1900] + "\n（清單過長，部分內容已省略）"
