@@ -1,6 +1,6 @@
 ---
 title: "試煉達成通知每行格式順序調整"
-status: Reviewed
+status: Done
 created: 2026-08-09
 doc_type: change
 last_reviewed: 2026-08-09
