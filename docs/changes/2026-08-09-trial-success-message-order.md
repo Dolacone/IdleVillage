@@ -1,6 +1,6 @@
 ---
 title: "試煉達成通知每行格式順序調整"
-status: Ready-to-review
+status: Reviewed
 created: 2026-08-09
 doc_type: change
 last_reviewed: 2026-08-09
@@ -90,3 +90,19 @@ scope: "Tracks reordering each participant line in the 試煉達成 (trial_succe
 ## Plan Review Issues
 
 - [x] Issue 1: `source_paths` 在 frontmatter（line 7）仍是 `[]`，但本計畫已實際檢視並引用三個檔案的確切內容：`src/core/notification.py`（Architecture Decisions, line 63，逐字引用 `_format_event` 的 `trial_success` 分支現有 f-string）、`tests/test_discord_notifications.py`（Tasks, line 69-73，逐一列出既有測試名稱與斷言字串）、`docs/discord/notification.md`（Problem Statement, line 15-18，引用現有範本）。依 `AGENTS.md` 規則「當描述已實作行為時，需以實際建立或檢視過的檔案更新 `source_paths`」，且同系列前一份計畫文件 `docs/changes/2026-08-08-trial-success-player-name.md` 已將這三個檔案列入 `source_paths`，本文件應比照補上，而非留空。
+
+## Review Issues
+
+- [x] Issue 1 [Minor]: 變更文件存放於 `docs/changes/`，與 `AGENTS.md` line 5 文字（「All design and implementation change documents live in `docs/changelogs/`」）不一致。屬既有慣例（`docs/changes/2026-08-08-trial-success-player-name.md` 等 8 份文件皆存放於此，已合併至 main），非本次變更新增問題，不影響此次審查結論。
+
+## Verification Notes
+
+- `git diff main...HEAD --stat`：4 個檔案變更，與 frontmatter `source_paths` 一致（變更文件本身不計入 `source_paths`，符合系列慣例）。
+- Tasks：Task 1、Task 2、Plan Review Issue 1 皆已勾選 `[x]`。
+- `docs/discord/notification.md` 的 `last_reviewed` 已更新為 2026-08-09（line 4）；本變更文件 frontmatter `last_reviewed` 亦為 2026-08-09。
+- 送審前 `status` 為 `Ready-to-review`，符合預期；審查完成後更新為 `Reviewed`（僅 Minor 發現）。
+- `uv run python -m pytest -q`：575 passed, 3 subtests passed，全數通過。
+- Diff 檢查確認：`src/core/notification.py` 僅 line 224 一行變更（`lines.append(...)` 內容），迴圈（`for p in participants:`）、`name_map.get(...)` 解析、截斷邏輯（`len(text) > 1900`）、`get_member`/`fetch_member`/`allowed_mentions`（line 253、257、301）皆未出現在 diff 中，確認未被觸碰。
+- `grep -nE "[A-Za-z0-9]+：貢獻" tests/ src/ docs/`：無殘留舊格式斷言（唯一命中的「，獲得」出現在 changelog 條目中，用於描述舊格式，屬正確用法，非遺漏）。
+- 新格式字串逐字比對：`src/core/notification.py:224` 為 `f"貢獻 {p['contribution']} ({p['reward']} 素材)：{display_name}"`，與規格 `貢獻 {contribution} ({reward} 素材)：{display_name}` 完全一致（括號、標點、「素材」標籤皆正確）。
+- 以 `codex exec review --base main` 執行第二意見審查，結論為程式邏輯與測試無誤，僅提出上述文件目錄慣例的 P2 意見（已列為 Issue 1）。
