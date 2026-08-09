@@ -1,10 +1,13 @@
 ---
 title: "試煉達成通知每行格式順序調整"
-status: Draft
+status: Ready-to-implement
 created: 2026-08-09
 doc_type: change
 last_reviewed: 2026-08-09
-source_paths: []
+source_paths:
+  - src/core/notification.py
+  - docs/discord/notification.md
+  - tests/test_discord_notifications.py
 scope: "Tracks reordering each participant line in the 試煉達成 (trial_success) notification from name-first to contribution-first."
 ---
 
@@ -83,3 +86,7 @@ scope: "Tracks reordering each participant line in the 試煉達成 (trial_succe
 ### 平行任務標記（僅供未來參考，目前循序執行）
 
 - 無可平行任務：Task 2 依賴 Task 1 完成後的實際格式。
+
+## Plan Review Issues
+
+- [x] Issue 1: `source_paths` 在 frontmatter（line 7）仍是 `[]`，但本計畫已實際檢視並引用三個檔案的確切內容：`src/core/notification.py`（Architecture Decisions, line 63，逐字引用 `_format_event` 的 `trial_success` 分支現有 f-string）、`tests/test_discord_notifications.py`（Tasks, line 69-73，逐一列出既有測試名稱與斷言字串）、`docs/discord/notification.md`（Problem Statement, line 15-18，引用現有範本）。依 `AGENTS.md` 規則「當描述已實作行為時，需以實際建立或檢視過的檔案更新 `source_paths`」，且同系列前一份計畫文件 `docs/changes/2026-08-08-trial-success-player-name.md` 已將這三個檔案列入 `source_paths`，本文件應比照補上，而非留空。
