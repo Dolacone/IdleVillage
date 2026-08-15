@@ -1,7 +1,7 @@
 ---
 title: "Module: notification"
 doc_type: module
-last_reviewed: 2026-08-09
+last_reviewed: 2026-08-15
 source_paths:
   - src/core/notification.py
   - src/cogs/actions.py
@@ -36,9 +36,9 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 | 工具強化失敗 | gear-manager 回傳失敗 | `{user_display_name} 的 {gear_name} 升級失敗 :boom: Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）` | Public |
 | 詞條抽取 | `extract_affix` handler 成功後 | `{user_display_name} 的 {gear_name} 抽到詞條：{affix_label}（{sign}{value}%）`，sign 為 `-`（reduce 類型）或 `+`（其他） | Public |
 | 詞條清除 | `clear_affix` handler 成功後 | `{user_display_name} 的 {gear_name} 清除詞條：{affix_label}（{sign}{value}%）`，sign 為 `-`（reduce 類型）或 `+`（其他） | Public |
-| 試煉開始 | `open_trial_start` 成功開啟試煉 | 花費的資源類型與數量（系統自動隨機選定）+ 目標值（行動產出總計，與資源類型脫鉤）+ 期限 + 獎勵池大小；不顯示發起者 | Public |
+| 試煉開始 | `trial_target_select` 成功開啟試煉 | 玩家選定的目標值 + 系統隨機選定的扣款資源 + 期限 + 獎勵池大小；不顯示發起者 | Public |
 | 試煉達成 | trial-manager 判定進度達標 | 目標值（行動產出總計）+ 各參與者貢獻與獲得數量列表（依貢獻降冪） | Public |
-| 試煉失敗（逾時） | trial-manager 判定 24 小時內未達標 | 目標值（行動產出總計）+ 逾時當下進度，說明資源不退還 | Public |
+| 試煉失敗（逾時） | trial-manager 判定 12 小時內未達標 | 目標值（行動產出總計）+ 逾時當下進度，說明資源不退還 | Public |
 
 ## 通知去重
 
@@ -50,7 +50,7 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 - 建築一次升多級時，每個等級分開發送。
 - 工具強化成功/失敗為 Public 訊息，只在強化處理瞬間發送，不需要持久去重。
 - 詞條抽取/清除通知只在操作瞬間發送，不需持久去重。
-- 試煉開始通知只在 `open_trial_start` 成功開啟當下發送一次。
+- 試煉開始通知只在 `trial_target_select` 通過提交驗證後發送一次。開啟選單與翻頁都不通知。
 - 試煉達成/失敗通知只在 trial-manager 判定當下（settlement 內或 Watcher tick）發送一次，不需持久去重。
 
 ## 同一 settlement 內的通知順序
@@ -120,7 +120,7 @@ sign 為 `-`（reduce 類型，如 `upgrade_cost_reduce`）或 `+`（其他類�
 期限：<t:{deadline_unix}:R> 前
 達成後將依貢獻度瓜分共 {reward_pool} 個 🌟萬能素材
 ```
-不顯示發起者（開啟試煉不需要玩家輸入資訊，也不記錄是誰點擊了按鈕）。花費的資源類型只出現在第一行「花費」措辭中，刻意不與「目標」綁在一起，避免讓人誤以為試煉目標是收集單一資源，而非全服行動產出總和。
+不顯示發起者。玩家只選擇 target，不選擇扣款資源。花費的資源類型只出現在第一行「花費」措辭中，避免讓人誤以為試煉目標是收集單一資源。
 `{reward_pool}` = `floor(target / TRIAL_REWARD_DIVISOR)`，僅供公告顯示的預覽值；實際發放總量以達成當下逐人無條件進位後加總為準（見達成訊息）。當 `target` 不能被 `TRIAL_REWARD_DIVISOR` 整除時，此預覽值與實際發放總量可能有些微差異，此為預期行為（預覽值刻意採 floor，不影響實際分配結果）。
 
 ### 試煉達成
@@ -149,6 +149,7 @@ sign 為 `-`（reduce 類型，如 `upgrade_cost_reduce`）或 `+`（其他類�
 
 ## Changelog
 
+- 2026-08-15: 試煉開始通知改由目標選取成功觸發。通知使用動態 target 與實際隨機扣除的資源。
 - 2026-08-09: 試煉達成通知每行欄位順序調整，由 `{display_name}：貢獻 {contribution}，獲得 {reward} 個` 改為 `貢獻 {contribution} ({reward} 素材)：{display_name}`。純顯示格式調整，跨行排序（依貢獻降冪）、截斷規則、名稱解析機制皆未變動。
 - 2026-08-08: 試煉達成通知的參與者清單改用玩家名稱取代 `<@{user_id}>` mention。名稱由 `dispatch_events` 優先查 `guild.get_member()` 快取，未命中才 fallback `guild.fetch_member()`（比照 `/idlevillage-ranking` 既有手法），找不到時再 fallback 顯示 `user_id`；`channel.send` 一律加上 `allowed_mentions=disnake.AllowedMentions.none()` 防止玩家暱稱觸發非預期 mention；不新增任何資料表欄位，`trial_manager.py`/`settlement.py`/`engine.py` 未變動。
 - 2026-07-14: 試煉開始通知移除發起者 mention（開啟試煉不再需要玩家輸入，也不記錄是誰點擊）。花費的資源類型改由系統自動隨機選定，`target` 固定為 `TRIAL_TARGET_AMOUNT`。

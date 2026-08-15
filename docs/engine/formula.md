@@ -1,7 +1,7 @@
 ---
 title: "Module: formula"
 doc_type: module
-last_reviewed: 2026-07-20
+last_reviewed: 2026-08-15
 source_paths:
   - src/core/formula.py
 ---
@@ -86,7 +86,8 @@ Discord UI 顯示使用繁體中文。資料庫與程式內部 enum 一律使用
 | `AFFIX_CLEAR_COST` | `managers/affix-manager.md` |
 | `TRIAL_DURATION_SECONDS` | `managers/trial-manager.md` |
 | `TRIAL_COOLDOWN_SECONDS` | `managers/trial-manager.md` |
-| `TRIAL_TARGET_AMOUNT` | `managers/trial-manager.md` |
+| `TRIAL_TARGET_STEP` | `managers/trial-manager.md` |
+| `TRIAL_RESOURCE_RESERVE` | `managers/trial-manager.md` |
 | `TRIAL_REWARD_DIVISOR` | `managers/trial-manager.md` |
 | `AUTO_TOOL_SECONDS_PER_MATERIAL` | `managers/auto-tool-manager.md` |
 | `AUTO_TOOL_MAX_HOURS` | `managers/auto-tool-manager.md` |
@@ -105,6 +106,7 @@ Discord UI 顯示使用繁體中文。資料庫與程式內部 enum 一律使用
 
 ## Changelog
 
+- 2026-08-15: `TRIAL_TARGET_AMOUNT` 改名為 `TRIAL_TARGET_STEP`。新增 `TRIAL_RESOURCE_RESERVE`，由 trial-manager 擁有。
 - 2026-07-20: Renamed `AUTO_TOOL_MAX_MATERIALS` to `AUTO_TOOL_MAX_HOURS` (6→24); it now caps player-set remaining time in hours, decoupled from materials (auto-tool is pay-as-you-go). See `managers/auto-tool-manager.md`.
 - 2026-07-17: Added `AUTO_TOOL_SECONDS_PER_MATERIAL`, `AUTO_TOOL_MAX_MATERIALS` (owned by auto-tool-manager). `effective_cycle_seconds(cycle_time_reduce_pct)` now lives here (moved from settlement.py) so manual actions and auto-tools share one cycle-timing formula.
 - 2026-07-14: Renamed TRIAL_TARGET_STEP to TRIAL_TARGET_AMOUNT (trial target/cost is now a fixed amount, not a player-chosen multiple of a step).

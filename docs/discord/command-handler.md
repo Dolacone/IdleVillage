@@ -1,7 +1,7 @@
 ---
 title: "Module: command-handler"
 doc_type: module
-last_reviewed: 2026-07-20
+last_reviewed: 2026-08-15
 source_paths:
   - src/cogs/actions.py
   - src/cogs/general.py
@@ -34,7 +34,9 @@ source_paths:
 | `confirm_action` | 點擊確認行動 | 呼叫 `player-manager.setAction()`，更新 Embed |
 | `burst_execute` | 點擊瞬間行動 | 確認 AP ≥ 1 → 呼叫 `cycle-engine.burst()`，更新 Embed |
 | `open_gear_upgrade` | 點擊強化工具 | 渲染工具強化子選單 |
-| `open_trial_start` | 點擊開啟試煉 | 直接呼叫 `trial-manager.start_trial()`（無 Modal、無需玩家輸入）：系統自動在可負擔 `TRIAL_TARGET_AMOUNT` 的資源類型中隨機選一種扣除並開啟試煉；於主介面內嵌顯示結果訊息並觸發 Public 開始通知；前置條件不滿足時顯示統一錯誤訊息，不扣除資源。僅在無進行中試煉、冷卻已過、且至少一種資源足夠時可點擊，否則 disabled |
+| `open_trial_start` | 點擊開啟試煉 | 重新讀取三種資源並顯示第 0 頁 Ephemeral 目標選單。此步驟不扣款 |
+| `trial_target_page:{page}` | 點擊上一頁或下一頁 | page 代表 0-based 目的頁。重新讀取試煉狀態、資源與最大目標。超界時夾限到最後一頁。此步驟不扣款 |
+| `trial_target_select` | 選擇目標 | 將選取值解析為整數，呼叫 `trial-manager.start_trial(db, now, target)`。manager 在寫入鎖內重新驗證。成功後刷新主介面並觸發 Public 開始通知 |
 | `open_auto_tool` | 點擊自動工具 | 渲染自動工具子介面 |
 
 ### 自動工具子介面
@@ -99,6 +101,7 @@ source_paths:
 
 ## Changelog
 
+- 2026-08-15: `open_trial_start` 改為顯示動態目標選單。新增 `trial_target_select` 與 `trial_target_page:{page}` 路由。選取目標後才原子開啟試煉。
 - 2026-07-20: Auto-tool routes reworked for pay-as-you-go: `auto_tool_count_select` replaced by `auto_tool_add_select` / `auto_tool_sub_select`; `auto_tool_confirm:{tool}:{delta}:{target}` carries a signed hours delta routed to `start` / `add_time` / `subtract_time`. See `managers/auto-tool-manager.md`.
 - 2026-07-17: Added auto-tool routes (`open_auto_tool`, `auto_tool_type_select`, `auto_tool_target_select:{tool}`, `auto_tool_count_select:{tool}:{target}`, `auto_tool_confirm:{tool}:{count}:{target}`); opening the main interface now also settles due auto-tools. See `managers/auto-tool-manager.md`.
 - 2026-07-17: `affix_extract`/`affix_clear` 素材消耗改為「先扣對應素材，不足由萬能素材補足」；路由行為不變，僅素材來源擴充。

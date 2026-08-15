@@ -1,7 +1,7 @@
 ---
 title: "Module: ui-renderer"
 doc_type: module
-last_reviewed: 2026-07-20
+last_reviewed: 2026-08-15
 source_paths:
   - src/cogs/ui_renderer.py
 ---
@@ -59,10 +59,12 @@ source_paths:
 2. 冷卻中（`is_active=0` 且 `ended_at` 存在且 `now - ended_at < TRIAL_COOLDOWN_SECONDS`）：
    `🏆 試煉 ⏳ 可於 <t:{cooldown_deadline}:t> 後開啟`
    `{cooldown_deadline}` = `ended_at` 的 unix 時間 + `TRIAL_COOLDOWN_SECONDS`。使用 Discord `:t`（短時間）格式顯示固定時刻，而非 `:R` 相對時間，避免與「多久後」的倒數混淆。
-3. 資源不足（`is_active=0`，冷卻已過，但村莊三種資源皆低於 `TRIAL_TARGET_AMOUNT`）：
+3. 資源不足（`is_active=0`，冷卻已過，但 `max_target == 0`）：
    `🏆 試煉 ⚠️ 資源不足，尚無法開啟`
-4. 可開啟（`is_active=0`，冷卻已過，且至少一種資源 `>= TRIAL_TARGET_AMOUNT`）：
+4. 可開啟（`is_active=0`，冷卻已過，且 `max_target >= TRIAL_TARGET_STEP`）：
    `🏆 試煉 ✅ 可開啟試煉`
+
+`max_target` 的公式與設定由 `managers/trial-manager.md` 擁有。renderer 呼叫共用計算入口，不複製公式。
 
 刻意不顯示試煉花費的資源類型與發起者：資源類型只在試煉開始的 Public 通知中以「花費」措辭呈現（避免讓人誤以為試煉目標是單一資源的收集數量，因為目標實際上是全服玩家行動產出總和，與資源類型無關）；發起者也僅出現在該通知中，Dashboard 不重複呈現。
 
@@ -103,7 +105,7 @@ source_paths:
 ⚡ AP：{ap} / {ap_cap}
 ⚡ AP：{ap} / {ap_cap}（下次：<t:{next_ap_unix}:R>）（AP < cap 時顯示）
 🏆 試煉貢獻：{n}（僅試煉進行中時顯示）
-{trial_message}（僅剛點擊「🏆 開啟試煉」按鈕後顯示一次，如 `✅ 試煉已開始！` 或 `⚠️ 開啟試煉失敗，請重新嘗試。`；下次重新渲染主介面後即消失）
+{trial_message}（僅試煉目標提交後顯示一次。成功與失敗都會說明結果；下次重新渲染主介面後消失）
 ```
 
 效率欄位：`{n}` 為該行動類別的有效產出，`{p}` 為總加成百分比（floor）。
@@ -136,10 +138,23 @@ Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
 
 ### 開啟試煉
 
-- **Button**：`🏆 開啟試煉`（Blue，custom_id: `open_trial_start`）
-  - 禁用條件：目前已有進行中試煉；或試煉冷卻中（`trial_state.ended_at` 存在且 `now - ended_at < TRIAL_COOLDOWN_SECONDS`）；或村莊三種資源（食物/木頭/知識）皆不足 `TRIAL_TARGET_AMOUNT`
-  - 點擊後**不彈出任何 Modal，不需玩家輸入任何資訊**：直接呼叫 `trial-manager.start_trial()`，由系統在可負擔 `TRIAL_TARGET_AMOUNT` 的資源類型中均勻隨機選一種扣除
-  - 成功時於主介面個人資訊區塊下方顯示 `✅ 試煉已開始！`，並觸發 Public 開始通知；前置條件不滿足時（理論上按鈕已 disabled，但仍防呆處理併發競態）顯示統一的 `⚠️ 開啟試煉失敗，請重新嘗試。`，不扣除資源
+- Button：`🏆 開啟試煉`（Blue，custom_id: `open_trial_start`）
+  - 禁用條件：目前已有進行中試煉；試煉冷卻中；或 `max_target == 0`
+  - 點擊後顯示第 0 頁 Ephemeral 目標選單，不扣除資源
+- Dropdown：custom_id 為 `trial_target_select`
+  - 合法值為 `25000` 到 `max_target` 的每個 `25000` 倍數
+  - label 與 value 都顯示十進位 target
+  - 每頁最多 25 個選項，只建立當頁選項
+  - 選取後立即提交，不增加第二個確認按鈕
+- 分頁按鈕：custom_id 為 `trial_target_page:{page}`
+  - page 採 0-based
+  - 第一頁停用上一頁，最後一頁停用下一頁
+  - custom_id 的 page 代表 0-based 目的頁
+  - 翻頁時重新讀取試煉狀態與資源，再重算 `max_target`
+  - 如果頁碼超過新範圍，夾限到最後一頁
+- 返回按鈕沿用 `back_to_main`
+- 選取成功後顯示 `✅ 試煉已開始！`，並觸發 Public 開始通知
+- 如果 active、cooldown、target 或資源在提交前失效，返回主介面並顯示對應錯誤。失敗時不扣款，也不通知
 
 ### 行動選擇組
 - **Dropdown 1**：選擇行動
@@ -286,6 +301,7 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
 
 ## Changelog
 
+- 2026-08-15: 試煉按鈕改為開啟每頁 25 個選項的 Ephemeral 目標選單。新增 0-based 分頁與提交失效規則。
 - 2026-07-20: Auto-tool sub-interface reworked for pay-as-you-go: idle tool picks initial hours (`auto_tool_add_select`, 1..24), running tool gets add-time and subtract-time selects (`auto_tool_add_select` / `auto_tool_sub_select`, bottom subtract step stops it); confirm custom_id carries a signed hours delta (`auto_tool_confirm:{tool}:{delta}:{target|none}`); embed shows each running tool's material runway. See `managers/auto-tool-manager.md`.
 - 2026-07-17: Added `⚙️ 自動工具` main-interface button and the auto-tool sub-interface (`build_auto_tool_embed` / `build_auto_tool_components`); the action dropdown now excludes tools running as auto-tools. See `managers/auto-tool-manager.md`.
 - 2026-07-17: 詞條管理畫面選定工具類型後，Embed 新增持有素材列（該類型素材 + 🌟 萬能素材），格式比照工具強化子選單；`build_affix_embed` 新增 `materials`/`universal_materials` 參數。
