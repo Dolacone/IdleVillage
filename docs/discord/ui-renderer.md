@@ -66,7 +66,7 @@ source_paths:
 
 `max_target` 的公式與設定由 `managers/trial-manager.md` 擁有。renderer 呼叫共用計算入口，不複製公式。
 
-刻意不顯示試煉花費的資源類型與發起者：資源類型只在試煉開始的 Public 通知中以「花費」措辭呈現（避免讓人誤以為試煉目標是單一資源的收集數量，因為目標實際上是全服玩家行動產出總和，與資源類型無關）；發起者也僅出現在該通知中，Dashboard 不重複呈現。
+刻意不顯示試煉花費的資源類型與發起者：資源類型只在試煉開始的 Public 通知中以「花費」措辭呈現（避免讓人誤以為試煉目標是單一資源的收集數量，因為目標實際上是全服玩家行動產出總和，與資源類型無關）；系統不記錄發起者，因此 Dashboard 與通知都不顯示發起者。
 
 ### Buildings 百分比計算
 
@@ -306,7 +306,7 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
 
 ## Changelog
 
-- 2026-08-15: 試煉按鈕改為開啟每頁 25 個選項的 Ephemeral 目標選單。新增 0-based 分頁與提交失效規則。
+- 2026-08-15: 試煉按鈕改為開啟每頁 25 個選項的 Ephemeral 目標選單。新增 0-based 分頁與提交失效規則。Dashboard 不顯示扣款資源或發起者，系統也不記錄發起者。
 - 2026-07-20: Auto-tool sub-interface reworked for pay-as-you-go: idle tool picks initial hours (`auto_tool_add_select`, 1..24), running tool gets add-time and subtract-time selects (`auto_tool_add_select` / `auto_tool_sub_select`, bottom subtract step stops it); confirm custom_id carries a signed hours delta (`auto_tool_confirm:{tool}:{delta}:{target|none}`); embed shows each running tool's material runway. See `managers/auto-tool-manager.md`.
 - 2026-07-17: Added `⚙️ 自動工具` main-interface button and the auto-tool sub-interface (`build_auto_tool_embed` / `build_auto_tool_components`); the action dropdown now excludes tools running as auto-tools. See `managers/auto-tool-manager.md`.
 - 2026-07-17: 詞條管理畫面選定工具類型後，Embed 新增持有素材列（該類型素材 + 🌟 萬能素材），格式比照工具強化子選單；`build_affix_embed` 新增 `materials`/`universal_materials` 參數。

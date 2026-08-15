@@ -12,6 +12,7 @@ source_paths:
 
 所有平衡數值必須由環境變數讀取，程式碼不得 hardcode。
 `.env.example` 必須列出所有 v2 使用的環境變數。所有列出的 key 都是 required；啟動時若缺少任一 key，列印 missing key 並啟動失敗。
+一般 key 缺少值或顯式空白時，使用 `.env.example` 的 fallback。`TRIAL_TARGET_STEP` 與 `TRIAL_RESOURCE_RESERVE` 的顯式空白是例外，設定驗證會失敗。
 
 ## 效率公式
 
@@ -106,7 +107,7 @@ Discord UI 顯示使用繁體中文。資料庫與程式內部 enum 一律使用
 
 ## Changelog
 
-- 2026-08-15: `TRIAL_TARGET_AMOUNT` 改名為 `TRIAL_TARGET_STEP`。新增 `TRIAL_RESOURCE_RESERVE`，由 trial-manager 擁有。
+- 2026-08-15: `TRIAL_TARGET_AMOUNT` 改名為 `TRIAL_TARGET_STEP`。新增 `TRIAL_RESOURCE_RESERVE`，由 trial-manager 擁有。一般 key 的缺少值與空白使用 `.env.example` fallback，兩個試煉 key 的顯式空白則驗證失敗。
 - 2026-07-20: Renamed `AUTO_TOOL_MAX_MATERIALS` to `AUTO_TOOL_MAX_HOURS` (6→24); it now caps player-set remaining time in hours, decoupled from materials (auto-tool is pay-as-you-go). See `managers/auto-tool-manager.md`.
 - 2026-07-17: Added `AUTO_TOOL_SECONDS_PER_MATERIAL`, `AUTO_TOOL_MAX_MATERIALS` (owned by auto-tool-manager). `effective_cycle_seconds(cycle_time_reduce_pct)` now lives here (moved from settlement.py) so manual actions and auto-tools share one cycle-timing formula.
 - 2026-07-14: Historical trial configuration contract update; current keys and ownership are defined by `managers/trial-manager.md`.
