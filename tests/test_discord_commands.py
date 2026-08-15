@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 # Support module must be loaded before any src imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from tests.support import ALL_TEST_ENV, DatabaseTestCase
+from database import schema
 
 
 class TestGuildCheck(unittest.TestCase):
@@ -171,15 +172,20 @@ class TestRenderMainTrialWiring(DatabaseTestCase):
 
 
 class TestTrialStartButton(DatabaseTestCase):
-    TRIAL_AMOUNT = 50000  # matches TRIAL_TARGET_AMOUNT in tests/support.py
+    TRIAL_AMOUNT = 50000
 
-    def _make_button_inter(self, user_id=111222333):
+    def _make_button_inter(self, custom_id="open_trial_start", user_id=111222333):
         inter = MagicMock()
         inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
-        inter.component.custom_id = "open_trial_start"
+        inter.component.custom_id = custom_id
         inter.user.id = user_id
         inter.response.defer = AsyncMock()
         inter.edit_original_response = AsyncMock()
+        return inter
+
+    def _make_dropdown_inter(self, value, user_id=111222333):
+        inter = self._make_button_inter("trial_target_select", user_id)
+        inter.values = [value]
         return inter
 
     def _dispatched_trial_start_events(self, dispatch):
@@ -188,104 +194,134 @@ class TestTrialStartButton(DatabaseTestCase):
             events.extend(e for e in call.args[1] if e.get("type") == "trial_start")
         return events
 
-    async def test_click_with_no_resource_funded_shows_error_and_spends_nothing(self):
+    async def _set_resource(self, resource_type, amount):
+        async with schema.get_connection() as db:
+            await db.execute(
+                "UPDATE village_resources SET amount=? WHERE resource_type=?",
+                (amount, resource_type),
+            )
+            await db.commit()
+
+    async def test_open_only_shows_targets_without_spending_or_notifying(self):
         from cogs.actions import ActionsCog
 
+        await self._set_resource("wood", 60000)
         inter = self._make_button_inter()
-        cog = ActionsCog(bot=MagicMock())
         with patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as dispatch:
-            await cog.on_button_click(inter)
+            await ActionsCog(bot=MagicMock()).on_button_click(inter)
 
-        embed = inter.edit_original_response.call_args.kwargs["embed"]
-        self.assertIn("⚠️ 開啟試煉失敗", embed.description)
+        components = inter.edit_original_response.call_args.kwargs["components"]
+        self.assertEqual(components[0].children[0].custom_id, "trial_target_select")
         self.assertEqual(self._dispatched_trial_start_events(dispatch), [])
         row = await self.fetchone("SELECT is_active FROM trial_state WHERE id=1")
         self.assertEqual(row[0], 0)
-
-    async def test_click_starts_trial_and_dispatches_notification(self):
-        from cogs.actions import ActionsCog
-        from database.schema import get_connection
-
-        async with get_connection() as db:
-            await db.execute(
-                "UPDATE village_resources SET amount=? WHERE resource_type='wood'",
-                (self.TRIAL_AMOUNT * 2,),
-            )
-            await db.commit()
-
-        inter = self._make_button_inter()
-        cog = ActionsCog(bot=MagicMock())
-        with patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as dispatch:
-            await cog.on_button_click(inter)
-
-        embed = inter.edit_original_response.call_args.kwargs["embed"]
-        self.assertIn("✅ 試煉已開始！", embed.description)
-
-        row = await self.fetchone(
-            "SELECT is_active, target, resource_type FROM trial_state WHERE id=1"
-        )
-        self.assertEqual(row, (1, self.TRIAL_AMOUNT, "wood"))
         row = await self.fetchone("SELECT amount FROM village_resources WHERE resource_type='wood'")
-        self.assertEqual(row[0], self.TRIAL_AMOUNT)
+        self.assertEqual(row[0], 60000)
 
-        trial_start_events = self._dispatched_trial_start_events(dispatch)
-        self.assertEqual(len(trial_start_events), 1)
-        event = trial_start_events[0]
-        self.assertEqual(event["resource_type"], "wood")
-        self.assertEqual(event["target"], self.TRIAL_AMOUNT)
-        self.assertNotIn("user_id", event)
-
-    async def test_click_rejects_when_trial_already_active(self):
+    async def test_open_active_returns_main_without_select(self):
         from cogs.actions import ActionsCog
-        from database.schema import get_connection
 
         now = datetime.now(timezone.utc)
-        async with get_connection() as db:
+        async with schema.get_connection() as db:
             await db.execute(
-                "UPDATE village_resources SET amount=? WHERE resource_type='food'",
-                (self.TRIAL_AMOUNT * 2,),
-            )
-            await db.execute(
-                """UPDATE trial_state SET
-                   is_active=1, resource_type='food', target=?, progress=0,
-                   started_at=?, updated_at=? WHERE id=1""",
-                (self.TRIAL_AMOUNT, now.isoformat(), now.isoformat()),
+                "UPDATE trial_state SET is_active=1, started_at=?, updated_at=? WHERE id=1",
+                (now.isoformat(), now.isoformat()),
             )
             await db.commit()
-
         inter = self._make_button_inter()
-        cog = ActionsCog(bot=MagicMock())
-        with patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as dispatch:
-            await cog.on_button_click(inter)
-
+        with patch("cogs.actions.notification.dispatch_events", new=AsyncMock()):
+            await ActionsCog(bot=MagicMock()).on_button_click(inter)
         embed = inter.edit_original_response.call_args.kwargs["embed"]
-        self.assertIn("⚠️ 開啟試煉失敗", embed.description)
-        self.assertEqual(self._dispatched_trial_start_events(dispatch), [])
-        row = await self.fetchone("SELECT amount FROM village_resources WHERE resource_type='food'")
-        self.assertEqual(row[0], self.TRIAL_AMOUNT * 2)
+        self.assertIn("⚠️ 試煉已由其他玩家開啟。", embed.description)
+        self.assertFalse(any(c.custom_id == "trial_target_select" for row in inter.edit_original_response.call_args.kwargs["components"] for c in row.children))
 
-    async def test_click_rejects_during_cooldown(self):
+    async def test_open_cooldown_returns_main_without_select(self):
         from cogs.actions import ActionsCog
-        from database.schema import get_connection
 
         now = datetime.now(timezone.utc)
-        async with get_connection() as db:
-            await db.execute(
-                "UPDATE village_resources SET amount=? WHERE resource_type='food'",
-                (self.TRIAL_AMOUNT * 2,),
-            )
+        async with schema.get_connection() as db:
             await db.execute(
                 "UPDATE trial_state SET is_active=0, ended_at=? WHERE id=1", (now.isoformat(),)
             )
             await db.commit()
-
         inter = self._make_button_inter()
-        cog = ActionsCog(bot=MagicMock())
-        with patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as dispatch:
-            await cog.on_button_click(inter)
-
+        with patch("cogs.actions.notification.dispatch_events", new=AsyncMock()):
+            await ActionsCog(bot=MagicMock()).on_button_click(inter)
         embed = inter.edit_original_response.call_args.kwargs["embed"]
-        self.assertIn("⚠️ 開啟試煉失敗", embed.description)
+        self.assertIn("⚠️ 試煉仍在冷卻中。", embed.description)
+        self.assertFalse(any(c.custom_id == "trial_target_select" for row in inter.edit_original_response.call_args.kwargs["components"] for c in row.children))
+
+    async def test_open_without_legal_target_returns_main_without_empty_select(self):
+        from cogs.actions import ActionsCog
+
+        await self._set_resource("food", 34999)
+        inter = self._make_button_inter()
+        with patch("cogs.actions.notification.dispatch_events", new=AsyncMock()):
+            await ActionsCog(bot=MagicMock()).on_button_click(inter)
+        embed = inter.edit_original_response.call_args.kwargs["embed"]
+        self.assertIn("⚠️ 村莊資源不足，尚無法開啟試煉。", embed.description)
+        self.assertFalse(any(c.custom_id == "trial_target_select" for row in inter.edit_original_response.call_args.kwargs["components"] for c in row.children))
+
+    async def test_page_rereads_resources_clamps_page_and_does_not_spend(self):
+        from cogs.actions import ActionsCog
+
+        await self._set_resource("wood", 660000)
+        open_inter = self._make_button_inter()
+        with patch("cogs.actions.notification.dispatch_events", new=AsyncMock()):
+            await ActionsCog(bot=MagicMock()).on_button_click(open_inter)
+        await self._set_resource("wood", 35000)
+        page_inter = self._make_button_inter("trial_target_page:999")
+        with patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as dispatch:
+            await ActionsCog(bot=MagicMock()).on_button_click(page_inter)
+        options = page_inter.edit_original_response.call_args.kwargs["components"][0].children[0].options
+        self.assertEqual([option.value for option in options], ["25000"])
+        self.assertEqual(self._dispatched_trial_start_events(dispatch), [])
+        row = await self.fetchone("SELECT amount FROM village_resources WHERE resource_type='wood'")
+        self.assertEqual(row[0], 35000)
+
+    async def test_select_success_spends_stores_target_and_dispatches_dynamic_event(self):
+        from cogs.actions import ActionsCog
+
+        await self._set_resource("wood", 160000)
+        started_before = int(datetime.now(timezone.utc).timestamp())
+        inter = self._make_dropdown_inter("150000")
+        with patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as dispatch:
+            await ActionsCog(bot=MagicMock()).on_dropdown(inter)
+        row = await self.fetchone("SELECT is_active, target, resource_type FROM trial_state WHERE id=1")
+        self.assertEqual(row, (1, 150000, "wood"))
+        row = await self.fetchone("SELECT amount FROM village_resources WHERE resource_type='wood'")
+        self.assertEqual(row[0], 10000)
+        events = self._dispatched_trial_start_events(dispatch)
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["target"], 150000)
+        self.assertEqual(events[0]["reward_pool"], 1500)
+        self.assertGreaterEqual(events[0]["deadline_unix"], started_before + 43200)
+
+    async def test_select_non_integer_or_non_step_target_is_invalid_without_notification(self):
+        from cogs.actions import ActionsCog
+
+        await self._set_resource("wood", 60000)
+        for value in ("not-an-integer", "12500"):
+            with self.subTest(value=value):
+                inter = self._make_dropdown_inter(value)
+                with patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as dispatch:
+                    await ActionsCog(bot=MagicMock()).on_dropdown(inter)
+                embed = inter.edit_original_response.call_args.kwargs["embed"]
+                self.assertIn("⚠️ 試煉目標無效，請重新選擇。", embed.description)
+                self.assertEqual(self._dispatched_trial_start_events(dispatch), [])
+        row = await self.fetchone("SELECT is_active FROM trial_state WHERE id=1")
+        self.assertEqual(row[0], 0)
+
+    async def test_select_stale_target_is_invalid_without_notification(self):
+        from cogs.actions import ActionsCog
+
+        await self._set_resource("wood", 60000)
+        inter = self._make_dropdown_inter("50000")
+        await self._set_resource("wood", 10000)
+        with patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as dispatch:
+            await ActionsCog(bot=MagicMock()).on_dropdown(inter)
+        embed = inter.edit_original_response.call_args.kwargs["embed"]
+        self.assertIn("⚠️ 資源已變動，所選目標已無法支付。", embed.description)
         self.assertEqual(self._dispatched_trial_start_events(dispatch), [])
 
 

@@ -16,6 +16,8 @@ from cogs.ui_renderer import (
     build_main_components,
     build_main_embed,
     build_ranking_text,
+    build_trial_target_components,
+    build_trial_target_embed,
 )
 from core import notification
 from core.config import get_discord_guild_id, get_env_int
@@ -26,8 +28,8 @@ from database.schema import get_connection
 from managers import affix_manager, auto_tool_manager, building_manager, gear_manager, player_manager, trial_manager
 
 _OWN_BUTTONS = frozenset({"burst_execute", "open_gear_upgrade", "open_trial_start", "open_auto_tool", "back_to_main"})
-_OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:", "clear_affix:", "sacrifice_material:", "open_affix_mgmt:", "affix_extract:", "affix_clear:", "back_to_gear:", "auto_tool_confirm:")
-_OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "gear_type_select", "affix_gear_select", "auto_tool_type_select"})
+_OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:", "clear_affix:", "sacrifice_material:", "open_affix_mgmt:", "affix_extract:", "affix_clear:", "back_to_gear:", "auto_tool_confirm:", "trial_target_page:")
+_OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "gear_type_select", "affix_gear_select", "auto_tool_type_select", "trial_target_select"})
 _OWN_DROPDOWN_PREFIXES = ("upgrade_mode_select:", "affix_slot_select:", "auto_tool_target_select:", "auto_tool_add_select:", "auto_tool_sub_select:")
 _OWN_MODAL_PREFIXES = ("modal_sacrifice:",)
 _VALID_GEAR_TYPES = frozenset({"gathering", "building", "combat", "research"})
@@ -298,6 +300,33 @@ class ActionsCog(commands.Cog):
         )
         await inter.edit_original_response(embed=embed, components=components)
 
+    async def _read_trial_context(self, db) -> tuple[dict, dict]:
+        trial_data = await trial_manager.get_trial_info(db)
+        resources = {}
+        async with db.execute("SELECT resource_type, amount FROM village_resources") as cur:
+            async for row in cur:
+                resources[row[0]] = row[1]
+        return trial_data, resources
+
+    async def _render_trial_targets(self, inter, page: int) -> None:
+        now = datetime.now(timezone.utc)
+        async with get_connection() as db:
+            trial_data, resources = await self._read_trial_context(db)
+
+        if trial_data.get("is_active"):
+            await self._render_main(inter, trial_message="⚠️ 試煉已由其他玩家開啟。")
+            return
+        if trial_manager.is_cooldown_active(trial_data.get("ended_at"), now):
+            await self._render_main(inter, trial_message="⚠️ 試煉仍在冷卻中。")
+            return
+        if trial_manager.get_max_trial_target(resources) == 0:
+            await self._render_main(inter, trial_message="⚠️ 村莊資源不足，尚無法開啟試煉。")
+            return
+
+        embed = build_trial_target_embed(resources, page)
+        components = build_trial_target_components(resources, page)
+        await inter.edit_original_response(embed=embed, components=components)
+
     @commands.slash_command(name="idlevillage-ranking", description="查看各工具等級排行榜")
     async def idlevillage_ranking(self, inter: disnake.ApplicationCommandInteraction) -> None:
         if not self._check_guild(inter):
@@ -390,28 +419,15 @@ class ActionsCog(commands.Cog):
 
         elif cid == "open_trial_start":
             await inter.response.defer()
-            now = datetime.now(timezone.utc)
-            trial_message: str
-            trial_started_event: dict | None = None
-            async with get_connection() as db:
-                try:
-                    info = await trial_manager.start_trial(db, now)
-                    await db.commit()
-                    trial_message = "✅ 試煉已開始！"
-                    divisor = get_env_int("TRIAL_REWARD_DIVISOR")
-                    duration = get_env_int("TRIAL_DURATION_SECONDS")
-                    trial_started_event = {
-                        "type": "trial_start",
-                        "resource_type": info["resource_type"],
-                        "target": info["target"],
-                        "reward_pool": info["target"] // divisor,
-                        "deadline_unix": int(now.timestamp()) + duration,
-                    }
-                except ValueError:
-                    trial_message = "⚠️ 開啟試煉失敗，請重新嘗試。"
-            await self._render_main(inter, trial_message=trial_message)
-            if trial_started_event is not None:
-                await notification.dispatch_events(self.bot, [trial_started_event])
+            await self._render_trial_targets(inter, 0)
+
+        elif cid.startswith("trial_target_page:"):
+            await inter.response.defer()
+            try:
+                page = int(cid.split(":", 1)[1])
+            except ValueError:
+                page = 0
+            await self._render_trial_targets(inter, page)
 
         elif cid == "back_to_main":
             await inter.response.defer()
@@ -685,6 +701,40 @@ class ActionsCog(commands.Cog):
             await self._render_auto_tool(
                 inter, selected_tool=tool_type, selected_target=target, selected_delta=delta
             )
+        elif cid == "trial_target_select":
+            try:
+                target = int(value)
+            except (TypeError, ValueError):
+                await self._render_main(inter, trial_message="⚠️ 試煉目標無效，請重新選擇。")
+                return
+
+            now = datetime.now(timezone.utc)
+            trial_message = None
+            trial_started_event = None
+            async with get_connection() as db:
+                try:
+                    info = await trial_manager.start_trial(db, now, target)
+                    await db.commit()
+                    divisor = get_env_int("TRIAL_REWARD_DIVISOR")
+                    duration = get_env_int("TRIAL_DURATION_SECONDS")
+                    trial_started_event = {
+                        "type": "trial_start",
+                        "resource_type": info["resource_type"],
+                        "target": info["target"],
+                        "reward_pool": info["target"] // divisor,
+                        "deadline_unix": int(now.timestamp()) + duration,
+                    }
+                    trial_message = "✅ 試煉已開始！"
+                except trial_manager.TrialStartError as error:
+                    trial_message = {
+                        "active": "⚠️ 試煉已由其他玩家開啟。",
+                        "cooldown": "⚠️ 試煉仍在冷卻中。",
+                        "invalid_target": "⚠️ 試煉目標無效，請重新選擇。",
+                        "stale_target": "⚠️ 資源已變動，所選目標已無法支付。",
+                    }[error.reason]
+            await self._render_main(inter, trial_message=trial_message)
+            if trial_started_event is not None:
+                await notification.dispatch_events(self.bot, [trial_started_event])
 
 
 def setup(bot: commands.Bot) -> None:

@@ -223,7 +223,7 @@ Task 2 與 Task 3 可在 Task 1 完成後平行。Task 4 必須等待兩者完�
     - 沒有合法目標時，主介面按鈕維持 disabled。
     - manager 與 renderer 對最大目標的資料契約有回歸測試。
 
-- [ ] Task 4: 串接選取、翻頁與開始通知
+- [x] Task 4: 串接選取、翻頁與開始通知
   - Source/logic files: `src/cogs/actions.py`
   - Tests: `tests/test_discord_commands.py`, `tests/test_discord_notifications.py`
   - Depends on: Task 2, Task 3

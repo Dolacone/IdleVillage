@@ -384,15 +384,15 @@ class TestNotificationFormatting(unittest.TestCase):
         ev = {
             "type": "trial_start",
             "resource_type": "wood",
-            "target": 5000,
-            "reward_pool": 50,
+            "target": 150000,
+            "reward_pool": 1500,
             "deadline_unix": 1234567890,
         }
         text = _format_event(ev)
         self.assertNotIn("<@", text)
-        self.assertIn("花費 5000 個 🪵木頭", text)
-        self.assertIn("目標：全服玩家共同累積 5000 點行動產出", text)
-        self.assertIn("50 個 🌟萬能素材", text)
+        self.assertIn("花費 150000 個 🪵木頭", text)
+        self.assertIn("目標：全服玩家共同累積 150000 點行動產出", text)
+        self.assertIn("1500 個 🌟萬能素材", text)
         self.assertIn("<t:1234567890:R>", text)
 
     def test_format_trial_success(self):
