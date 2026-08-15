@@ -182,7 +182,7 @@ Task 2 與 Task 3 可在 Task 1 完成後平行。Task 4 必須等待兩者完�
     - reserve 為負數或非整數時，設定驗證失敗。
     - 期限與冷卻維持 `43200`。
 
-- [ ] Task 2: 實作目標規則與原子開啟交易
+- [x] Task 2: 實作目標規則與原子開啟交易
   - Source/logic files: `src/managers/trial_manager.py`
   - Tests: `tests/test_trial_manager.py`
   - Depends on: Task 1

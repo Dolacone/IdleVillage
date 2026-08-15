@@ -16,6 +16,18 @@ from managers import player_manager, resource_manager
 TRIAL_RESOURCE_TYPES = ("food", "wood", "knowledge")
 
 
+class TrialStartError(ValueError):
+    """Raised when a trial cannot be started for a known business reason."""
+
+    _REASONS = {"active", "cooldown", "invalid_target", "stale_target"}
+
+    def __init__(self, reason: str):
+        if reason not in self._REASONS:
+            raise ValueError(f"Unknown trial start reason: {reason}")
+        self.reason = reason
+        super().__init__(reason)
+
+
 def get_cooldown_deadline_unix(ended_at_str: str | None) -> int | None:
     """Return the unix timestamp when the trial cooldown ends, or None if not on cooldown."""
     if not ended_at_str:
@@ -58,49 +70,78 @@ async def _clear_contributions(db) -> None:
     await db.execute("DELETE FROM trial_contributions")
 
 
-async def get_eligible_resource_types(db) -> list[str]:
-    """Return TRIAL_RESOURCE_TYPES entries the village can currently afford for a new trial."""
-    amount = get_env_int("TRIAL_TARGET_AMOUNT")
-    return [r for r in TRIAL_RESOURCE_TYPES if await resource_manager.can_afford(db, r, amount)]
+def get_max_trial_target(resources: dict[str, int]) -> int:
+    """Return the largest configured target supported after reserving each resource."""
+    step = get_env_int("TRIAL_TARGET_STEP")
+    reserve = get_env_int("TRIAL_RESOURCE_RESERVE")
+    available = [max(resources.get(resource_type, 0) - reserve, 0) for resource_type in TRIAL_RESOURCE_TYPES]
+    if step <= 0:
+        return 0
+    return max(available) // step * step
 
 
-async def start_trial(db, now: datetime) -> dict:
+async def get_eligible_resource_types(db, target: int) -> list[str]:
+    """Return resources whose balance can pay target while preserving the reserve."""
+    reserve = get_env_int("TRIAL_RESOURCE_RESERVE")
+    eligible = []
+    for resource_type in TRIAL_RESOURCE_TYPES:
+        if await resource_manager.balance(db, resource_type) - reserve >= target:
+            eligible.append(resource_type)
+    return eligible
+
+
+async def start_trial(db, now: datetime, target: int) -> dict:
     """
-    Open a new village trial. The resource type is chosen automatically: uniformly at random
-    among the resource types the village can currently afford TRIAL_TARGET_AMOUNT of.
+    Open a new village trial at target. The resource type is chosen uniformly at random
+    among resources that can pay target while preserving the reserve.
 
-    Preconditions (raises ValueError if unmet; no resources are spent on failure):
+    Preconditions (raises TrialStartError if unmet; no resources are spent on failure):
       - no trial is currently active
       - TRIAL_COOLDOWN_SECONDS has elapsed since the last trial ended (if any)
-      - the village can afford TRIAL_TARGET_AMOUNT of at least one resource type
+      - target is a positive multiple of TRIAL_TARGET_STEP
+      - target is no greater than the latest maximum target
 
     Returns the new trial_state dict.
     """
-    info = await get_trial_info(db)
-    if info.get("is_active"):
-        raise ValueError("A trial is already active")
+    try:
+        await db.execute("BEGIN IMMEDIATE")
+        info = await get_trial_info(db)
+        if info.get("is_active"):
+            raise TrialStartError("active")
 
-    if is_cooldown_active(info.get("ended_at"), now):
-        raise ValueError("Trial cooldown has not elapsed")
+        if is_cooldown_active(info.get("ended_at"), now):
+            raise TrialStartError("cooldown")
 
-    amount = get_env_int("TRIAL_TARGET_AMOUNT")
-    eligible = await get_eligible_resource_types(db)
-    if not eligible:
-        raise ValueError(f"Insufficient resources: need {amount} of at least one type")
-    resource_type = random.choice(eligible)
+        step = get_env_int("TRIAL_TARGET_STEP")
+        if not isinstance(target, int) or isinstance(target, bool) or target <= 0 or step <= 0 or target % step:
+            raise TrialStartError("invalid_target")
 
-    await resource_manager.withdraw(db, resource_type, amount, now)
-    await _clear_contributions(db)
+        resources = {
+            resource_type: await resource_manager.balance(db, resource_type)
+            for resource_type in TRIAL_RESOURCE_TYPES
+        }
+        max_target = get_max_trial_target(resources)
+        if target > max_target:
+            raise TrialStartError("stale_target")
 
-    now_str = dt_str(now)
-    await db.execute(
-        """UPDATE trial_state SET
-           is_active=1, resource_type=?, target=?, progress=0,
-           started_at=?, updated_at=?
-           WHERE id=1""",
-        (resource_type, amount, now_str, now_str),
-    )
-    return await get_trial_info(db)
+        eligible = await get_eligible_resource_types(db, target)
+        resource_type = random.choice(eligible)
+
+        await resource_manager.withdraw(db, resource_type, target, now)
+        await _clear_contributions(db)
+
+        now_str = dt_str(now)
+        await db.execute(
+            """UPDATE trial_state SET
+               is_active=1, resource_type=?, target=?, progress=0,
+               started_at=?, updated_at=?
+               WHERE id=1""",
+            (resource_type, target, now_str, now_str),
+        )
+        return await get_trial_info(db)
+    except Exception:
+        await db.rollback()
+        raise
 
 
 async def _fail_trial(db, info: dict, ended_at: datetime) -> dict:
