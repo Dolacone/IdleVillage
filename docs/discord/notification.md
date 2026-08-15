@@ -152,8 +152,8 @@ sign 為 `-`（reduce 類型，如 `upgrade_cost_reduce`）或 `+`（其他類�
 - 2026-08-15: 試煉開始通知改由目標選取成功觸發。通知使用動態 target 與實際隨機扣除的資源。
 - 2026-08-09: 試煉達成通知每行欄位順序調整，由 `{display_name}：貢獻 {contribution}，獲得 {reward} 個` 改為 `貢獻 {contribution} ({reward} 素材)：{display_name}`。純顯示格式調整，跨行排序（依貢獻降冪）、截斷規則、名稱解析機制皆未變動。
 - 2026-08-08: 試煉達成通知的參與者清單改用玩家名稱取代 `<@{user_id}>` mention。名稱由 `dispatch_events` 優先查 `guild.get_member()` 快取，未命中才 fallback `guild.fetch_member()`（比照 `/idlevillage-ranking` 既有手法），找不到時再 fallback 顯示 `user_id`；`channel.send` 一律加上 `allowed_mentions=disnake.AllowedMentions.none()` 防止玩家暱稱觸發非預期 mention；不新增任何資料表欄位，`trial_manager.py`/`settlement.py`/`engine.py` 未變動。
-- 2026-07-14: 試煉開始通知移除發起者 mention（開啟試煉不再需要玩家輸入，也不記錄是誰點擊）。花費的資源類型改由系統自動隨機選定，`target` 固定為 `TRIAL_TARGET_AMOUNT`。
-- 2026-07-14: 試煉開始由 `open_trial_start` 按鈕 + `modal_start_trial` Modal 觸發（取代 slash command）。三種試煉訊息移除「目標 {target} {resource_label}」措辭，改為「目標：{target} 點行動產出」，資源類型只保留在試煉開始訊息的「花費」措辭中，避免讓人誤以為試煉目標是收集單一資源。
+- 2026-07-14: Historical trial notification wording update; current target and resource fields are defined by the `trial_target_select` event contract above.
+- 2026-07-14: Historical trial entrypoint migration; current notification timing is defined by the 2026-08-15 entry above.
 - 2026-07-14: 新增村莊試煉事件（試煉開始、達成、失敗）與訊息範本；「同一 settlement 內的通知順序」新增第 4 項試煉達成/失敗通知並重新編號。試煉相關訊息一律使用 `<@{user_id}>` mention 呈現使用者，不需額外解析 display name。
 - 2026-07-14: 移除奉獻達標事件、訊息範本，並自「同一 settlement 內的通知順序」重新編號。
 - 2026-05-31: 工具強化成功通知的 `target_level` 改為使用實際到達等級（`new_level`），以正確反映鐵齒 +2/+3 多段升級結果。失敗通知不變，仍顯示 `current_level + 1`。

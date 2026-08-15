@@ -109,7 +109,7 @@ Discord UI 顯示使用繁體中文。資料庫與程式內部 enum 一律使用
 - 2026-08-15: `TRIAL_TARGET_AMOUNT` 改名為 `TRIAL_TARGET_STEP`。新增 `TRIAL_RESOURCE_RESERVE`，由 trial-manager 擁有。
 - 2026-07-20: Renamed `AUTO_TOOL_MAX_MATERIALS` to `AUTO_TOOL_MAX_HOURS` (6→24); it now caps player-set remaining time in hours, decoupled from materials (auto-tool is pay-as-you-go). See `managers/auto-tool-manager.md`.
 - 2026-07-17: Added `AUTO_TOOL_SECONDS_PER_MATERIAL`, `AUTO_TOOL_MAX_MATERIALS` (owned by auto-tool-manager). `effective_cycle_seconds(cycle_time_reduce_pct)` now lives here (moved from settlement.py) so manual actions and auto-tools share one cycle-timing formula.
-- 2026-07-14: Renamed TRIAL_TARGET_STEP to TRIAL_TARGET_AMOUNT (trial target/cost is now a fixed amount, not a player-chosen multiple of a step).
+- 2026-07-14: Historical trial configuration contract update; current keys and ownership are defined by `managers/trial-manager.md`.
 - 2026-07-14: Added TRIAL_DURATION_SECONDS, TRIAL_COOLDOWN_SECONDS, TRIAL_TARGET_STEP, TRIAL_REWARD_DIVISOR env vars owned by trial-manager.
 - 2026-07-14: Removed offering action (stored value `offering`, action_target usage, `OFFERING_THRESHOLD_PER_PLAYER` env var).
 - 2026-05-22: Added AFFIX_SLOT_INTERVAL, AFFIX_EXTRACT_COST, AFFIX_CLEAR_COST env vars owned by affix-manager.

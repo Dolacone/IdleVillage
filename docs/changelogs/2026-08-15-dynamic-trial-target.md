@@ -1,6 +1,6 @@
 ---
 title: "村莊試煉動態目標"
-status: In-Progress
+status: Ready-to-review
 created: 2026-08-15
 doc_type: change
 last_reviewed: 2026-08-15
@@ -19,8 +19,6 @@ source_paths:
   - tests/test_discord_commands.py
   - tests/test_discord_notifications.py
   - docs/README.md
-  - docs/changes/2026-07-14-village-trial.md
-  - docs/changes/2026-07-15-trial-dashboard-status.md
   - docs/deployment.md
   - docs/engine/formula.md
   - docs/managers/trial-manager.md
@@ -242,7 +240,7 @@ Task 2 與 Task 3 可在 Task 1 完成後平行。Task 4 必須等待兩者完�
     - 所有失敗都不發送 `trial_start` 通知。
     - 資源失效或頁面失效時，返回可恢復的主介面。
 
-- [ ] Task 5: 核對 SSOT 並執行完整驗證
+- [x] Task 5: 核對 SSOT 並執行完整驗證
   - Source/logic files: 無
   - Docs: `docs/deployment.md`, `docs/engine/formula.md`, `docs/managers/trial-manager.md`, `docs/discord/command-handler.md`, `docs/discord/ui-renderer.md`, `docs/discord/notification.md`
   - Tests: 完整 pytest 與 doc-audit

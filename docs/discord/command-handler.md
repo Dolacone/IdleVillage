@@ -105,8 +105,8 @@ source_paths:
 - 2026-07-20: Auto-tool routes reworked for pay-as-you-go: `auto_tool_count_select` replaced by `auto_tool_add_select` / `auto_tool_sub_select`; `auto_tool_confirm:{tool}:{delta}:{target}` carries a signed hours delta routed to `start` / `add_time` / `subtract_time`. See `managers/auto-tool-manager.md`.
 - 2026-07-17: Added auto-tool routes (`open_auto_tool`, `auto_tool_type_select`, `auto_tool_target_select:{tool}`, `auto_tool_count_select:{tool}:{target}`, `auto_tool_confirm:{tool}:{count}:{target}`); opening the main interface now also settles due auto-tools. See `managers/auto-tool-manager.md`.
 - 2026-07-17: `affix_extract`/`affix_clear` 素材消耗改為「先扣對應素材，不足由萬能素材補足」；路由行為不變，僅素材來源擴充。
-- 2026-07-14: `open_trial_start` no longer opens a Modal — clicking it directly starts a trial with a fixed, system-chosen amount/resource; no player input at all. Removed the `modal_start_trial` route.
-- 2026-07-14: Replaced the `/idlevillage-trial` slash command with an `open_trial_start` button on the main interface (same row as burst/gear upgrade), disabled unless a trial can currently be started; submits via `modal_start_trial` Modal (resource type + target, free-text) instead of slash command options.
+- 2026-07-14: Historical trial entrypoint migration; the current paginated target flow is documented in the 2026-08-15 entry above.
+- 2026-07-14: Historical trial command migration; current routes use `open_trial_start`, `trial_target_page:{page}`, and `trial_target_select`.
 - 2026-07-14: `/idlevillage-manager` 編輯素材數量 Modal 新增第 5 個欄位（萬能素材），`mgr_modal_material` 提交流程改為呼叫 `set_material()` × 4 + `set_universal_material()` × 1。
 - 2026-07-14: Removed `offering_resource_select` dropdown route and offering resource validation in `confirm_action:` handler.
 - 2026-05-22: Added `extract_affix:{gear_type}` and `clear_affix:{gear_type}:{slot_index}` routes for the tool affix system.

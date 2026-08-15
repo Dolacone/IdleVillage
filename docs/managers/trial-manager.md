@@ -135,8 +135,8 @@ reward_i = ceil(contribution_i / total_contribution × (target / TRIAL_REWARD_DI
 
 ## Changelog
 
-- 2026-08-15: 固定目標改為玩家選擇的 `25000` 級距。新增 `10000` 資源保留量、分頁目標契約及原子提交驗證。
+- 2026-08-15: 試煉目標改為玩家選擇的 `25000` 級距。新增 `10000` 資源保留量、分頁目標契約及原子提交驗證。
 - 2026-07-17: `add_progress` 新增「自動工具完整週期」為呼叫來源，貢獻歸於自動工具擁有者（見 `managers/auto-tool-manager.md`）。
-- 2026-07-14: 試煉改為完全自動化：`start_trial()` 不再接受 `resource_type`/`target`/`user_id` 參數，目標值固定為 `TRIAL_TARGET_AMOUNT`（取代 `TRIAL_TARGET_STEP`），資源類型由系統在「可負擔 `TRIAL_TARGET_AMOUNT` 的資源類型」中均勻隨機選定（新增 `get_eligible_resource_types()`）。`TRIAL_DURATION_SECONDS` 預設由 86400（24h）改為 43200（12h）。移除 `get_invalid_target_step()`（不再需要驗證玩家輸入的目標值）。
-- 2026-07-14: 開啟試煉的呼叫端由獨立的 `trial_cog.py` slash command 改為 `actions.py` 的主介面按鈕（`open_trial_start`）+ Modal（`modal_start_trial`）流程；`get_invalid_target_step()`/`is_cooldown_active()`/`get_cooldown_deadline_unix()` 三個共用前置條件 helper 的呼叫端隨之改變，函式本身行為不變。
+- 2026-07-14: Historical trial automation and resource-selection update; current target validation and resource eligibility are defined above.
+- 2026-07-14: Historical trial entrypoint migration; current interaction routes are defined by `docs/discord/command-handler.md`.
 - 2026-07-14: 新增模組。
