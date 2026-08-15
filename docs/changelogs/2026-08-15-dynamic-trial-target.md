@@ -1,6 +1,6 @@
 ---
 title: "村莊試煉動態目標"
-status: In-Progress
+status: Refactored
 created: 2026-08-15
 doc_type: change
 last_reviewed: 2026-08-15
@@ -270,3 +270,5 @@ Claude re-review 於 2026-08-15 通過。Verdict: Approved。無必要修正。
 - [x] Issue 6: [Minor] Claude refactor review 重複指出 renderer 對試煉發起者通知的描述與通知 SSOT 不一致，與 Issue 4 重疊。Issue 4 的文件修正一併處理。→ 已隨 Issue 4 完成。
 - [x] Issue 7: [Minor] Claude refactor review 指出 resource-manager 的資源負擔 helper 在全 repo 沒有呼叫，應移除未使用 helper 與文件介面項目。
 - [x] Issue 8: [Minor] Claude refactor review 指出 formula 文件未說明一般環境變數的 fallback 與試煉設定顯式空白的驗證例外。補充設定語意並保留既有 changelog。→ 已補充 fallback 與驗證例外。
+
+Refactor verification 於 2026-08-15 完成：完整 pytest 通過 605 tests。doc-audit 僅剩既有 baseline 警告，沒有本變更新增問題。Issue 3-8 全部完成。本 refactor 沒有行為變更。
