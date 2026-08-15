@@ -1,6 +1,6 @@
 ---
 title: "村莊試煉動態目標"
-status: Ready-to-review
+status: Reviewed
 created: 2026-08-15
 doc_type: change
 last_reviewed: 2026-08-15
@@ -260,3 +260,6 @@ Task 2 與 Task 3 可在 Task 1 完成後平行。Task 4 必須等待兩者完�
 - [x] Issue 2: [Minor] Claude plan review 要求明確把 `.env.example` 計入 configuration/runtime 範圍。Task 1 維持 `src/core/config.py` 與 `.env.example` 兩個 source/logic 檔案，符合上限。
 
 Claude re-review 於 2026-08-15 通過。Verdict: Approved。無必要修正。
+
+- [ ] Issue 3: [Minor] `source_paths` 遺漏 `docs/changes/2026-07-14-village-trial.md` 與 `docs/changes/2026-07-15-trial-dashboard-status.md`。本文件的 source path 標記明確記錄兩者為檢視限定，實作驗證提交卻移除它們。這使 metadata 與實際檢視範圍不符。此為文件 metadata finding，不需 reproducer。
+- [ ] Issue 4: [Minor] `docs/discord/ui-renderer.md` 聲稱試煉發起者會出現在 Public 開始通知。`docs/discord/notification.md` 與實作都明確不顯示發起者。六份本次修改的 SSOT 尚未完全對齊。此為文件一致性 finding，不需 reproducer。
