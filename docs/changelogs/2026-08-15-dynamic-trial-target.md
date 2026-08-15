@@ -1,6 +1,6 @@
 ---
 title: "村莊試煉動態目標"
-status: Reviewed
+status: In-Progress
 created: 2026-08-15
 doc_type: change
 last_reviewed: 2026-08-15
@@ -25,6 +25,7 @@ source_paths:
   - docs/discord/command-handler.md
   - docs/discord/ui-renderer.md
   - docs/discord/notification.md
+  - docs/managers/resource-manager.md
 scope: "Tracks player-selected village trial targets, reserved resources, pagination, atomic start validation, review, and refactoring."
 ---
 
@@ -263,3 +264,7 @@ Claude re-review 於 2026-08-15 通過。Verdict: Approved。無必要修正。
 
 - [ ] Issue 3: [Minor] `source_paths` 遺漏 `docs/changes/2026-07-14-village-trial.md` 與 `docs/changes/2026-07-15-trial-dashboard-status.md`。本文件的 source path 標記明確記錄兩者為檢視限定，實作驗證提交卻移除它們。這使 metadata 與實際檢視範圍不符。此為文件 metadata finding，不需 reproducer。
 - [ ] Issue 4: [Minor] `docs/discord/ui-renderer.md` 聲稱試煉發起者會出現在 Public 開始通知。`docs/discord/notification.md` 與實作都明確不顯示發起者。六份本次修改的 SSOT 尚未完全對齊。此為文件一致性 finding，不需 reproducer。
+- [ ] Issue 5: [Minor] Claude refactor review 重複指出 `source_paths` 未包含本次核對的既有試煉 change docs，與 Issue 3 重疊。Issue 3 的 source path 修正一併處理。
+- [ ] Issue 6: [Minor] Claude refactor review 重複指出 renderer 對試煉發起者通知的描述與通知 SSOT 不一致，與 Issue 4 重疊。Issue 4 的文件修正一併處理。
+- [x] Issue 7: [Minor] Claude refactor review 指出 resource-manager 的資源負擔 helper 在全 repo 沒有呼叫，應移除未使用 helper 與文件介面項目。
+- [ ] Issue 8: [Minor] Claude refactor review 指出 formula 文件未說明一般環境變數的 fallback 與試煉設定顯式空白的驗證例外。補充設定語意並保留既有 changelog。

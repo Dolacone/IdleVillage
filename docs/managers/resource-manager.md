@@ -1,7 +1,7 @@
 ---
 title: "Module: resource-manager"
 doc_type: module
-last_reviewed: 2026-05-01
+last_reviewed: 2026-08-15
 source_paths:
   - src/managers/resource_manager.py
 ---
@@ -25,7 +25,6 @@ source_paths:
 - `deposit(type, amount)` — 增加指定資源
 - `withdraw(type, amount)` — 扣除指定資源（不得低於 0）
 - `balance(type)` — 查詢當前數量
-- `canAfford(type, amount)` — 確認是否足夠（回傳 boolean）
 
 ## 生產鏈
 

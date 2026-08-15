@@ -21,11 +21,6 @@ async def balance(db, resource_type: str) -> int:
     return row[0] if row else 0
 
 
-async def can_afford(db, resource_type: str, amount: int) -> bool:
-    """Return True if the village has at least amount of the resource."""
-    return await balance(db, resource_type) >= amount
-
-
 async def deposit(db, resource_type: str, amount: int, ts: datetime) -> None:
     """Add amount to the resource pool."""
     current = await balance(db, resource_type)
