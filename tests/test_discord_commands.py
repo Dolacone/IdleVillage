@@ -537,12 +537,24 @@ class TestRendererVillageEmbed(unittest.TestCase):
 
     def test_embed_shows_openable_when_inactive_and_resource_enough(self):
         from cogs.ui_renderer import build_village_embed
-        trial_amount = int(ALL_TEST_ENV["TRIAL_TARGET_AMOUNT"])
+        trial_amount = 35000
         resources = {"food": trial_amount, "wood": 0, "knowledge": 0}
         embed = build_village_embed(
             self._make_stage_data(), resources, {}, [], self._make_trial_data(is_active=0)
         )
         self.assertIn("🏆 試煉 ✅ 可開啟試煉", embed.description)
+
+    def test_trial_status_respects_reserved_resource_boundary(self):
+        from cogs.ui_renderer import build_village_embed
+
+        below = build_village_embed(
+            self._make_stage_data(), {"food": 34999}, {}, [], self._make_trial_data(is_active=0)
+        )
+        at_boundary = build_village_embed(
+            self._make_stage_data(), {"food": 35000}, {}, [], self._make_trial_data(is_active=0)
+        )
+        self.assertIn("🏆 試煉 ⚠️ 資源不足，尚無法開啟", below.description)
+        self.assertIn("🏆 試煉 ✅ 可開啟試煉", at_boundary.description)
 
     def test_embed_shows_cooldown_deadline_when_recently_ended(self):
         from cogs.ui_renderer import build_village_embed
@@ -562,10 +574,72 @@ class TestRendererVillageEmbed(unittest.TestCase):
         ended_at = now - timedelta(seconds=cooldown + 100)
         trial_data = self._make_trial_data(is_active=0)
         trial_data["ended_at"] = ended_at.isoformat()
-        trial_amount = int(ALL_TEST_ENV["TRIAL_TARGET_AMOUNT"])
+        trial_amount = 35000
         resources = {"food": trial_amount, "wood": 0, "knowledge": 0}
         embed = build_village_embed(self._make_stage_data(), resources, {}, [], trial_data)
         self.assertIn("🏆 試煉 ✅ 可開啟試煉", embed.description)
+
+
+class TestRendererTrialTargets(unittest.TestCase):
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    @staticmethod
+    def _resources(balance):
+        return {"food": balance, "wood": 0, "knowledge": 0}
+
+    @staticmethod
+    def _components(resources, page=0):
+        from cogs.ui_renderer import build_trial_target_components
+
+        return build_trial_target_components(resources, page)
+
+    def test_example_resources_render_twelve_targets_with_matching_values(self):
+        rows = self._components({"food": 51000, "wood": 310000, "knowledge": 220000})
+        options = rows[0].children[0].options
+        self.assertEqual(len(options), 12)
+        self.assertEqual(options[0].label, "25000")
+        self.assertEqual(options[-1].label, "300000")
+        self.assertTrue(all(option.label == option.value for option in options))
+
+    def test_six_hundred_twenty_five_thousand_fits_one_page(self):
+        rows = self._components(self._resources(635000))
+        options = rows[0].children[0].options
+        self.assertEqual(len(options), 25)
+        self.assertTrue(rows[1].children[1].disabled)
+
+    def test_six_hundred_fifty_thousand_uses_second_page_for_final_target(self):
+        rows = self._components(self._resources(660000), page=1)
+        options = rows[0].children[0].options
+        self.assertEqual(len(options), 1)
+        self.assertEqual(options[0].value, "650000")
+        previous, next_page, back = rows[1].children
+        self.assertEqual(previous.custom_id, "trial_target_page:0")
+        self.assertFalse(previous.disabled)
+        self.assertTrue(next_page.disabled)
+        self.assertEqual(back.custom_id, "back_to_main")
+
+    def test_page_navigation_disables_edges_and_clamps_out_of_range_pages(self):
+        first_page = self._components(self._resources(660000), page=-1)
+        last_page = self._components(self._resources(660000), page=999)
+        self.assertTrue(first_page[1].children[0].disabled)
+        self.assertEqual(first_page[0].children[0].options[0].value, "25000")
+        self.assertTrue(last_page[1].children[1].disabled)
+        self.assertEqual(last_page[0].children[0].options[0].value, "650000")
+
+    def test_no_legal_target_returns_only_back_button(self):
+        rows = self._components(self._resources(9999))
+        components = [component for row in rows for component in row.children]
+        self.assertEqual(len(components), 1)
+        self.assertEqual(components[0].custom_id, "back_to_main")
+
+    def test_target_embed_reports_clamped_page(self):
+        from cogs.ui_renderer import build_trial_target_embed
+
+        embed = build_trial_target_embed(self._resources(660000), page=999)
+        self.assertIn("第 2/2 頁", embed.description)
+        self.assertIn("650000", embed.description)
 
 
 class TestRendererMainEmbed(unittest.TestCase):
@@ -798,7 +872,7 @@ class TestRendererMainComponents(unittest.TestCase):
         )
 
     def _abundant_resources(self):
-        amount = int(ALL_TEST_ENV["TRIAL_TARGET_AMOUNT"])
+        amount = 35000
         return {"food": amount, "wood": 0, "knowledge": 0}
 
     def test_trial_start_enabled_when_no_trial_and_no_cooldown(self):
@@ -818,6 +892,19 @@ class TestRendererMainComponents(unittest.TestCase):
             self._make_player(), buildings, trial_data=None, resources={"food": 1, "wood": 1, "knowledge": 1}
         )
         self.assertTrue(self._trial_button(rows).disabled)
+
+    def test_trial_start_uses_reserve_boundary(self):
+        from cogs.ui_renderer import build_main_components
+
+        buildings = {"research_lab": {"level": 3, "xp_progress": 0}}
+        below_reserve_boundary = build_main_components(
+            self._make_player(), buildings, trial_data=None, resources={"food": 34999}
+        )
+        at_reserve_boundary = build_main_components(
+            self._make_player(), buildings, trial_data=None, resources={"food": 35000}
+        )
+        self.assertTrue(self._trial_button(below_reserve_boundary).disabled)
+        self.assertFalse(self._trial_button(at_reserve_boundary).disabled)
 
     def test_trial_start_disabled_when_trial_active(self):
         from cogs.ui_renderer import build_main_components

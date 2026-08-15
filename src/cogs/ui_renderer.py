@@ -10,6 +10,7 @@ import disnake
 
 from core.config import get_env_float, get_env_int
 from core.formula import ACTION_FACILITY_BUILDING
+from managers import trial_manager
 
 ACTION_LABELS = {
     "gathering": "採集",
@@ -64,6 +65,7 @@ AFFIX_TYPE_LABELS = {
 
 # Valid building targets for the action dropdown (research_lab is facility for research, not a build target)
 UI_BUILDING_TARGETS = ("gathering_field", "workshop", "hunting_ground")
+TRIAL_TARGETS_PER_PAGE = 25
 
 
 def _progress_bar(progress: int, target: int, width: int = 10) -> str:
@@ -127,10 +129,84 @@ def _build_trial_line(trial_data: dict, resources: dict, now_ts: int) -> str:
     if trial_reopen_unix is not None:
         return f"\n🏆 試煉 ⏳ 可於 <t:{trial_reopen_unix}:t> 後開啟\n"
 
-    trial_target_amount = get_env_int("TRIAL_TARGET_AMOUNT")
-    if any(resources.get(r, 0) >= trial_target_amount for r in ("food", "wood", "knowledge")):
+    if trial_manager.get_max_trial_target(resources) > 0:
         return "\n🏆 試煉 ✅ 可開啟試煉\n"
     return "\n🏆 試煉 ⚠️ 資源不足，尚無法開啟\n"
+
+
+def _trial_target_page(resources: dict, page: int) -> tuple[int, int, int, int]:
+    max_target = trial_manager.get_max_trial_target(resources)
+    step = get_env_int("TRIAL_TARGET_STEP")
+    target_count = max_target // step if step > 0 else 0
+    last_page = (target_count - 1) // TRIAL_TARGETS_PER_PAGE if target_count else 0
+    clamped_page = min(max(page, 0), last_page)
+    return max_target, step, target_count, clamped_page
+
+
+def build_trial_target_embed(resources: dict, page: int = 0) -> disnake.Embed:
+    max_target, step, target_count, clamped_page = _trial_target_page(resources, page)
+    if not target_count:
+        description = "目前沒有可用的試煉目標。"
+    else:
+        first_target = (clamped_page * TRIAL_TARGETS_PER_PAGE + 1) * step
+        last_target = min((clamped_page + 1) * TRIAL_TARGETS_PER_PAGE, target_count) * step
+        total_pages = (target_count - 1) // TRIAL_TARGETS_PER_PAGE + 1
+        description = (
+            f"選擇試煉目標（第 {clamped_page + 1}/{total_pages} 頁）\n"
+            f"目標範圍：{first_target} - {last_target}\n"
+            f"最大目標：{max_target}"
+        )
+    return disnake.Embed(title="🏆 開啟試煉", description=description, color=disnake.Color.blue())
+
+
+def build_trial_target_components(resources: dict, page: int = 0) -> list:
+    _, step, target_count, clamped_page = _trial_target_page(resources, page)
+    if not target_count:
+        return [
+            disnake.ui.ActionRow(
+                disnake.ui.Button(
+                    label="返回",
+                    style=disnake.ButtonStyle.secondary,
+                    custom_id="back_to_main",
+                )
+            )
+        ]
+
+    last_page = (target_count - 1) // TRIAL_TARGETS_PER_PAGE
+    first_index = clamped_page * TRIAL_TARGETS_PER_PAGE + 1
+    last_index = min((clamped_page + 1) * TRIAL_TARGETS_PER_PAGE, target_count)
+    options = [
+        disnake.SelectOption(label=str(index * step), value=str(index * step))
+        for index in range(first_index, last_index + 1)
+    ]
+    return [
+        disnake.ui.ActionRow(
+            disnake.ui.StringSelect(
+                custom_id="trial_target_select",
+                placeholder="選擇試煉目標...",
+                options=options,
+            )
+        ),
+        disnake.ui.ActionRow(
+            disnake.ui.Button(
+                label="上一頁",
+                style=disnake.ButtonStyle.secondary,
+                custom_id=f"trial_target_page:{clamped_page - 1}",
+                disabled=clamped_page == 0,
+            ),
+            disnake.ui.Button(
+                label="下一頁",
+                style=disnake.ButtonStyle.secondary,
+                custom_id=f"trial_target_page:{clamped_page + 1}",
+                disabled=clamped_page == last_page,
+            ),
+            disnake.ui.Button(
+                label="返回",
+                style=disnake.ButtonStyle.secondary,
+                custom_id="back_to_main",
+            ),
+        ),
+    ]
 
 
 def _build_village_section(
@@ -322,8 +398,7 @@ def build_main_components(
             can_start_trial = (now_unix - ended_unix) >= cooldown
     if can_start_trial:
         resources = resources or {}
-        trial_amount = get_env_int("TRIAL_TARGET_AMOUNT")
-        can_start_trial = any(resources.get(r, 0) >= trial_amount for r in ("food", "wood", "knowledge"))
+        can_start_trial = trial_manager.get_max_trial_target(resources) > 0
 
     # A tool running as an auto-tool cannot also be selected as the manual action.
     active_auto = set(active_auto_tools or [])

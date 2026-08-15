@@ -207,7 +207,7 @@ Task 2 與 Task 3 可在 Task 1 完成後平行。Task 4 必須等待兩者完�
     - 動態 `150000` 目標沿用既有獎勵公式。
     - 試煉期限仍為 12 小時。
 
-- [ ] Task 3: 建立目標選單與分頁
+- [x] Task 3: 建立目標選單與分頁
   - Source/logic files: `src/cogs/ui_renderer.py`
   - Tests: `tests/test_discord_commands.py`
   - Depends on: Task 1
