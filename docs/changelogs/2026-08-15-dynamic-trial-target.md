@@ -1,6 +1,6 @@
 ---
 title: "村莊試煉動態目標"
-status: Draft
+status: Ready-to-implement
 created: 2026-08-15
 doc_type: change
 last_reviewed: 2026-08-15
@@ -260,3 +260,5 @@ Task 2 與 Task 3 可在 Task 1 完成後平行。Task 4 必須等待兩者完�
 
 - [x] Issue 1: [Major] Claude plan review 指出 `open_trial_start` 的前置檢查與 manager 失敗分類不一致。修正為開啟及翻頁都重讀 active、cooldown、三種資源與 `max_target`。失敗時返回主介面，不建立空 Select。manager 使用 `stale_target` 表示合法級距超過最新上限，不保留不可達的 `insufficient_resources` 分支。
 - [x] Issue 2: [Minor] Claude plan review 要求明確把 `.env.example` 計入 configuration/runtime 範圍。Task 1 維持 `src/core/config.py` 與 `.env.example` 兩個 source/logic 檔案，符合上限。
+
+Claude re-review 於 2026-08-15 通過。Verdict: Approved。無必要修正。
