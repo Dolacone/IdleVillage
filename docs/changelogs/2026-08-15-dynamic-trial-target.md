@@ -129,17 +129,21 @@ manager 在鎖內驗證 active、cooldown、正數級距與最新可支付資源
 
 扣款、清空舊貢獻與更新 `trial_state` 都在同一交易內。成功時由既有呼叫端 commit。任何例外都由 manager rollback 後再拋出。
 
-manager 用可識別的失敗原因區分 `active`、`cooldown`、`invalid_target` 與 `insufficient_resources`。handler 依原因顯示對應訊息。
+manager 用可識別的失敗原因區分 `active`、`cooldown`、`invalid_target` 與 `stale_target`。`invalid_target` 代表非正數或非 step 倍數。`stale_target` 代表合法級距超過最新 `max_target`。
+
+target 通過最新 `max_target` 驗證後，eligible 在數學上必不為空。manager 不保留獨立的 `insufficient_resources` 分支。
 
 ### Discord 互動
 
-`open_trial_start` 不再扣款。它重新讀取試煉狀態與資源，再顯示第 0 頁目標選單。
+`open_trial_start` 不再扣款。它重新讀取 active、cooldown 與三種資源，再計算 `max_target`。
+
+如果 active、cooldown 或 `max_target == 0`，handler 返回主介面並顯示對應訊息。這些路徑不得建立空 Select。
 
 目標選單使用 `trial_target_select`。翻頁按鈕使用 `trial_target_page:{page}`，其中 page 是目的頁。翻頁會重新讀取試煉狀態與資源，再重算頁數。
 
 選取值是十進位 target。handler 將其解析為整數，再交給 manager 驗證。成功後沿用現有 `trial_start` Public 通知。
 
-如果翻頁時已無合法目標，handler 返回主介面並顯示資源不足。不同玩家各自使用 Ephemeral 訊息，頁面狀態不共享。
+如果翻頁時 active、cooldown 或已無合法目標，handler 返回主介面並顯示對應訊息。不同玩家各自使用 Ephemeral 訊息，頁面狀態不共享。
 
 ### 相容性
 
@@ -189,6 +193,10 @@ Task 2 與 Task 3 可在 Task 1 完成後平行。Task 4 必須等待兩者完�
     - 最大可用量低於 `25000` 時，最大目標為 `0`。
     - `get_eligible_resource_types(db, 200000)` 只回傳 wood 與 knowledge。
     - `0`、負數、非 `25000` 倍數與超過最新上限的 target 都失敗。
+    - 非正數或非 step 倍數回傳 `invalid_target`。
+    - 合法級距超過最新上限時回傳 `stale_target`。
+    - target 通過最新上限驗證後，eligible 必不為空。
+    - manager 不保留獨立的 `insufficient_resources` 失敗分支。
     - 成功扣款後，被選資源至少保留 `10000`。
     - 單一可支付資源時，只扣除該資源。
     - 多種可支付資源時，只把合格清單傳給 `random.choice`。
@@ -220,13 +228,17 @@ Task 2 與 Task 3 可在 Task 1 完成後平行。Task 4 必須等待兩者完�
   - Tests: `tests/test_discord_commands.py`, `tests/test_discord_notifications.py`
   - Depends on: Task 2, Task 3
   - Acceptance criteria:
-    - 點擊 `open_trial_start` 只顯示第 0 頁，不扣款。
-    - 翻頁使用最新資源重新計算，不扣款。
+    - 點擊 `open_trial_start` 重讀 active、cooldown 與三種資源，再計算 `max_target`。
+    - active 時返回主介面並顯示進行中訊息，不建立 Select。
+    - cooldown 時返回主介面並顯示冷卻訊息，不建立 Select。
+    - `max_target == 0` 時返回主介面並顯示資源不足，不建立空 Select。
+    - 只有通過開啟檢查時，才顯示第 0 頁且不扣款。
+    - 翻頁重讀相同狀態與最新資源，不扣款。
     - 選取 `trial_target_select` 後才呼叫 `start_trial`。
     - 選取時 manager 重新驗證，不信任 UI 選項。
     - 成功事件包含動態 target 與實際扣除資源。
     - 成功後刷新主介面，再發送一次 Public 開始通知。
-    - active、cooldown、invalid target 與資源變動會顯示對應失敗訊息。
+    - active、cooldown、invalid target 與 stale target 會顯示對應失敗訊息。
     - 所有失敗都不發送 `trial_start` 通知。
     - 資源失效或頁面失效時，返回可恢復的主介面。
 
@@ -245,3 +257,6 @@ Task 2 與 Task 3 可在 Task 1 完成後平行。Task 4 必須等待兩者完�
     - doc-audit 不回報本變更新增的缺漏或斷鏈。
 
 ## Review Issues
+
+- [x] Issue 1: [Major] Claude plan review 指出 `open_trial_start` 的前置檢查與 manager 失敗分類不一致。修正為開啟及翻頁都重讀 active、cooldown、三種資源與 `max_target`。失敗時返回主介面，不建立空 Select。manager 使用 `stale_target` 表示合法級距超過最新上限，不保留不可達的 `insufficient_resources` 分支。
+- [x] Issue 2: [Minor] Claude plan review 要求明確把 `.env.example` 計入 configuration/runtime 範圍。Task 1 維持 `src/core/config.py` 與 `.env.example` 兩個 source/logic 檔案，符合上限。

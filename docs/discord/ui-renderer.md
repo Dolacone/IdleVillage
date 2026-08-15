@@ -140,7 +140,9 @@ Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
 
 - Button：`🏆 開啟試煉`（Blue，custom_id: `open_trial_start`）
   - 禁用條件：目前已有進行中試煉；試煉冷卻中；或 `max_target == 0`
-  - 點擊後顯示第 0 頁 Ephemeral 目標選單，不扣除資源
+  - 點擊時重讀 active、cooldown 與三種資源，再計算 `max_target`
+  - 前置條件失效時返回主介面並顯示對應訊息，不建立空 Select
+  - 通過檢查後顯示第 0 頁 Ephemeral 目標選單，不扣除資源
 - Dropdown：custom_id 為 `trial_target_select`
   - 合法值為 `25000` 到 `max_target` 的每個 `25000` 倍數
   - label 與 value 都顯示十進位 target
@@ -154,7 +156,10 @@ Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
   - 如果頁碼超過新範圍，夾限到最後一頁
 - 返回按鈕沿用 `back_to_main`
 - 選取成功後顯示 `✅ 試煉已開始！`，並觸發 Public 開始通知
-- 如果 active、cooldown、target 或資源在提交前失效，返回主介面並顯示對應錯誤。失敗時不扣款，也不通知
+- 如果 active、cooldown 或 target 在提交前失效，返回主介面並顯示對應錯誤
+- 合法級距超過最新 `max_target` 時顯示 stale target 訊息
+- `max_target == 0` 的 UI 狀態顯示資源不足。manager 不使用 `insufficient_resources` 分支
+- 失敗時不扣款，也不通知
 
 ### 行動選擇組
 - **Dropdown 1**：選擇行動

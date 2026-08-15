@@ -43,6 +43,8 @@ max_target = floor(max(available(food), available(wood), available(knowledge)) /
 - target 是正數及 `TRIAL_TARGET_STEP` 的倍數
 - target 不超過依最新資源重算的 `max_target`
 
+非正數或非 step 倍數回傳 `invalid_target`。合法級距超過最新 `max_target` 時回傳 `stale_target`。
+
 成立後：
 
 1. 執行 `BEGIN IMMEDIATE`，取得 SQLite 寫入鎖。
@@ -54,6 +56,8 @@ max_target = floor(max(available(food), available(wood), available(knowledge)) /
 7. 寫入 `trial_state`：`is_active=1, resource_type, target, progress=0, started_at=now`。`ended_at` 不變。
 
 成功交易由呼叫端 commit。任何驗證或寫入例外都由 `start_trial` rollback。兩個同時開始的請求會依寫入鎖序列化。後取得鎖的請求會讀到最新 active 狀態。
+
+target 通過最新 `max_target` 驗證後，eligible 必不為空。manager 不保留獨立的 `insufficient_resources` 失敗分支。UI 在 `max_target == 0` 時顯示資源不足。
 
 ## 進度累加
 
