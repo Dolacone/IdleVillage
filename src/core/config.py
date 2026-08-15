@@ -79,7 +79,8 @@ REQUIRED_KEYS = [
     "AFFIX_CLEAR_COST",
     "TRIAL_DURATION_SECONDS",
     "TRIAL_COOLDOWN_SECONDS",
-    "TRIAL_TARGET_AMOUNT",
+    "TRIAL_TARGET_STEP",
+    "TRIAL_RESOURCE_RESERVE",
     "TRIAL_REWARD_DIVISOR",
     "AUTO_TOOL_SECONDS_PER_MATERIAL",
     "AUTO_TOOL_MAX_HOURS",
@@ -99,8 +100,29 @@ def validate_env() -> bool:
     if missing:
         for key in missing:
             print(f"Missing required environment variable: {key}")
-        return False
-    return True
+    valid = not missing
+
+    trial_integer_rules = {
+        "TRIAL_TARGET_STEP": lambda value: value > 0,
+        "TRIAL_RESOURCE_RESERVE": lambda value: value >= 0,
+    }
+    for key, is_valid in trial_integer_rules.items():
+        raw_value = os.getenv(key)
+        if raw_value is not None and not raw_value.strip():
+            print(f"Invalid environment variable: {key} must be an integer")
+            valid = False
+            continue
+        resolved_value = _resolve_raw(key)
+        try:
+            parsed_value = int(resolved_value)
+        except (TypeError, ValueError):
+            print(f"Invalid environment variable: {key} must be an integer")
+            valid = False
+            continue
+        if not is_valid(parsed_value):
+            print(f"Invalid environment variable: {key} is out of range")
+            valid = False
+    return valid
 
 
 def get_env_str(key: str) -> str:

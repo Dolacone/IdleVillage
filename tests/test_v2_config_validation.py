@@ -70,6 +70,64 @@ class ValidateEnvBehavior(unittest.TestCase):
         self.assertEqual(config.get_env_int("AUTO_TOOL_SECONDS_PER_MATERIAL"), 3600)
         self.assertEqual(config.get_env_int("AUTO_TOOL_MAX_HOURS"), 24)
 
+    def test_dynamic_trial_target_settings_are_required_and_resolve(self):
+        self.assertEqual(config.get_env_int("TRIAL_TARGET_STEP"), 25000)
+        self.assertEqual(config.get_env_int("TRIAL_RESOURCE_RESERVE"), 10000)
+        self.assertNotIn("TRIAL_TARGET_AMOUNT", config.REQUIRED_KEYS)
+
+    def test_legacy_trial_target_setting_is_not_documented(self):
+        env_example_path = os.path.join(ROOT_DIR, ".env.example")
+        with open(env_example_path) as f:
+            self.assertNotIn("TRIAL_TARGET_AMOUNT=", f.read())
+
+    def test_missing_dynamic_trial_target_setting_fails_validation(self):
+        original = config._ENV_EXAMPLE_DEFAULTS.pop("TRIAL_TARGET_STEP")
+        os.environ.pop("TRIAL_TARGET_STEP")
+        try:
+            output = self._validate_with_output()
+            self.assertFalse(output[0])
+            self.assertIn("TRIAL_TARGET_STEP", output[1])
+        finally:
+            config._ENV_EXAMPLE_DEFAULTS["TRIAL_TARGET_STEP"] = original
+
+    def test_trial_target_step_must_be_positive_integer(self):
+        for value in ("0", "-1", "not-an-integer"):
+            with self.subTest(value=value):
+                os.environ["TRIAL_TARGET_STEP"] = value
+                result, diagnostics = self._validate_with_output()
+                self.assertFalse(result)
+                self.assertIn("TRIAL_TARGET_STEP", diagnostics)
+
+    def test_blank_trial_target_step_fails_instead_of_using_default(self):
+        os.environ["TRIAL_TARGET_STEP"] = "   "
+        result, diagnostics = self._validate_with_output()
+        self.assertFalse(result)
+        self.assertIn("TRIAL_TARGET_STEP", diagnostics)
+
+    def test_trial_resource_reserve_allows_zero_but_not_negative_or_non_integer(self):
+        os.environ["TRIAL_RESOURCE_RESERVE"] = "0"
+        self.assertTrue(config.validate_env())
+        for value in ("-1", "not-an-integer", "   "):
+            with self.subTest(value=value):
+                os.environ["TRIAL_RESOURCE_RESERVE"] = value
+                result, diagnostics = self._validate_with_output()
+                self.assertFalse(result)
+                self.assertIn("TRIAL_RESOURCE_RESERVE", diagnostics)
+
+    def test_trial_duration_and_cooldown_remain_twelve_hours(self):
+        self.assertEqual(config.get_env_int("TRIAL_DURATION_SECONDS"), 43200)
+        self.assertEqual(config.get_env_int("TRIAL_COOLDOWN_SECONDS"), 43200)
+
+    @staticmethod
+    def _validate_with_output():
+        import io
+        from contextlib import redirect_stdout
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            result = config.validate_env()
+        return result, buf.getvalue()
+
     def test_required_keys_list_matches_env_example(self):
         env_example_path = os.path.join(ROOT_DIR, ".env.example")
         with open(env_example_path) as f:

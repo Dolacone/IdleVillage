@@ -1,6 +1,6 @@
 ---
 title: "村莊試煉動態目標"
-status: Ready-to-implement
+status: In-Progress
 created: 2026-08-15
 doc_type: change
 last_reviewed: 2026-08-15
@@ -170,7 +170,7 @@ Task 2 與 Task 3 可在 Task 1 完成後平行。Task 4 必須等待兩者完�
 
 ## Tasks
 
-- [ ] Task 1: 更新試煉設定契約
+- [x] Task 1: 更新試煉設定契約
   - Source/logic files: `src/core/config.py`, `.env.example`
   - Tests: `tests/support.py`, `tests/test_v2_config_validation.py`
   - Depends on: 無
