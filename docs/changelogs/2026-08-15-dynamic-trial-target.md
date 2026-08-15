@@ -1,6 +1,6 @@
 ---
 title: "村莊試煉動態目標"
-status: Refactored
+status: Done
 created: 2026-08-15
 doc_type: change
 last_reviewed: 2026-08-15
@@ -274,3 +274,5 @@ Claude re-review 於 2026-08-15 通過。Verdict: Approved。無必要修正。
 Refactor verification 於 2026-08-15 完成：完整 pytest 通過 605 tests。doc-audit 僅剩既有 baseline 警告，沒有本變更新增問題。Issue 3-8 全部完成。本 refactor 沒有行為變更。
 
 Sol post-refactor review 於 2026-08-15 通過。Verdict: Approved。確認 commits `c4248e2`、`be479fd`、`3a5558d` 沒有改變執行行為。Issue 3-8 已解決。完整 pytest 通過 605 tests。doc-audit 僅剩既有 baseline 警告。
+
+Claude post-refactor review 於 2026-08-15 通過。Verdict: Approved。Critical/Major/Minor 皆 0。完整 pytest 通過 605 tests。
