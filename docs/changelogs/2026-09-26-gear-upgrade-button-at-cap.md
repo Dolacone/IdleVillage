@@ -1,6 +1,6 @@
 ---
 title: "工具滿級時主介面強化工具按鈕維持可用"
-status: Ready-to-implement
+status: In-Progress
 created: 2026-09-26
 doc_type: change
 last_reviewed: 2026-09-26
@@ -59,7 +59,7 @@ scope: "Tracks keeping the main gear upgrade button enabled at gear cap, from de
 Task 1 (renderer + test)  -- 無相依，單一 task
 ```
 
-- [ ] Task 1: 移除 `build_main_components` 的 `all_gear_at_cap` 計算與 `open_gear_upgrade` 按鈕的 `disabled` 參數；測試 `test_gear_upgrade_enabled_when_all_gear_at_cap` 斷言滿級時按鈕可用。
+- [x] Task 1: 移除 `build_main_components` 的 `all_gear_at_cap` 計算與 `open_gear_upgrade` 按鈕的 `disabled` 參數；測試 `test_gear_upgrade_enabled_when_all_gear_at_cap` 斷言滿級時按鈕可用。
   - Files: `src/cogs/ui_renderer.py`, `tests/test_discord_commands.py`
   - 新增 `TestRendererGearComponents` 測試：四種工具 Lv5、`gear_cap=5`、`can_attempt=False`、`max_slots=1`、`materials=3`，選定 `gathering` 與 `normal` 時 `🎲 強化工具` disabled，`🩸 獻祭素材` 與 `🔮 詞條管理` enabled。
   - 移除 `test_gear_upgrade_enabled_when_all_gear_at_cap` 的 `currently fails due to bug` 註解。

@@ -865,7 +865,9 @@ class TestRendererMainComponents(unittest.TestCase):
             "gear_research": gear_level,
         }
 
-    def test_gear_upgrade_disabled_when_all_gear_at_cap(self):
+    def test_gear_upgrade_enabled_when_all_gear_at_cap(self):
+        # The gear upgrade submenu is the only entry to affix management and material sacrifice,
+        # so max-level players must still be able to open it.
         from cogs.ui_renderer import build_main_components
 
         buildings = {"research_lab": {"level": 2, "xp_progress": 0}}
@@ -877,9 +879,9 @@ class TestRendererMainComponents(unittest.TestCase):
             if getattr(component, "custom_id", None) == "open_gear_upgrade"
         )
 
-        self.assertTrue(
+        self.assertFalse(
             gear_button.disabled,
-            "Gear upgrade button should be disabled when all gear is at research-lab cap",
+            "Gear upgrade button must stay enabled at research-lab cap to reach affix management",
         )
 
     def test_gear_upgrade_enabled_when_no_ap_but_not_at_cap(self):
@@ -1103,6 +1105,35 @@ class TestRendererGearComponents(unittest.TestCase):
         descriptions = {option.value: option.description for option in gear_select.options}
 
         self.assertEqual(descriptions["gathering"], "已達等級上限 Lv3")
+
+    def test_capped_gear_keeps_sacrifice_and_affix_management_available(self):
+        from cogs.ui_renderer import build_gear_components
+
+        player_gear = {"gathering": 5, "building": 5, "combat": 5, "research": 5}
+        rows = build_gear_components(
+            "gathering", "normal", False, player_gear, gear_cap=5, max_slots=1, materials=3
+        )
+        buttons = {
+            component.custom_id: component
+            for row in rows
+            for component in row.children
+            if getattr(component, "custom_id", None)
+            in {
+                "attempt_upgrade:gathering:normal",
+                "sacrifice_material:gathering",
+                "open_affix_mgmt:gathering",
+            }
+        }
+
+        self.assertTrue(buttons["attempt_upgrade:gathering:normal"].disabled)
+        self.assertFalse(
+            buttons["sacrifice_material:gathering"].disabled,
+            "Max-level players must still reach affix management and material sacrifice",
+        )
+        self.assertFalse(
+            buttons["open_affix_mgmt:gathering"].disabled,
+            "Max-level players must still reach affix management and material sacrifice",
+        )
 
 
 class TestGearEmbedRiskyLine(unittest.TestCase):
