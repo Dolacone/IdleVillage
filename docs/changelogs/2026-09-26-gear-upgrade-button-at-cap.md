@@ -1,6 +1,6 @@
 ---
 title: "工具滿級時主介面強化工具按鈕維持可用"
-status: Refactored
+status: Done
 created: 2026-09-26
 doc_type: change
 last_reviewed: 2026-09-26
