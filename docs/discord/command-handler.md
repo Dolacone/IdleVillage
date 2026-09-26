@@ -1,11 +1,12 @@
 ---
 title: "Module: command-handler"
 doc_type: module
-last_reviewed: 2026-08-15
+last_reviewed: 2026-09-26
 source_paths:
   - src/cogs/actions.py
   - src/cogs/general.py
   - src/cogs/player_manager_cog.py
+  - src/cogs/ui_renderer.py
 ---
 
 # Module: command-handler
@@ -33,7 +34,7 @@ source_paths:
 | `building_target_select` | 選擇建設目標 | 啟用確認按鈕 |
 | `confirm_action` | 點擊確認行動 | 呼叫 `player-manager.setAction()`，更新 Embed |
 | `burst_execute` | 點擊瞬間行動 | 確認 AP ≥ 1 → 呼叫 `cycle-engine.burst()`，更新 Embed |
-| `open_gear_upgrade` | 點擊強化工具 | 渲染工具強化子選單 |
+| `open_gear_upgrade` | 點擊主介面「🔨 強化工具」 | 主介面按鈕沒有禁用條件；渲染工具強化子選單。子選單「🎲 強化工具」在工具滿級、素材不足或 AP 不足時 disabled |
 | `open_trial_start` | 點擊開啟試煉 | 重讀 active、cooldown 與三種資源，再計算 `max_target`。active、cooldown 或 `max_target == 0` 時返回主介面並顯示對應訊息，不建立空 Select。其餘情況顯示第 0 頁 Ephemeral 目標選單，不扣款 |
 | `trial_target_page:{page}` | 點擊上一頁或下一頁 | page 代表 0-based 目的頁。重讀 active、cooldown 與三種資源，再計算 `max_target`。前置條件失效時返回主介面，不建立空 Select。頁碼超界時夾限到最後一頁。此步驟不扣款 |
 | `trial_target_select` | 選擇目標 | 將選取值解析為整數，呼叫 `trial-manager.start_trial(db, now, target)`。manager 在寫入鎖內重新驗證。合法級距超過最新上限時回傳 `stale_target`。成功後刷新主介面並觸發 Public 開始通知 |
