@@ -1,6 +1,6 @@
 ---
 title: "工具滿級時主介面強化工具按鈕維持可用"
-status: Reviewed
+status: Refactored
 created: 2026-09-26
 doc_type: change
 last_reviewed: 2026-09-26
@@ -9,6 +9,7 @@ source_paths:
   - tests/test_discord_commands.py
   - src/cogs/actions.py
   - docs/discord/ui-renderer.md
+  - docs/discord/command-handler.md
 scope: "Tracks keeping the main gear upgrade button enabled at gear cap, from design through review."
 ---
 
