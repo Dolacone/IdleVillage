@@ -1,6 +1,6 @@
 ---
 title: "詞條自動抽取"
-status: Issues-confirmed
+status: Ready-to-review
 created: 2026-09-30
 doc_type: change
 last_reviewed: 2026-09-30
