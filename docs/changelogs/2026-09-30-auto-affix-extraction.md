@@ -56,11 +56,12 @@ scope: "Tracks automatic affix extraction from design through review."
 
 沿用 manager、互動 handler、renderer 與 notification 的分層。抽選規則由 affix-manager 擁有。
 
-- Manager: 新增 `auto_extract_affix(db, user_id, gear_type, gear_level, now, *, target_affix_type=None, min_value=1, material_source="tool")`。回傳 `{affix, attempts, material_spent, material_source}`。`affix` 為單抽同型 dict 或 `None`。
+- Manager: 新增 `auto_extract_affix(db, user_id, gear_type, gear_level, now, *, target_affix_type=None, min_value=1, material_source="tool", expected_slot=None)`。回傳 `{affix, attempts, material_spent, material_source}`。`affix` 為單抽同型 dict 或 `None`。
 - 成本: 固定工具素材 1、萬能素材 5。保留單抽與清除的成本設定。只保存最終符合條件的結果。
 - 抽選: 使用既有 `random.choice(AFFIX_TYPES)` 與 `random.randint(1, 5)`。每 100 次讓出事件迴圈。
 - 交易: manager 在讀取起始素材後抽選，不持有寫入鎖。抽選完成後以 `BEGIN IMMEDIATE` 重讀工具等級、槽位與素材。依最新餘額縮減可扣次數。成功結果超過可扣次數時丟棄。總成本只扣一次。handler 提交或回滾。
 - 並行: 本批次只使用開始時持有的素材。抽選期間新增的素材保留。抽選期間素材減少時縮減次數。最新槽位全滿時拒絕且不扣款。
+- 目標槽: 設定頁將第一空槽寫入確認 ID。manager 在抽選前與交易內檢查目標槽。目標槽改變時拒絕確認，不移至下一個空槽。
 - 介面: 「目標種類」選任意或特定效果。選特定效果後顯示七種效果選單。另有「目標數值」與「花費素材」。設定未齊時停用確認。
 - 介面狀態: 沿用 custom_id 帶選擇值的慣例。四個選單與按鈕共用最多五列。每個 custom_id 必須不超過 100 字元。
 - 提交: handler 延後回應，再提交批次。重新檢查滿槽與素材。起始素材不足時顯示錯誤，不送零次公告。
@@ -101,6 +102,18 @@ Task 2 (UI/events) --+
   - Acceptance: 大量未達標抽選期間，其他 SQLite 連線可以寫入。扣款次數固定為一次。抽選期間新增與減少素材均符合批次規則。
   - Evidence: `UV_CACHE_DIR=/private/tmp/idlevillage-uv-cache uv run --no-project python -m unittest discover -s tests -q` — `Ran 637 tests in 7.929s`; `OK`. Handler integration uses real SQLite, manager, renderer and notification formatting with mocked Discord transport. Live Discord interaction remains unverified.
   - Acceptance: 更新文件及 `last_reviewed`。更新 `source_paths` 為實際建立或檢查的路徑。完整測試套件通過。
+- [ ] Task 4: manager 固定本次目標槽。[Review/Major 的第一步]
+  - Source: `src/managers/affix_manager.py`。
+  - Tests: `tests/test_affix_manager.py`。
+  - Acceptance: 新增 `expected_slot`。參數無效或不符第一空槽時拒絕且不扣款。抽選完成後第一空槽改變時拒絕。
+  - Acceptance: 抽選期間原目標槽被填入時不轉抽其他槽。保留原有素材、回滾及分布規則。
+- [ ] Task 5: 確認 ID 綁定目標槽。[依賴 Task 4]
+  - Source: `src/cogs/ui_renderer.py`、`src/cogs/actions.py`。
+  - Tests: `tests/test_discord_commands.py`。
+  - Docs: `docs/discord/command-handler.md`、`docs/discord/ui-renderer.md`、`docs/managers/affix-manager.md`。
+  - Acceptance: 確認 ID 附帶設定頁第一空槽。handler 驗證並傳入 `expected_slot`。完整 ID 仍不超過 100 字元。
+  - Acceptance: 同一確認在兩個空槽上並行時只扣一次、填一槽、發一則公告。完成後再次提交同一確認不得扣款。
+  - Acceptance: 重新開啟設定頁可對下一個空槽正常抽取。所有既有確認測試配合新 ID。完整測試套件通過。
 
 ## Review Issues
 
