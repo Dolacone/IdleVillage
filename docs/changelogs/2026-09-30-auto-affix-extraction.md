@@ -143,6 +143,14 @@ Task 1 (manager) + Task 2 (UI/events) --> Task 3 (handler/integration) --> Revie
   - Acceptance: 補上回歸測試並先取得失敗證據。修正後執行完整測試。
   - Evidence: `UV_CACHE_DIR=/private/tmp/idlevillage-uv-cache uv run --no-project python -m unittest discover -s tests -q` — `Ran 652 tests in 8.495s`; `OK`. `test_returning_to_affix_management_invalidates_pending_confirmation`, `test_main_navigation_and_slash_reopen_invalidate_before_confirmation`, `test_navigation_invalidation_is_per_user`, and `test_selector_change_invalidates_confirmation_before_defer` verify real handler navigation, SQLite, renderer IDs and notification dispatch.
 
+- [ ] Task 9: 驗證導覽撤銷時序與按鈕文件。[Review/Major、Minor]
+  - Tests: `tests/test_discord_commands.py`。
+  - Docs: `docs/discord/ui-renderer.md`。
+  - Acceptance: 返回詞條管理、主介面與 slash 重開時，在 defer 開始就拒絕舊確認。
+  - Acceptance: 從真實 renderer 取得 ID。在 defer side effect 重送舊 ID，不抽選、不扣款、不填槽、不公告。
+  - Acceptance: 重新渲染的確認仍可使用。其他玩家的確認仍有效。
+  - Acceptance: 按鈕文件描述目前 success 綠色樣式。執行完整測試。
+
 ## Review Issues
 
 - [ ] [Review/Major] 導覽與 `/idlevillage` 重開必須在首次 await 前撤銷確認。`tests/test_discord_commands.py:1904-1932,1959-1980` 只在操作完成後檢查舊 ID；`tests/test_discord_commands.py:1946-1951` 只驗證設定選單的 defer 時序。若將 `src/cogs/actions.py:432-433,419-420` 的撤銷移到 defer 後，現有導覽測試仍會通過。補上在 defer 邊界檢查 registry 的回歸測試。
