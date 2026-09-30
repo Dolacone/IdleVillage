@@ -1,10 +1,17 @@
 ---
 title: "詞條自動抽取"
-status: Draft
+status: Ready-to-implement
 created: 2026-09-30
 doc_type: change
 last_reviewed: 2026-09-30
-source_paths: []
+source_paths:
+  - src/managers/affix_manager.py
+  - src/cogs/ui_renderer.py
+  - src/cogs/actions.py
+  - src/core/notification.py
+  - tests/test_affix_manager.py
+  - tests/test_discord_commands.py
+  - tests/test_discord_notifications.py
 scope: "Tracks automatic affix extraction from design through review."
 ---
 
@@ -43,16 +50,59 @@ scope: "Tracks automatic affix extraction from design through review."
 
 沿用 manager、互動 handler、renderer 與 notification 的分層。抽選規則由 affix-manager 擁有。
 
+- Manager: 新增 `auto_extract_affix(db, user_id, gear_type, gear_level, now, *, target_affix_type=None, min_value=1, material_source="tool")`。回傳 `{affix, attempts, material_spent, material_source}`。`affix` 為單抽同型 dict 或 `None`。
+- 成本: 固定工具素材 1、萬能素材 5。保留單抽與清除的成本設定。只保存最終符合條件的結果。
+- 抽選: 使用既有 `random.choice(AFFIX_TYPES)` 與 `random.randint(1, 5)`。每 100 次讓出事件迴圈。
+- 交易: manager 在讀取起始素材後抽選，不持有寫入鎖。抽選完成後以 `BEGIN IMMEDIATE` 重讀工具等級、槽位與素材。依最新餘額縮減可扣次數。成功結果超過可扣次數時丟棄。總成本只扣一次。handler 提交或回滾。
+- 並行: 本批次只使用開始時持有的素材。抽選期間新增的素材保留。抽選期間素材減少時縮減次數。最新槽位全滿時拒絕且不扣款。
+- 介面: 「目標種類」選任意或特定效果。選特定效果後顯示七種效果選單。另有「目標數值」與「花費素材」。設定未齊時停用確認。
+- 介面狀態: 沿用 custom_id 帶選擇值的慣例。四個選單與按鈕共用最多五列。每個 custom_id 必須不超過 100 字元。
+- 提交: handler 延後回應，再提交批次。重新檢查滿槽與素材。起始素材不足時顯示錯誤，不送零次公告。
+- 公告: 新增 `affix_auto_extracted`。成功沿用詞條名稱與正負號。未達標使用確認的文案。只發送一則事件。
+- 文件: 在程式存在後更新模組文件。同一主題維持 canonical 文件。變更紀錄放在 `docs/changelogs/`。
+- 驗證: 使用已安裝的 Python 3.11.14、disnake 2.12.0、aiosqlite 0.22.1。以 unittest 執行既有測試。測試資料庫使用既有 `DatabaseTestCase`。
+- 整合驗證: 從真實互動 handler 執行設定、確認、manager、SQLite、renderer 與 notification。外部 Discord 傳輸使用 mock。Discord 實際點擊與發送標記為未驗證。
+
+```text
+Task 1 (manager) ----+
+                    +--> Task 3 (handler + integration) --> review --> refactor --> draft PR
+Task 2 (UI/events) --+
+```
+
 ## Tasks
 
-- [ ] Task 1: 規劃 manager、介面與公告的實作及驗證。
+- [ ] Task 1: 自動抽取 manager。[可與 Task 2 平行]
+  - Source: `src/managers/affix_manager.py`。
+  - Tests: `tests/test_affix_manager.py`。
+  - Acceptance: 任意效果與特定效果均與最低數值共同判斷。失敗結果不入庫。成功只填第一空槽。滿槽與無槽拒絕。
+  - Acceptance: 工具素材耗盡不扣萬能素材。萬能素材每次扣 5，不扣工具素材。餘數保留。次數與花費包含成功那次。
+  - Acceptance: 未達標保持空槽。既有詞條不變。所有無效參數與起始素材不足不扣款。單抽補足測試維持通過。
+- [ ] Task 2: 設定介面與批次公告。[可與 Task 1 平行]
+  - Source: `src/cogs/ui_renderer.py`、`src/core/notification.py`。
+  - Tests: `tests/test_discord_commands.py`、`tests/test_discord_notifications.py`。
+  - Acceptance: 新增自動抽取入口。無工具、無槽或滿槽停用。設定頁列出任意與特定效果、七種效果、五個數值門檻與兩種素材。
+  - Acceptance: 未選齊、滿槽或所選素材不足時確認停用。所有選項狀態保留。所有組合最多五列。ID 不超過 100 字元。
+  - Acceptance: 公告成功與耗盡均只有一條文案。研究工具週期縮短 4%、50 次、250 萬能素材符合使用者範例。素材成本降低顯示負號。
+- [ ] Task 3: 互動路由、整合驗證與模組文件。
+  - Source: `src/cogs/actions.py`。
+  - Tests: `tests/test_discord_commands.py`。
+  - Docs: `docs/managers/affix-manager.md`、`docs/managers/player-manager.md`、`docs/discord/ui-renderer.md`、`docs/discord/command-handler.md`、`docs/discord/notification.md`、`docs/README.md`。
+  - Acceptance: 真實路由從設定頁到確認執行。切換任意或特定效果時保留其餘設定。操作前先 defer。使用者與 guild 沿用既有判斷。
+  - Acceptance: 重讀狀態並在交易內完成扣款與填槽。成功或耗盡後只 dispatch 一則公告。非法、缺值、過期滿槽與素材不足均不扣款、不公告。
+  - Acceptance: 真實 manager 與 SQLite 驗證兩种素材、AND 判斷、首次成功停止、第一空槽、耗盡保持空槽。既有單抽維持原規則。
+  - Acceptance: 扣款後或提交前發生錯誤時回滾素材與詞條，不送公告。兩個並行確認只能填一個空槽。第二次確認不得扣款。
+  - Acceptance: 大量未達標抽選期間，其他 SQLite 連線可以寫入。扣款次數固定為一次。抽選期間新增與減少素材均符合批次規則。
+  - Acceptance: 更新文件及 `last_reviewed`。更新 `source_paths` 為實際建立或檢查的路徑。完整測試套件通過。
 
 ## Review Issues
 
-尚無審查結果。
+- [x] [Plan/Major] 抽選不得長時間持有寫入鎖。抽選先在交易外完成。交易內只重讀狀態、一次扣款與最終填槽。
+- [x] [Plan/Major] 補上扣款後失敗、提交失敗與並行競爭的真實 SQLite 測試。
+- [x] [Plan/Minor] 素材 canonical 文件納入更新。新增自動抽取規則的交叉連結。
+- [x] [Plan] 獨立 Codex 複審結果為 Approved。
 
 ## Key Assumptions
 
-- 批次抽選保留單抽的效果與数值分布。
+- 批次抽選保留單抽的效果與數值分布。
 - Discord 使用者操作後只需要最終結果。
 - 自動抽取不消耗 AP。
