@@ -133,6 +133,15 @@ Task 1 (manager) + Task 2 (UI/events) --> Task 3 (handler/integration) --> Revie
   - Acceptance: 含失敗抽選的批次仍只扣一次總成本。單純改成逐次扣款時測試必須失敗。
   - Evidence: `UV_CACHE_DIR=/private/tmp/idlevillage-uv-cache uv run --no-project python -m unittest tests.test_affix_manager -q` — `Ran 50 tests in 0.949s`; `OK`. Output: `/private/tmp/idlevillage-task7.log`.
 
+- [ ] Task 8: 離開設定頁撤銷確認。[Review/Major]
+  - Source: `src/cogs/actions.py`。
+  - Tests: `tests/test_discord_commands.py`。
+  - Docs: `docs/discord/command-handler.md`。
+  - Acceptance: 返回詞條管理或主介面時，在首次 await 前撤銷確認。切換至其他介面也撤銷。
+  - Acceptance: 返回後重送舊 ID 不抽選、不扣款、不填槽、不公告。重新開啟設定頁取得新確認後仍可使用。
+  - Acceptance: 測試從真實 renderer 取得確認 ID。用真實 handler、SQLite 與 notification 驗證。
+  - Acceptance: 補上回歸測試並先取得失敗證據。修正後執行完整測試。
+
 ## Review Issues
 
 - [ ] [Review/Major] 返回詞條管理後，舊自動抽取確認仍可扣款並公告。`src/cogs/actions.py:607-619` 的返回路由未移除玩家確認 ID；本機實際 handler 與 SQLite 驗證返回後重送同 ID，工具素材由 2 降為 1，並送出一則公告。離開設定頁時必須撤銷未使用的確認，並加入返回後重送測試。
