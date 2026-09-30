@@ -1,6 +1,6 @@
 ---
 title: "詞條自動抽取"
-status: Ready-to-review
+status: Issues-confirmed
 created: 2026-09-30
 doc_type: change
 last_reviewed: 2026-09-30
@@ -120,6 +120,9 @@ Task 1 (manager) + Task 2 (UI/events) --> Task 3 (handler/integration) --> Revie
 
 ## Review Issues
 
+- [ ] [Review/Major] `src/cogs/actions.py:604-660` 與 `src/managers/affix_manager.py:138-175` 只用槽位判斷確認是否過期。槽 0 成功後若被清除，重送同一個 `auto_affix_confirm:...:0` 會再次扣款、填槽並公告。真實 handler、SQLite 與 mocked 公告重現兩次扣款及兩則公告；同一確認必須保持一次性。
+- [ ] [Review/Major] `tests/test_affix_manager.py:193-207` 只核對總餘額與回傳成本，無法驗證 `docs/changelogs/2026-09-30-auto-affix-extraction.md:103` 的「扣款次數固定為一次」。需直接驗證一次批次只呼叫一次所選素材扣款或只執行一次扣款 UPDATE。
+- [ ] [Review/Major] `tests/test_discord_commands.py:1620-1628` 只走「未選擇 -> 特定效果」設定序列，未覆蓋 `docs/changelogs/2026-09-30-auto-affix-extraction.md:99` 指定的任意與特定效果來回切換。需從渲染後的 custom_id 實際切換模式並斷言效果、門檻與素材來源均保留。
 - [x] [Review/Major] 每個自動抽取確認 ID 必須綁定當下第一個空槽。`test_slot_bound_confirmation_blocks_repeat_and_allows_next_slot` 驗證等級 10 的並行確認只扣一次並填槽 0；重送同 ID 不扣款、不公告；重新渲染後的槽 1 確認可成功。`test_confirmation_binds_first_empty_slot_and_stays_within_limit` 驗證最早空槽與滿槽 ID。
 - [x] [Plan/Major] 抽選不得長時間持有寫入鎖。抽選先在交易外完成。交易內只重讀狀態、一次扣款與最終填槽。
 - [x] [Plan/Major] 補上扣款後失敗、提交失敗與並行競爭的真實 SQLite 測試。
