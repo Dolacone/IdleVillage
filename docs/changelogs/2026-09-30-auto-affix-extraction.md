@@ -1,6 +1,6 @@
 ---
 title: "詞條自動抽取"
-status: Done
+status: Refactored
 created: 2026-09-30
 doc_type: change
 last_reviewed: 2026-09-30
@@ -155,6 +155,8 @@ Task 1 (manager) + Task 2 (UI/events) --> Task 3 (handler/integration) --> Revie
   - Evidence: `UV_CACHE_DIR=/private/tmp/idlevillage-uv-cache uv run --no-project python -m unittest discover -s tests -q` — `Ran 652 tests in 8.352s`; `OK`. `test_returning_to_affix_management_invalidates_pending_confirmation` and `test_main_navigation_and_slash_reopen_invalidate_before_confirmation` replay renderer-issued IDs inside navigation defer callbacks and assert revocation before the stale callback runs. `test_navigation_invalidation_is_per_user` confirms another player's ID remains valid.
 
 ## Review Issues
+
+- [ ] [PR] 公開推送與草稿 PR 等待使用者明確授權。目的地為 `Dolacone/IdleVillage` 的公開 GitHub repository。自動核准審查拒絕推送。
 
 - [x] [Review] 獨立複審沒有 Critical、Major 或 Minor 發現。`UV_CACHE_DIR=/private/tmp/idlevillage-uv-cache uv run --no-project python -m unittest discover -s tests -q` 在 Python 3.11.14、disnake 2.12.0、aiosqlite 0.22.1 執行，輸出 `Ran 652 tests in 8.278s` 與 `OK`。完整輸出見 `/private/tmp/idlevillage-review-final-2-tests.log`，逐項行號證據見 `/private/tmp/idlevillage-review-final-2.md`。
 - [x] [Review/Major] 導覽按鈕與 `/idlevillage` 必須在 defer 前撤銷確認。`test_returning_to_affix_management_invalidates_pending_confirmation` 與 `test_main_navigation_and_slash_reopen_invalidate_before_confirmation` 在 defer callback 內重送真實 renderer 確認 ID，並於 callback 前檢查 registry 已清除。
