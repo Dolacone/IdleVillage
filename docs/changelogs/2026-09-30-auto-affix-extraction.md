@@ -1,6 +1,6 @@
 ---
 title: "詞條自動抽取"
-status: Ready-to-review
+status: Issues-confirmed
 created: 2026-09-30
 doc_type: change
 last_reviewed: 2026-09-30
@@ -104,6 +104,7 @@ Task 2 (UI/events) --+
 
 ## Review Issues
 
+- [ ] [Review/Major] `src/managers/affix_manager.py:134-136,164-166`: 兩個確認若在等級 10 的兩個空槽上並行，第二次會重新選槽並再次扣款。`tests/test_discord_commands.py:1708-1722` 只測一個槽，未涵蓋此情境。實測兩次確認後素材從 4 降到 2、槽 0 與 1 均填入、公告兩則；違反 Task 3 的並行與第二次不扣款條件。
 - [x] [Plan/Major] 抽選不得長時間持有寫入鎖。抽選先在交易外完成。交易內只重讀狀態、一次扣款與最終填槽。
 - [x] [Plan/Major] 補上扣款後失敗、提交失敗與並行競爭的真實 SQLite 測試。
 - [x] [Plan/Minor] 素材 canonical 文件納入更新。新增自動抽取規則的交叉連結。
