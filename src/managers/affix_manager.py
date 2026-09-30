@@ -114,7 +114,7 @@ async def extract_affix(db, user_id: str, gear_type: str, gear_level: int, now: 
 
 async def auto_extract_affix(
     db, user_id: str, gear_type: str, gear_level: int, now: datetime, *,
-    target_affix_type=None, min_value=1, material_source="tool",
+    target_affix_type=None, min_value=1, material_source="tool", expected_slot: int | None = None,
 ) -> dict:
     """Draw until a target affix appears or the selected material budget runs out."""
     if gear_type not in GEAR_TYPES:
@@ -127,14 +127,21 @@ async def auto_extract_affix(
         raise ValueError(f"Invalid min_value: {min_value!r}")
     if material_source not in ("tool", "universal"):
         raise ValueError(f"Invalid material_source: {material_source!r}")
+    if expected_slot is not None and (
+        not isinstance(expected_slot, int) or isinstance(expected_slot, bool) or expected_slot < 0
+    ):
+        raise ValueError(f"Invalid expected_slot: {expected_slot!r}")
 
     slots = slot_count(gear_level)
     if slots == 0:
         raise ValueError(f"No affix slots unlocked at gear level {gear_level}")
     existing = await get_affixes(db, user_id, gear_type)
     filled = {a["slot_index"] for a in existing}
-    if not any(i not in filled for i in range(slots)):
+    initial_slot = next((i for i in range(slots) if i not in filled), None)
+    if initial_slot is None:
         raise ValueError("All affix slots are full; clear one before extracting")
+    if expected_slot is not None and expected_slot != initial_slot:
+        raise ValueError(f"Expected slot {expected_slot} does not match first empty slot {initial_slot}")
 
     cost_per_attempt = 1 if material_source == "tool" else 5
     initial_balance = (
@@ -164,8 +171,8 @@ async def auto_extract_affix(
     latest = await get_affixes(db, user_id, gear_type)
     latest_filled = {a["slot_index"] for a in latest}
     empty_slot = next((i for i in range(actual_slots) if i not in latest_filled), None)
-    if empty_slot is None:
-        raise ValueError("All affix slots are full; clear one before extracting")
+    if empty_slot != initial_slot:
+        raise ValueError("First empty affix slot changed during extraction")
 
     latest_balance = (
         await player_manager.get_material(db, user_id, gear_type)

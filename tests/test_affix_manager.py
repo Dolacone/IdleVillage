@@ -270,6 +270,69 @@ class TestAutoExtractAffix(DatabaseTestCase):
             await db.commit()
         self.assertEqual(result["affix"], {"slot_index": 0, "affix_type": "cycle_time_reduce", "value": 5})
 
+    async def test_expected_slot_success_fills_requested_first_slot(self):
+        async with schema.get_connection() as db:
+            with patch("random.choice", return_value="efficiency"), patch("random.randint", return_value=4):
+                result = await affix_manager.auto_extract_affix(
+                    db, USER, GEAR, 10, NOW, expected_slot=0
+                )
+            await db.commit()
+        self.assertEqual(result["affix"], {"slot_index": 0, "affix_type": "efficiency", "value": 4})
+        self.assertEqual(await self._balances(), (9_999, 0))
+
+    async def test_invalid_expected_slot_rejects_without_sampling_or_spending(self):
+        for expected_slot in (True, -1, "0"):
+            async with schema.get_connection() as db:
+                with self.subTest(expected_slot=expected_slot), \
+                     patch("random.choice") as choice, self.assertRaises(ValueError):
+                    await affix_manager.auto_extract_affix(
+                        db, USER, GEAR, 10, NOW, expected_slot=expected_slot
+                    )
+                choice.assert_not_called()
+                await db.commit()
+        self.assertEqual(await self._balances(), (10_000, 0))
+
+    async def test_stale_expected_slot_rejects_while_another_slot_is_empty(self):
+        async with schema.get_connection() as db:
+            with patch("random.choice") as choice, self.assertRaises(ValueError):
+                await affix_manager.auto_extract_affix(
+                    db, USER, GEAR, 10, NOW, expected_slot=1
+                )
+            choice.assert_not_called()
+            await db.commit()
+            affixes = await affix_manager.get_affixes(db, USER, GEAR)
+        self.assertEqual(affixes, [])
+        self.assertEqual(await self._balances(), (10_000, 0))
+
+    async def test_filled_target_during_sampling_does_not_move_to_next_slot(self):
+        async with schema.get_connection() as db:
+            await player_manager.set_material(db, USER, GEAR, 150, NOW)
+            await db.commit()
+            did_fill = False
+
+            async def fill_target(_):
+                nonlocal did_fill
+                if not did_fill:
+                    did_fill = True
+                    async with schema.get_connection() as other:
+                        await other.execute(
+                            "INSERT INTO gear_affixes (user_id, gear_type, slot_index, affix_type, value) VALUES (?,?,?,?,?)",
+                            (USER, GEAR, 0, "efficiency", 2),
+                        )
+                        await other.commit()
+
+            with patch("asyncio.sleep", side_effect=fill_target), \
+                 patch("random.choice", return_value="material_drop"), patch("random.randint", return_value=1):
+                with self.assertRaises(ValueError):
+                    await affix_manager.auto_extract_affix(
+                        db, USER, GEAR, 10, NOW, target_affix_type="efficiency", expected_slot=0
+                    )
+            await db.rollback()
+        async with schema.get_connection() as db:
+            affixes = await affix_manager.get_affixes(db, USER, GEAR)
+        self.assertEqual(affixes, [{"slot_index": 0, "affix_type": "efficiency", "value": 2}])
+        self.assertEqual(await self._balances(), (150, 0))
+
     async def test_invalid_arguments_do_not_spend(self):
         cases = [
             {"gear_type": "bad"}, {"target_affix_type": "bad"}, {"min_value": 0},

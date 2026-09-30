@@ -102,11 +102,12 @@ Task 2 (UI/events) --+
   - Acceptance: 大量未達標抽選期間，其他 SQLite 連線可以寫入。扣款次數固定為一次。抽選期間新增與減少素材均符合批次規則。
   - Evidence: `UV_CACHE_DIR=/private/tmp/idlevillage-uv-cache uv run --no-project python -m unittest discover -s tests -q` — `Ran 637 tests in 7.929s`; `OK`. Handler integration uses real SQLite, manager, renderer and notification formatting with mocked Discord transport. Live Discord interaction remains unverified.
   - Acceptance: 更新文件及 `last_reviewed`。更新 `source_paths` 為實際建立或檢查的路徑。完整測試套件通過。
-- [ ] Task 4: manager 固定本次目標槽。[Review/Major 的第一步]
+- [x] Task 4: manager 固定本次目標槽。[Review/Major 的第一步]
   - Source: `src/managers/affix_manager.py`。
   - Tests: `tests/test_affix_manager.py`。
   - Acceptance: 新增 `expected_slot`。參數無效或不符第一空槽時拒絕且不扣款。抽選完成後第一空槽改變時拒絕。
   - Acceptance: 抽選期間原目標槽被填入時不轉抽其他槽。保留原有素材、回滾及分布規則。
+  - Evidence: `UV_CACHE_DIR=/private/tmp/idlevillage-uv-cache uv run --no-project python -m unittest tests.test_affix_manager -q` — `Ran 48 tests in 0.867s`; `OK`.
 - [ ] Task 5: 確認 ID 綁定目標槽。[依賴 Task 4]
   - Source: `src/cogs/ui_renderer.py`、`src/cogs/actions.py`。
   - Tests: `tests/test_discord_commands.py`。
