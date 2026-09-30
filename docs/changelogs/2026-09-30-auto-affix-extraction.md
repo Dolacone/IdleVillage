@@ -133,7 +133,7 @@ Task 1 (manager) + Task 2 (UI/events) --> Task 3 (handler/integration) --> Revie
   - Acceptance: 含失敗抽選的批次仍只扣一次總成本。單純改成逐次扣款時測試必須失敗。
   - Evidence: `UV_CACHE_DIR=/private/tmp/idlevillage-uv-cache uv run --no-project python -m unittest tests.test_affix_manager -q` — `Ran 50 tests in 0.949s`; `OK`. Output: `/private/tmp/idlevillage-task7.log`.
 
-- [ ] Task 8: 離開設定頁撤銷確認。[Review/Major]
+- [x] Task 8: 離開設定頁撤銷確認。[Review/Major]
   - Source: `src/cogs/actions.py`。
   - Tests: `tests/test_discord_commands.py`。
   - Docs: `docs/discord/command-handler.md`。
@@ -141,10 +141,11 @@ Task 1 (manager) + Task 2 (UI/events) --> Task 3 (handler/integration) --> Revie
   - Acceptance: 返回後重送舊 ID 不抽選、不扣款、不填槽、不公告。重新開啟設定頁取得新確認後仍可使用。
   - Acceptance: 測試從真實 renderer 取得確認 ID。用真實 handler、SQLite 與 notification 驗證。
   - Acceptance: 補上回歸測試並先取得失敗證據。修正後執行完整測試。
+  - Evidence: `UV_CACHE_DIR=/private/tmp/idlevillage-uv-cache uv run --no-project python -m unittest discover -s tests -q` — `Ran 652 tests in 8.495s`; `OK`. `test_returning_to_affix_management_invalidates_pending_confirmation`, `test_main_navigation_and_slash_reopen_invalidate_before_confirmation`, `test_navigation_invalidation_is_per_user`, and `test_selector_change_invalidates_confirmation_before_defer` verify real handler navigation, SQLite, renderer IDs and notification dispatch.
 
 ## Review Issues
 
-- [ ] [Review/Major] 返回詞條管理後，舊自動抽取確認仍可扣款並公告。`src/cogs/actions.py:607-619` 的返回路由未移除玩家確認 ID；本機實際 handler 與 SQLite 驗證返回後重送同 ID，工具素材由 2 降為 1，並送出一則公告。離開設定頁時必須撤銷未使用的確認，並加入返回後重送測試。
+- [x] [Review/Major] 離開自動抽取設定時，在首次 await 前撤銷該玩家未使用的確認。`test_returning_to_affix_management_invalidates_pending_confirmation`, `test_main_navigation_and_slash_reopen_invalidate_before_confirmation`, `test_navigation_invalidation_is_per_user`, and `test_selector_change_invalidates_confirmation_before_defer` 驗證導覽、設定選單與 slash reopen 後的確認失效；玩家間確認彼此獨立。
 - [x] [Review/Major] 一次性確認必須綁定玩家目前 renderer 產生的完整 ID，並在首次 await 前消耗。`test_confirmation_replay_after_clear_is_rejected_and_new_render_works` 驗證成功後清槽再重送不扣款、不公告；`test_exhausted_confirmation_replay_after_refill_is_rejected` 驗證耗盡後加素材仍拒絕舊 ID。
 - [x] [Review/Major] 批次扣款次數固定為一次。`test_tool_batch_calls_real_debit_once_after_rejected_draws` 與 `test_universal_exhaustion_calls_real_debit_once_for_total_cost` 使用 wraps 執行真實素材扣款與 SQLite，並檢查所選扣款只呼叫一次、金額等於總成本、另一來源未呼叫及最終餘額。
 - [x] [Review/Major] 任意與特定效果切換必須由當前 renderer custom_id 驅動，並保留效果、門檻與素材來源。`test_kind_switch_round_trip_uses_rendered_dropdown_ids_and_retains_settings` 驗證特定 -> 任意 -> 特定切換期間資料庫素材不變。

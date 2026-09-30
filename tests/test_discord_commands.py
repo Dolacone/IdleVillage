@@ -1901,6 +1901,121 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (1,))
         self.assertEqual(sent.await_count, 2)
 
+    async def test_returning_to_affix_management_invalidates_pending_confirmation(self):
+        from cogs.actions import ActionsCog
+        await self._player(tool=2)
+        sent = AsyncMock()
+        bot = MagicMock()
+        bot.get_channel.return_value.send = sent
+        cog = ActionsCog(bot)
+        cid, _ = await self._render_confirm(cog)
+        await cog.on_button_click(self._inter("back_to_affix:research"))
+        with patch("cogs.actions.affix_manager.random.choice", return_value="efficiency") as draw_type, patch(
+            "cogs.actions.affix_manager.random.randint", return_value=1
+        ) as draw_value:
+            stale_click = self._inter(cid)
+            await cog.on_button_click(stale_click)
+        draw_type.assert_not_called()
+        draw_value.assert_not_called()
+        self.assertTrue(stale_click.response.defer.awaited)
+        self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (2,))
+        self.assertIsNone(await self.fetchone("SELECT * FROM gear_affixes WHERE user_id='12345'"))
+        self.assertEqual(sent.await_count, 0)
+        new_id, _ = await self._render_confirm(cog)
+        self.assertNotEqual(new_id, cid)
+        with patch("cogs.actions.affix_manager.random.choice", return_value="efficiency"), patch(
+            "cogs.actions.affix_manager.random.randint", return_value=1
+        ):
+            await cog.on_button_click(self._inter(new_id))
+        self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (1,))
+        self.assertEqual(await self.fetchone("SELECT slot_index FROM gear_affixes WHERE user_id='12345'"), (0,))
+        self.assertEqual(sent.await_count, 1)
+
+    async def test_selector_change_invalidates_confirmation_before_defer(self):
+        from cogs.actions import ActionsCog
+        await self._player(tool=2)
+        sent = AsyncMock()
+        bot = MagicMock()
+        bot.get_channel.return_value.send = sent
+        cog = ActionsCog(bot)
+        cid, page = await self._render_confirm(cog)
+        selector_id = self._component_id(page, "auto_affix_kind:")
+        selector = self._inter(selector_id, "specific")
+        original_defer = selector.response.defer
+
+        async def assert_consumed_before_defer(*args, **kwargs):
+            self.assertNotIn("12345", cog._auto_affix_confirmations)
+            await original_defer(*args, **kwargs)
+
+        selector.response.defer = AsyncMock(side_effect=assert_consumed_before_defer)
+        await cog.on_dropdown(selector)
+        with patch("cogs.actions.affix_manager.random.choice", return_value="efficiency") as draw:
+            await cog.on_button_click(self._inter(cid))
+        draw.assert_not_called()
+        self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (2,))
+        self.assertIsNone(await self.fetchone("SELECT * FROM gear_affixes WHERE user_id='12345'"))
+        self.assertEqual(sent.await_count, 0)
+
+    async def test_main_navigation_and_slash_reopen_invalidate_before_confirmation(self):
+        from cogs.actions import ActionsCog
+        await self._player(tool=3)
+        sent = AsyncMock()
+        bot = MagicMock()
+        bot.get_channel.return_value.send = sent
+        cog = ActionsCog(bot)
+        first_id, _ = await self._render_confirm(cog)
+        await cog.on_button_click(self._inter("back_to_main"))
+        with patch("cogs.actions.affix_manager.random.choice", return_value="efficiency") as draw_type:
+            await cog.on_button_click(self._inter(first_id))
+        draw_type.assert_not_called()
+        self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (3,))
+
+        current_id, _ = await self._render_confirm(cog)
+        slash_inter = self._inter("unused")
+        await ActionsCog.idlevillage.callback(cog, slash_inter)
+        with patch("cogs.actions.affix_manager.random.choice", return_value="efficiency") as reopened_draw:
+            await cog.on_button_click(self._inter(current_id))
+        reopened_draw.assert_not_called()
+        self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (3,))
+        self.assertEqual(sent.await_count, 0)
+
+    async def test_navigation_invalidation_is_per_user(self):
+        from cogs.actions import ActionsCog
+        from core.utils import dt_str
+        await self._player(tool=2)
+        now = dt_str(datetime.now(timezone.utc))
+        async with schema.get_connection() as db:
+            await db.execute(
+                "INSERT INTO players (user_id, created_at, updated_at, ap_full_time, materials_research, gear_research) VALUES (?, ?, ?, ?, ?, ?)",
+                ("67890", now, now, now, 2, 5),
+            )
+            await db.commit()
+        sent = AsyncMock()
+        bot = MagicMock()
+        bot.get_channel.return_value.send = sent
+        cog = ActionsCog(bot)
+        current_id, _ = await self._render_confirm(cog)
+        other_page = self._inter("open_auto_affix:research")
+        other_page.user.id = 67890
+        await cog.on_button_click(other_page)
+        await cog._render_auto_affix(other_page, "research", target_mode="any", min_value=1, material_source="tool")
+        other_id = self._component_id(other_page, "auto_affix_run:")
+
+        await cog.on_button_click(self._inter("back_to_affix:research"))
+        with patch("cogs.actions.affix_manager.random.choice", return_value="efficiency") as draw_type:
+            await cog.on_button_click(self._inter(current_id))
+        draw_type.assert_not_called()
+        with patch("cogs.actions.affix_manager.random.choice", return_value="efficiency"), patch(
+            "cogs.actions.affix_manager.random.randint", return_value=1
+        ):
+            other_click = self._inter(other_id)
+            other_click.user.id = 67890
+            await cog.on_button_click(other_click)
+        self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (2,))
+        self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='67890'"), (1,))
+        self.assertEqual(await self.fetchall("SELECT user_id, slot_index FROM gear_affixes"), [("67890", 0)])
+        self.assertEqual(sent.await_count, 1)
+
     async def test_obsolete_other_user_and_tampered_ids_do_not_consume_current_confirmation(self):
         from cogs.actions import ActionsCog
         await self._player(tool=2)

@@ -389,6 +389,7 @@ class ActionsCog(commands.Cog):
             return await inter.response.send_message(
                 "此指令僅限指定伺服器使用。", ephemeral=True
             )
+        self._auto_affix_confirmations.pop(str(inter.user.id), None)
         await inter.response.defer(ephemeral=True)
         async with get_connection() as db:
             rankings = await player_manager.get_gear_rankings(db)
@@ -415,6 +416,7 @@ class ActionsCog(commands.Cog):
             return await inter.response.send_message(
                 "此指令僅限指定伺服器使用。", ephemeral=True
             )
+        self._auto_affix_confirmations.pop(str(inter.user.id), None)
         await inter.response.defer(ephemeral=True)
         await self._render_main(inter)
 
@@ -427,6 +429,8 @@ class ActionsCog(commands.Cog):
             return
 
         user_id = str(inter.user.id)
+        if not cid.startswith("auto_affix_run:"):
+            self._auto_affix_confirmations.pop(user_id, None)
 
         if cid == "burst_execute":
             await inter.response.defer()
@@ -763,6 +767,8 @@ class ActionsCog(commands.Cog):
         if not _is_own_modal(cid):
             return
 
+        self._auto_affix_confirmations.pop(str(inter.user.id), None)
+
         if cid.startswith("modal_sacrifice:"):
             gear_type = cid.split(":", 1)[1]
             if gear_type not in _VALID_GEAR_TYPES:
@@ -792,6 +798,7 @@ class ActionsCog(commands.Cog):
 
         value = inter.values[0] if inter.values else None
         user_id = str(inter.user.id)
+        self._auto_affix_confirmations.pop(user_id, None)
         await inter.response.defer()
 
         if cid == "action_select":

@@ -76,7 +76,7 @@ source_paths:
 
 ### 自動抽取確認
 
-每次設定畫面渲染都產生 8 字元 URL-safe token，並將 renderer 輸出的完整確認 ID 存入該玩家目前確認表。確認 ID 必須符合 `auto_affix_run:{gear}:{mode}:{effect}:{value}:{source}:{expected_slot}:{token}` 且與玩家目前 ID 完全相同。handler 在第一次 await 前消耗 ID。重複、過期、跨玩家或欄位被改寫的 ID 只 defer 並返回。有效 ID 還須包含非負整數 `expected_slot`。目標槽過期與素材不足時回滾並重新渲染新 ID。Manager 在抽選完成後才開啟寫入交易；handler 提交成功後才 dispatch `affix_auto_extracted`。
+每次設定畫面渲染都產生 8 字元 URL-safe token，並將 renderer 輸出的完整確認 ID 存入該玩家目前確認表。確認 ID 必須符合 `auto_affix_run:{gear}:{mode}:{effect}:{value}:{source}:{expected_slot}:{token}` 且與玩家目前 ID 完全相同。handler 在第一次 await 前消耗 ID。重複、過期、跨玩家或欄位被改寫的 ID 只 defer 並返回。返回詞條管理、主介面、其他識別介面、送出設定選單、modal 或重新呼叫 `/idlevillage` 時，handler 在第一次 await 前撤銷該玩家尚未使用的確認。有效 ID 還須包含非負整數 `expected_slot`。目標槽過期與素材不足時回滾並重新渲染新 ID。Manager 在抽選完成後才開啟寫入交易；handler 提交成功後才 dispatch `affix_auto_extracted`。
 
 ### 管理員介面（資源管理）
 | 元件 ID | 觸發條件 | 處理邏輯 |
