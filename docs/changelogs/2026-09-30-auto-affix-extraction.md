@@ -12,6 +12,12 @@ source_paths:
   - tests/test_affix_manager.py
   - tests/test_discord_commands.py
   - tests/test_discord_notifications.py
+  - docs/managers/affix-manager.md
+  - docs/managers/player-manager.md
+  - docs/discord/ui-renderer.md
+  - docs/discord/command-handler.md
+  - docs/discord/notification.md
+  - docs/README.md
 scope: "Tracks automatic affix extraction from design through review."
 ---
 
@@ -84,15 +90,16 @@ Task 2 (UI/events) --+
   - Acceptance: 新增自動抽取入口。無工具、無槽或滿槽停用。設定頁列出任意與特定效果、七種效果、五個數值門檻與兩種素材。
   - Acceptance: 未選齊、滿槽或所選素材不足時確認停用。所有選項狀態保留。所有組合最多五列。ID 不超過 100 字元。
   - Acceptance: 公告成功與耗盡均只有一條文案。研究工具週期縮短 4%、50 次、250 萬能素材符合使用者範例。素材成本降低顯示負號。
-- [ ] Task 3: 互動路由、整合驗證與模組文件。
+- [x] Task 3: 互動路由、整合驗證與模組文件。
   - Source: `src/cogs/actions.py`。
   - Tests: `tests/test_discord_commands.py`。
   - Docs: `docs/managers/affix-manager.md`、`docs/managers/player-manager.md`、`docs/discord/ui-renderer.md`、`docs/discord/command-handler.md`、`docs/discord/notification.md`、`docs/README.md`。
   - Acceptance: 真實路由從設定頁到確認執行。切換任意或特定效果時保留其餘設定。操作前先 defer。使用者與 guild 沿用既有判斷。
   - Acceptance: 重讀狀態並在交易內完成扣款與填槽。成功或耗盡後只 dispatch 一則公告。非法、缺值、過期滿槽與素材不足均不扣款、不公告。
-  - Acceptance: 真實 manager 與 SQLite 驗證兩种素材、AND 判斷、首次成功停止、第一空槽、耗盡保持空槽。既有單抽維持原規則。
+  - Acceptance: 真實 manager 與 SQLite 驗證兩種素材、AND 判斷、首次成功停止、第一空槽、耗盡保持空槽。既有單抽維持原規則。
   - Acceptance: 扣款後或提交前發生錯誤時回滾素材與詞條，不送公告。兩個並行確認只能填一個空槽。第二次確認不得扣款。
   - Acceptance: 大量未達標抽選期間，其他 SQLite 連線可以寫入。扣款次數固定為一次。抽選期間新增與減少素材均符合批次規則。
+  - Evidence: `UV_CACHE_DIR=/private/tmp/idlevillage-uv-cache uv run --no-project python -m unittest discover -s tests -q` — `Ran 637 tests in 7.929s`; `OK`. Handler integration uses real SQLite, manager, renderer and notification formatting with mocked Discord transport. Live Discord interaction remains unverified.
   - Acceptance: 更新文件及 `last_reviewed`。更新 `source_paths` 為實際建立或檢查的路徑。完整測試套件通過。
 
 ## Review Issues

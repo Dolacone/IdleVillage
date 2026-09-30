@@ -1565,6 +1565,197 @@ class TestAffixRouteRegistration(unittest.TestCase):
         self.assertTrue(_is_own_button("back_to_gear:gathering"))
 
 
+class TestAutoAffixHandlerIntegration(DatabaseTestCase):
+    async def _player(self, *, tool=0, universal=0, level=5):
+        from database.schema import get_connection
+        from core.utils import dt_str
+        now = dt_str(datetime.now(timezone.utc))
+        async with get_connection() as db:
+            await db.execute(
+                "INSERT INTO players (user_id, created_at, updated_at, ap_full_time, materials_research, materials_universal, gear_research) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                ("12345", now, now, now, tool, universal, level),
+            )
+            await db.commit()
+
+    def _inter(self, cid, value=None):
+        inter = MagicMock()
+        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+        inter.user.id = 12345
+        inter.user.display_name = "TestUser"
+        inter.component.custom_id = cid
+        inter.values = [value] if value is not None else []
+        inter.response.defer = AsyncMock()
+        inter.edit_original_response = AsyncMock()
+        return inter
+
+    async def _select(self, cog, prefix, state, selected):
+        inter = self._inter(f"{prefix}:{state}", selected)
+        await cog.on_dropdown(inter)
+        return inter
+
+    async def test_full_configuration_success_uses_real_manager_renderer_and_notification(self):
+        from cogs.actions import ActionsCog
+        from database.schema import get_connection
+        await self._player(tool=3)
+        sent = AsyncMock()
+        bot = MagicMock()
+        bot.get_channel.return_value.send = sent
+        cog = ActionsCog(bot)
+        state = "research:none:none:none:none"
+        await self._select(cog, "auto_affix_kind", state, "specific")
+        state = "research:specific:none:none:none"
+        await self._select(cog, "auto_affix_effect", state, "cycle_time_reduce")
+        state = "research:specific:cycle_time_reduce:none:none"
+        await self._select(cog, "auto_affix_value", state, "4")
+        state = "research:specific:cycle_time_reduce:4:none"
+        last = await self._select(cog, "auto_affix_material", state, "tool")
+        self.assertIn("research:specific:cycle_time_reduce:4:tool", last.edit_original_response.call_args.kwargs["components"][0].children[0].custom_id)
+        with patch("cogs.actions.affix_manager.random.choice", return_value="cycle_time_reduce"), patch(
+            "cogs.actions.affix_manager.random.randint", return_value=4
+        ):
+            confirm = self._inter("auto_affix_confirm:research:specific:cycle_time_reduce:4:tool")
+            await cog.on_button_click(confirm)
+        self.assertTrue(confirm.response.defer.awaited)
+        self.assertEqual(sent.await_count, 1)
+        self.assertIn("抽到詞條：行動週期縮短（+4%）", sent.call_args.args[0])
+        async with get_connection() as db:
+            self.assertEqual(await (await db.execute("SELECT materials_research FROM players WHERE user_id='12345'")).fetchone(), (2,))
+            self.assertEqual(await (await db.execute("SELECT slot_index, affix_type, value FROM gear_affixes WHERE user_id='12345'")).fetchone(), (0, "cycle_time_reduce", 4))
+
+    async def test_any_mode_ignores_stale_effect_and_stops_at_first_match(self):
+        from cogs.actions import ActionsCog
+        from database.schema import get_connection
+        await self._player(tool=5)
+        sent = AsyncMock()
+        bot = MagicMock()
+        bot.get_channel.return_value.send = sent
+        cog = ActionsCog(bot)
+        with patch("cogs.actions.affix_manager.random.choice", side_effect=["efficiency", "cycle_time_reduce"]), patch(
+            "cogs.actions.affix_manager.random.randint", side_effect=[1, 3]
+        ):
+            await cog.on_button_click(self._inter("auto_affix_confirm:research:any:upgrade_success:3:tool"))
+        self.assertEqual(sent.await_count, 1)
+        async with get_connection() as db:
+            self.assertEqual(await (await db.execute("SELECT materials_research FROM players WHERE user_id='12345'")).fetchone(), (3,))
+            self.assertEqual(await (await db.execute("SELECT affix_type, value FROM gear_affixes WHERE user_id='12345'")).fetchone(), ("cycle_time_reduce", 3))
+
+    async def test_incomplete_and_malformed_confirmations_do_not_spend_or_announce(self):
+        from cogs.actions import ActionsCog
+        await self._player(tool=3)
+        bot = MagicMock()
+        sent = AsyncMock()
+        bot.get_channel.return_value.send = sent
+        cog = ActionsCog(bot)
+        for cid in ("auto_affix_confirm:research:none:none:none:none", "auto_affix_confirm:research:any:bogus:1:tool", "auto_affix_confirm:research:any:none:1:tool:extra"):
+            await cog.on_button_click(self._inter(cid))
+        malformed_select = self._inter("auto_affix_value:research:any:none:1:tool")
+        malformed_select.values = []
+        await cog.on_dropdown(malformed_select)
+        self.assertEqual(sent.await_count, 0)
+        self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (3,))
+
+    async def test_universal_exhaustion_keeps_remainder_and_emits_one_summary(self):
+        from cogs.actions import ActionsCog
+        await self._player(tool=8, universal=14)
+        sent = AsyncMock()
+        bot = MagicMock()
+        bot.get_channel.return_value.send = sent
+        cog = ActionsCog(bot)
+        with patch("cogs.actions.affix_manager.random.choice", return_value="efficiency"), patch(
+            "cogs.actions.affix_manager.random.randint", return_value=1
+        ):
+            await cog.on_button_click(self._inter("auto_affix_confirm:research:any:none:2:universal"))
+        self.assertEqual(sent.await_count, 1)
+        self.assertIn("未抽到目標詞條，抽選次數2 (10萬能素材)", sent.call_args.args[0])
+        self.assertEqual(await self.fetchone("SELECT materials_research, materials_universal FROM players WHERE user_id='12345'"), (8, 4))
+        self.assertIsNone(await self.fetchone("SELECT * FROM gear_affixes WHERE user_id='12345'"))
+
+    async def test_specific_requires_both_effect_and_threshold(self):
+        from cogs.actions import ActionsCog
+        await self._player(tool=2)
+        sent = AsyncMock()
+        bot = MagicMock()
+        bot.get_channel.return_value.send = sent
+        with patch("cogs.actions.affix_manager.random.choice", side_effect=["efficiency", "upgrade_success"]), patch(
+            "cogs.actions.affix_manager.random.randint", side_effect=[1, 5]
+        ):
+            await ActionsCog(bot).on_button_click(self._inter("auto_affix_confirm:research:specific:efficiency:2:tool"))
+        self.assertEqual(sent.await_count, 1)
+        self.assertIn("未抽到目標詞條，抽選次數2 (2工具素材)", sent.call_args.args[0])
+        self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (0,))
+        self.assertIsNone(await self.fetchone("SELECT * FROM gear_affixes WHERE user_id='12345'"))
+
+    async def test_full_slot_and_selected_source_shortage_reject_without_fallback(self):
+        from cogs.actions import ActionsCog
+        await self._player(tool=0, universal=20)
+        sent = AsyncMock()
+        bot = MagicMock()
+        bot.get_channel.return_value.send = sent
+        async with schema.get_connection() as db:
+            await db.execute("INSERT INTO gear_affixes VALUES ('12345', 'research', 0, 'efficiency', 2)")
+            await db.commit()
+        cog = ActionsCog(bot)
+        await cog.on_button_click(self._inter("auto_affix_confirm:research:any:none:1:universal"))
+        self.assertEqual(await self.fetchone("SELECT materials_universal FROM players WHERE user_id='12345'"), (20,))
+        self.assertEqual(await self.fetchone("SELECT COUNT(*) FROM gear_affixes WHERE user_id='12345'"), (1,))
+        async with schema.get_connection() as db:
+            await db.execute("DELETE FROM gear_affixes WHERE user_id='12345'")
+            await db.commit()
+        await cog.on_button_click(self._inter("auto_affix_confirm:research:any:none:1:tool"))
+        self.assertEqual(await self.fetchone("SELECT materials_universal, materials_research FROM players WHERE user_id='12345'"), (20, 0))
+        self.assertEqual(sent.await_count, 0)
+
+    async def test_parallel_confirmations_pay_for_only_one_empty_slot(self):
+        from cogs.actions import ActionsCog
+        await self._player(tool=4)
+        sent = AsyncMock()
+        bot = MagicMock()
+        bot.get_channel.return_value.send = sent
+        cog = ActionsCog(bot)
+        cid = "auto_affix_confirm:research:any:none:1:tool"
+        with patch("cogs.actions.affix_manager.random.choice", return_value="efficiency"), patch(
+            "cogs.actions.affix_manager.random.randint", return_value=1
+        ):
+            await __import__("asyncio").gather(cog.on_button_click(self._inter(cid)), cog.on_button_click(self._inter(cid)))
+        self.assertEqual(sent.await_count, 1)
+        self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (3,))
+        self.assertEqual(await self.fetchone("SELECT COUNT(*) FROM gear_affixes WHERE user_id='12345'"), (1,))
+
+    async def test_failure_after_real_deduction_rolls_back_and_sends_nothing(self):
+        from cogs.actions import ActionsCog
+        from managers import player_manager
+        await self._player(tool=3)
+        original_spend = player_manager.spend_material
+        sent = AsyncMock()
+        bot = MagicMock()
+        bot.get_channel.return_value.send = sent
+        async def deduct_then_fail(db, user_id, gear_type, amount, now):
+            await original_spend(db, user_id, gear_type, amount, now)
+            raise RuntimeError("injected after deduction")
+        with patch("cogs.actions.affix_manager.random.choice", return_value="efficiency"), patch(
+            "cogs.actions.affix_manager.random.randint", return_value=1
+        ), patch("managers.player_manager.spend_material", new=deduct_then_fail):
+            await ActionsCog(bot).on_button_click(self._inter("auto_affix_confirm:research:any:none:1:tool"))
+        self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (3,))
+        self.assertIsNone(await self.fetchone("SELECT * FROM gear_affixes WHERE user_id='12345'"))
+        self.assertEqual(sent.await_count, 0)
+
+    async def test_commit_failure_rolls_back_and_sends_nothing(self):
+        import aiosqlite
+        from cogs.actions import ActionsCog
+        await self._player(tool=3)
+        sent = AsyncMock()
+        bot = MagicMock()
+        bot.get_channel.return_value.send = sent
+        with patch("cogs.actions.affix_manager.random.choice", return_value="efficiency"), patch(
+            "cogs.actions.affix_manager.random.randint", return_value=1
+        ), patch.object(aiosqlite.core.Connection, "commit", new=AsyncMock(side_effect=RuntimeError("injected commit failure"))):
+            await ActionsCog(bot).on_button_click(self._inter("auto_affix_confirm:research:any:none:1:tool"))
+        self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (3,))
+        self.assertIsNone(await self.fetchone("SELECT * FROM gear_affixes WHERE user_id='12345'"))
+        self.assertEqual(sent.await_count, 0)
+
+
 class TestAutoToolRouteRegistration(unittest.TestCase):
     """Auto-tool interface interaction routes are registered."""
 

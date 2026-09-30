@@ -1,7 +1,7 @@
 ---
 title: IdleVillage v2 Preview SSOT Map
 doc_type: index
-last_reviewed: 2026-07-17
+last_reviewed: 2026-09-30
 source_paths: []
 scope: "Documentation entry point. All repository docs are reachable from this index."
 ---
@@ -31,6 +31,7 @@ This directory is the v2 design preview. v2 is a fresh restart and replaces v1 g
 | Auto-tool background action streams | `managers/auto-tool-manager.md` |
 | Gear upgrade rates, pity, costs | `managers/gear-manager.md` |
 | Tool affix slots, extraction, bonuses | `managers/affix-manager.md` |
+| Automatic affix extraction change record | `changelogs/2026-09-30-auto-affix-extraction.md` |
 | Village resources | `managers/resource-manager.md` |
 | SQLite schema | `db-schema.md` |
 | Slash command routing | `discord/command-handler.md` |

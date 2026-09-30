@@ -1,7 +1,7 @@
 ---
 title: "Module: command-handler"
 doc_type: module
-last_reviewed: 2026-09-26
+last_reviewed: 2026-09-30
 source_paths:
   - src/cogs/actions.py
   - src/cogs/general.py
@@ -69,6 +69,14 @@ source_paths:
 | `affix_extract:{gear_type}` | 點擊抽取詞條 | 消耗 `AFFIX_EXTRACT_COST` 個素材（先扣對應素材，不足由萬能素材補足），隨機填入第一個空槽 |
 | `affix_clear:{gear_type}:{slot_index}` | 點擊清除詞條 | 消耗 `AFFIX_CLEAR_COST` 個素材（先扣對應素材，不足由萬能素材補足），清除指定槽詞條 |
 | `back_to_gear:{gear_type}` | 點擊返回 | 回到工具強化子選單 |
+| `open_auto_affix:{gear_type}` | 開啟自動抽取 | 載入等級、槽位與兩類素材持有量 |
+| `auto_affix_kind/effect/value/material:{gear}:{mode}:{effect}:{value}:{source}` | 選擇設定 | 替換所選欄位並保留其他設定 |
+| `auto_affix_confirm:{gear}:{mode}:{effect}:{value}:{source}` | 確認批次 | 延後回應，呼叫 affix-manager；交易提交後發送一則摘要 |
+| `back_to_affix:{gear_type}` | 返回詞條管理 | 返回詞條管理畫面 |
+
+### 自動抽取確認
+
+確認時驗證 custom_id 的欄位數與每個值。缺值、非法值、過期滿槽與素材不足時回滾或不開始交易，顯示錯誤並重新渲染設定畫面。Manager 在抽選完成後才開啟寫入交易；handler 提交成功後才 dispatch `affix_auto_extracted`。
 
 ### 管理員介面（資源管理）
 | 元件 ID | 觸發條件 | 處理邏輯 |
@@ -101,6 +109,8 @@ source_paths:
 - 公告指令回應為 Public。
 
 ## Changelog
+
+- 2026-09-30: 新增自動抽取設定選單、確認與返回路由。成本和公告格式分別由 affix-manager 與 notification 擁有。
 
 - 2026-08-15: `open_trial_start` 改為顯示動態目標選單。新增 `trial_target_select` 與 `trial_target_page:{page}` 路由。選取目標後才原子開啟試煉。
 - 2026-07-20: Auto-tool routes reworked for pay-as-you-go: `auto_tool_count_select` replaced by `auto_tool_add_select` / `auto_tool_sub_select`; `auto_tool_confirm:{tool}:{delta}:{target}` carries a signed hours delta routed to `start` / `add_time` / `subtract_time`. See `managers/auto-tool-manager.md`.

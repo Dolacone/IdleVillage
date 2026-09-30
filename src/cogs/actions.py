@@ -9,6 +9,8 @@ from cogs.ui_renderer import (
     UI_BUILDING_TARGETS,
     build_affix_components,
     build_affix_embed,
+    build_auto_affix_components,
+    build_auto_affix_embed,
     build_auto_tool_components,
     build_auto_tool_embed,
     build_gear_components,
@@ -28,13 +30,32 @@ from database.schema import get_connection
 from managers import affix_manager, auto_tool_manager, building_manager, gear_manager, player_manager, trial_manager
 
 _OWN_BUTTONS = frozenset({"burst_execute", "open_gear_upgrade", "open_trial_start", "open_auto_tool", "back_to_main"})
-_OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:", "clear_affix:", "sacrifice_material:", "open_affix_mgmt:", "affix_extract:", "affix_clear:", "back_to_gear:", "auto_tool_confirm:", "trial_target_page:")
+_OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:", "clear_affix:", "sacrifice_material:", "open_affix_mgmt:", "affix_extract:", "affix_clear:", "back_to_gear:", "auto_tool_confirm:", "trial_target_page:", "open_auto_affix:", "back_to_affix:", "auto_affix_confirm:")
 _OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "gear_type_select", "affix_gear_select", "auto_tool_type_select", "trial_target_select"})
-_OWN_DROPDOWN_PREFIXES = ("upgrade_mode_select:", "affix_slot_select:", "auto_tool_target_select:", "auto_tool_add_select:", "auto_tool_sub_select:")
+_OWN_DROPDOWN_PREFIXES = ("upgrade_mode_select:", "affix_slot_select:", "auto_tool_target_select:", "auto_tool_add_select:", "auto_tool_sub_select:", "auto_affix_kind:", "auto_affix_effect:", "auto_affix_value:", "auto_affix_material:")
 _OWN_MODAL_PREFIXES = ("modal_sacrifice:",)
 _VALID_GEAR_TYPES = frozenset({"gathering", "building", "combat", "research"})
 _VALID_ACTIONS = frozenset({"gathering", "building", "combat", "research"})
 _VALID_UPGRADE_MODES = frozenset(gear_manager.UPGRADE_MODES)
+_VALID_AUTO_AFFIX_MODES = frozenset({"none", "any", "specific"})
+_VALID_AFFIX_TYPES = frozenset(affix_manager.AFFIX_TYPES)
+_VALID_AUTO_AFFIX_VALUES = frozenset({"1", "2", "3", "4", "5"})
+_VALID_AUTO_AFFIX_SOURCES = frozenset({"none", "tool", "universal"})
+
+
+def _parse_auto_affix_state(parts: list[str]) -> tuple[str, str, str, str, str] | None:
+    if len(parts) != 6:
+        return None
+    gear, mode, effect, value, source = parts[1:]
+    if gear not in (*_VALID_GEAR_TYPES, "none") or mode not in _VALID_AUTO_AFFIX_MODES:
+        return None
+    if effect != "none" and effect not in _VALID_AFFIX_TYPES:
+        return None
+    if value != "none" and value not in _VALID_AUTO_AFFIX_VALUES:
+        return None
+    if source not in _VALID_AUTO_AFFIX_SOURCES:
+        return None
+    return gear, mode, effect, value, source
 
 
 def _is_own_button(cid: str) -> bool:
@@ -244,6 +265,31 @@ class ActionsCog(commands.Cog):
         )
         components = build_affix_components(
             gear_type, player_gear, upgrade_info["gear_cap"], affixes, max_slots, selected_slot=selected_slot
+        )
+        await inter.edit_original_response(embed=embed, components=components)
+
+    async def _render_auto_affix(
+        self, inter, gear_type: str | None, *, target_mode: str | None = None,
+        target_affix_type: str | None = None, min_value: int | None = None,
+        material_source: str | None = None, error: str | None = None,
+    ) -> None:
+        user_id = str(inter.user.id)
+        materials = universal_materials = max_slots = 0
+        affixes = []
+        if gear_type in _VALID_GEAR_TYPES:
+            async with get_connection() as db:
+                gear_level = await player_manager.get_gear_level(db, user_id, gear_type)
+                max_slots = affix_manager.slot_count(gear_level)
+                affixes = await affix_manager.get_affixes(db, user_id, gear_type)
+                materials = await player_manager.get_material(db, user_id, gear_type)
+                universal_materials = await player_manager.get_universal_material(db, user_id)
+        embed = build_auto_affix_embed(
+            gear_type, materials, universal_materials, max_slots, affixes,
+            target_mode, target_affix_type, min_value, material_source, error,
+        )
+        components = build_auto_affix_components(
+            gear_type, materials, universal_materials, max_slots, affixes,
+            target_mode, target_affix_type, min_value, material_source, error,
         )
         await inter.edit_original_response(embed=embed, components=components)
 
@@ -541,6 +587,75 @@ class ActionsCog(commands.Cog):
             await inter.response.defer()
             await self._render_affix(inter, None)
 
+        elif cid.startswith("open_auto_affix:"):
+            parts = cid.split(":")
+            if len(parts) != 2 or parts[1] not in (*_VALID_GEAR_TYPES, "none"):
+                return
+            await inter.response.defer()
+            await self._render_auto_affix(inter, None if parts[1] == "none" else parts[1])
+
+        elif cid.startswith("back_to_affix:"):
+            parts = cid.split(":")
+            if len(parts) != 2 or parts[1] not in (*_VALID_GEAR_TYPES, "none"):
+                return
+            await inter.response.defer()
+            await self._render_affix(inter, None if parts[1] == "none" else parts[1])
+
+        elif cid.startswith("auto_affix_confirm:"):
+            state = _parse_auto_affix_state(cid.split(":"))
+            if state is None:
+                await inter.response.defer()
+                gear = cid.split(":")[1] if len(cid.split(":")) > 1 else "none"
+                gear = gear if gear in _VALID_GEAR_TYPES else None
+                await self._render_auto_affix(inter, gear, error="⚠️ 設定無效，請重新選擇。")
+                return
+            gear, mode, effect, value, source = state
+            complete = (
+                gear in _VALID_GEAR_TYPES and mode in {"any", "specific"}
+                and value in _VALID_AUTO_AFFIX_VALUES and source in {"tool", "universal"}
+                and (mode == "any" or effect in _VALID_AFFIX_TYPES)
+            )
+            if not complete:
+                await inter.response.defer()
+                await self._render_auto_affix(
+                    inter, gear if gear in _VALID_GEAR_TYPES else None,
+                    target_mode=mode if mode != "none" else None,
+                    target_affix_type=effect if effect != "none" else None,
+                    min_value=int(value) if value != "none" else None,
+                    material_source=source if source != "none" else None,
+                    error="⚠️ 設定未完成，請重新選擇。",
+                )
+                return
+            await inter.response.defer()
+            now = datetime.now(timezone.utc)
+            result = None
+            error = None
+            async with get_connection() as db:
+                try:
+                    gear_level = await player_manager.get_gear_level(db, user_id, gear)
+                    result = await affix_manager.auto_extract_affix(
+                        db, user_id, gear, gear_level, now,
+                        target_affix_type=effect if mode == "specific" else None,
+                        min_value=int(value), material_source=source,
+                    )
+                    await db.commit()
+                except Exception:
+                    error = "⚠️ 抽取失敗，素材與詞條未變更。"
+                    await db.rollback()
+            if error:
+                await self._render_auto_affix(
+                    inter, gear, target_mode=mode, target_affix_type=effect if effect != "none" else None,
+                    min_value=int(value), material_source=source, error=error,
+                )
+                return
+            await notification.dispatch_events(self.bot, [{
+                "type": "affix_auto_extracted",
+                "user_display_name": inter.user.display_name,
+                "gear_type": gear,
+                **result,
+            }])
+            await self._render_affix(inter, gear)
+
         elif cid.startswith("affix_extract:"):
             gear_type = cid.split(":", 1)[1]
             if gear_type not in _VALID_GEAR_TYPES:
@@ -653,7 +768,7 @@ class ActionsCog(commands.Cog):
         if not _is_own_dropdown(cid):
             return
 
-        value = inter.values[0]
+        value = inter.values[0] if inter.values else None
         user_id = str(inter.user.id)
         await inter.response.defer()
 
@@ -700,6 +815,34 @@ class ActionsCog(commands.Cog):
                 return
             await self._render_auto_tool(
                 inter, selected_tool=tool_type, selected_target=target, selected_delta=delta
+            )
+        elif cid.startswith(("auto_affix_kind:", "auto_affix_effect:", "auto_affix_value:", "auto_affix_material:")):
+            parts = cid.split(":")
+            state = _parse_auto_affix_state([parts[0], *parts[1:]])
+            prefix = parts[0]
+            valid_values = {
+                "auto_affix_kind": {"any", "specific"},
+                "auto_affix_effect": _VALID_AFFIX_TYPES,
+                "auto_affix_value": _VALID_AUTO_AFFIX_VALUES,
+                "auto_affix_material": {"tool", "universal"},
+            }
+            if state is None or value not in valid_values[prefix]:
+                return
+            gear, mode, effect, threshold, source = state
+            if prefix == "auto_affix_kind":
+                mode = value
+            elif prefix == "auto_affix_effect":
+                effect = value
+            elif prefix == "auto_affix_value":
+                threshold = value
+            else:
+                source = value
+            await self._render_auto_affix(
+                inter, gear if gear != "none" else None,
+                target_mode=mode if mode != "none" else None,
+                target_affix_type=effect if effect != "none" else None,
+                min_value=int(threshold) if threshold != "none" else None,
+                material_source=source if source != "none" else None,
             )
         elif cid == "trial_target_select":
             try:

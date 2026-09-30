@@ -1,7 +1,7 @@
 ---
 title: "Module: ui-renderer"
 doc_type: module
-last_reviewed: 2026-09-26
+last_reviewed: 2026-09-30
 source_paths:
   - src/cogs/ui_renderer.py
 ---
@@ -259,9 +259,16 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
   - 選項描述：`{±value}%`
 - **Button**：`🗑️ 清除詞條`（Red，custom_id: `affix_clear:{gear_type}:{slot_index}`，禁用條件：尚未選定槽位）
 - **Button**：`✨ 抽取詞條`（Blue，custom_id: `affix_extract:{gear_type}`，禁用條件：詞條槽已滿）
+- **Button**：`✨ 自動抽取`（Blue，custom_id: `open_auto_affix:{gear_type}`，禁用條件：無空槽或工具等級未解鎖詞條槽）
 - **Button**：`← 返回`（Gray，custom_id: `back_to_gear:{gear_type}`）
 
 抽取/清除的素材消耗若該類型素材不足，自動用萬能素材補足差額（兩者相加仍不足時執行才報錯），比照工具強化子選單；按鈕 disabled 條件不含素材是否足夠的判斷。
+
+### 自動抽取設定畫面
+
+- 目標種類選任意或特定效果；特定效果時顯示七種效果選單。另選最低數值（1+ 至 5）與花費來源（工具素材或萬能素材）。
+- 下拉選單與確認按鈕在 custom_id 中攜帶完整狀態。確認按鈕在設定不完整、沒有空槽或所選素材不足時停用。
+- `auto_affix_confirm:{gear}:{mode}:{effect}:{value}:{source}` 會執行一次批次。成功只保存第一條符合條件的詞條；耗盡時保持空槽。兩種結果都由 notification 模組發布一則摘要。
 
 ## 管理員介面 Embed（/idlevillage-manage）
 
@@ -305,6 +312,8 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
 `{target_user_id}` 為目標玩家的 Discord user ID（字串）。
 
 ## Changelog
+
+- 2026-09-30: 新增詞條自動抽取入口與完整狀態選單；成本與批次規則由 affix-manager 擁有。
 
 - 2026-09-26: 主介面 `🔨 強化工具` 移除「所有工具已達上限」禁用條件；子選單 `🎲 強化工具` 仍在滿級時 disabled。
 - 2026-08-15: 試煉按鈕改為開啟每頁 25 個選項的 Ephemeral 目標選單。新增 0-based 分頁與提交失效規則。Dashboard 不顯示扣款資源或發起者，系統也不記錄發起者。
