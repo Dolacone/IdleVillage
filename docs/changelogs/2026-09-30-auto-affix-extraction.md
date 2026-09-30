@@ -1,6 +1,6 @@
 ---
 title: "詞條自動抽取"
-status: Ready-to-review
+status: Issues-confirmed
 created: 2026-09-30
 doc_type: change
 last_reviewed: 2026-09-30
@@ -135,6 +135,7 @@ Task 1 (manager) + Task 2 (UI/events) --> Task 3 (handler/integration) --> Revie
 
 ## Review Issues
 
+- [ ] [Review/Major] 返回詞條管理後，舊自動抽取確認仍可扣款並公告。`src/cogs/actions.py:607-619` 的返回路由未移除玩家確認 ID；本機實際 handler 與 SQLite 驗證返回後重送同 ID，工具素材由 2 降為 1，並送出一則公告。離開設定頁時必須撤銷未使用的確認，並加入返回後重送測試。
 - [x] [Review/Major] 一次性確認必須綁定玩家目前 renderer 產生的完整 ID，並在首次 await 前消耗。`test_confirmation_replay_after_clear_is_rejected_and_new_render_works` 驗證成功後清槽再重送不扣款、不公告；`test_exhausted_confirmation_replay_after_refill_is_rejected` 驗證耗盡後加素材仍拒絕舊 ID。
 - [x] [Review/Major] 批次扣款次數固定為一次。`test_tool_batch_calls_real_debit_once_after_rejected_draws` 與 `test_universal_exhaustion_calls_real_debit_once_for_total_cost` 使用 wraps 執行真實素材扣款與 SQLite，並檢查所選扣款只呼叫一次、金額等於總成本、另一來源未呼叫及最終餘額。
 - [x] [Review/Major] 任意與特定效果切換必須由當前 renderer custom_id 驅動，並保留效果、門檻與素材來源。`test_kind_switch_round_trip_uses_rendered_dropdown_ids_and_retains_settings` 驗證特定 -> 任意 -> 特定切換期間資料庫素材不變。
