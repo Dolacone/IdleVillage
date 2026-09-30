@@ -602,13 +602,16 @@ class ActionsCog(commands.Cog):
             await self._render_affix(inter, None if parts[1] == "none" else parts[1])
 
         elif cid.startswith("auto_affix_confirm:"):
-            state = _parse_auto_affix_state(cid.split(":"))
-            if state is None:
+            parts = cid.split(":")
+            state = _parse_auto_affix_state(parts[:6]) if len(parts) == 7 else None
+            expected_slot_text = parts[6] if len(parts) == 7 else ""
+            if state is None or not expected_slot_text.isdecimal():
                 await inter.response.defer()
-                gear = cid.split(":")[1] if len(cid.split(":")) > 1 else "none"
+                gear = parts[1] if len(parts) > 1 else "none"
                 gear = gear if gear in _VALID_GEAR_TYPES else None
                 await self._render_auto_affix(inter, gear, error="⚠️ 設定無效，請重新選擇。")
                 return
+            expected_slot = int(expected_slot_text)
             gear, mode, effect, value, source = state
             complete = (
                 gear in _VALID_GEAR_TYPES and mode in {"any", "specific"}
@@ -636,7 +639,7 @@ class ActionsCog(commands.Cog):
                     result = await affix_manager.auto_extract_affix(
                         db, user_id, gear, gear_level, now,
                         target_affix_type=effect if mode == "specific" else None,
-                        min_value=int(value), material_source=source,
+                        min_value=int(value), material_source=source, expected_slot=expected_slot,
                     )
                     await db.commit()
                 except Exception:

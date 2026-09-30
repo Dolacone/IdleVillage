@@ -71,9 +71,10 @@ scope: "Tracks automatic affix extraction from design through review."
 - 整合驗證: 從真實互動 handler 執行設定、確認、manager、SQLite、renderer 與 notification。外部 Discord 傳輸使用 mock。Discord 實際點擊與發送標記為未驗證。
 
 ```text
-Task 1 (manager) ----+
-                    +--> Task 3 (handler + integration) --> review --> refactor --> draft PR
-Task 2 (UI/events) --+
+Task 1 (manager) + Task 2 (UI/events) --> Task 3 (handler/integration) --> Review --> approved --> refactor --> draft PR
+                                                                           |  ^
+                                                                           v  |
+                                                                          Fixes
 ```
 
 ## Tasks
@@ -108,17 +109,18 @@ Task 2 (UI/events) --+
   - Acceptance: 新增 `expected_slot`。參數無效或不符第一空槽時拒絕且不扣款。抽選完成後第一空槽改變時拒絕。
   - Acceptance: 抽選期間原目標槽被填入時不轉抽其他槽。保留原有素材、回滾及分布規則。
   - Evidence: `UV_CACHE_DIR=/private/tmp/idlevillage-uv-cache uv run --no-project python -m unittest tests.test_affix_manager -q` — `Ran 48 tests in 0.867s`; `OK`.
-- [ ] Task 5: 確認 ID 綁定目標槽。[依賴 Task 4]
+- [x] Task 5: 確認 ID 綁定目標槽。[依賴 Task 4]
   - Source: `src/cogs/ui_renderer.py`、`src/cogs/actions.py`。
   - Tests: `tests/test_discord_commands.py`。
   - Docs: `docs/discord/command-handler.md`、`docs/discord/ui-renderer.md`、`docs/managers/affix-manager.md`。
   - Acceptance: 確認 ID 附帶設定頁第一空槽。handler 驗證並傳入 `expected_slot`。完整 ID 仍不超過 100 字元。
   - Acceptance: 同一確認在兩個空槽上並行時只扣一次、填一槽、發一則公告。完成後再次提交同一確認不得扣款。
   - Acceptance: 重新開啟設定頁可對下一個空槽正常抽取。所有既有確認測試配合新 ID。完整測試套件通過。
+  - Evidence: `UV_CACHE_DIR=/private/tmp/idlevillage-uv-cache uv run --no-project python -m unittest discover -s tests -q` — `Ran 642 tests in 8.053s`; `OK`. Full runner output: `/private/tmp/idlevillage-task5.log`.
 
 ## Review Issues
 
-- [ ] [Review/Major] `src/managers/affix_manager.py:134-136,164-166`: 兩個確認若在等級 10 的兩個空槽上並行，第二次會重新選槽並再次扣款。`tests/test_discord_commands.py:1708-1722` 只測一個槽，未涵蓋此情境。實測兩次確認後素材從 4 降到 2、槽 0 與 1 均填入、公告兩則；違反 Task 3 的並行與第二次不扣款條件。
+- [x] [Review/Major] 每個自動抽取確認 ID 必須綁定當下第一個空槽。`test_slot_bound_confirmation_blocks_repeat_and_allows_next_slot` 驗證等級 10 的並行確認只扣一次並填槽 0；重送同 ID 不扣款、不公告；重新渲染後的槽 1 確認可成功。`test_confirmation_binds_first_empty_slot_and_stays_within_limit` 驗證最早空槽與滿槽 ID。
 - [x] [Plan/Major] 抽選不得長時間持有寫入鎖。抽選先在交易外完成。交易內只重讀狀態、一次扣款與最終填槽。
 - [x] [Plan/Major] 補上扣款後失敗、提交失敗與並行競爭的真實 SQLite 測試。
 - [x] [Plan/Minor] 素材 canonical 文件納入更新。新增自動抽取規則的交叉連結。

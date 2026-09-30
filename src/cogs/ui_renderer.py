@@ -914,10 +914,11 @@ def build_auto_affix_components(
     if target_mode == "specific":
         complete = complete and target_affix_type in AFFIX_TYPE_LABELS
     occupied_slots = {a.get("slot_index") for a in affixes if 0 <= a.get("slot_index", -1) < max_slots}
-    has_empty_slot = any(slot not in occupied_slots for slot in range(max_slots))
+    expected_slot = next((slot for slot in range(max_slots) if slot not in occupied_slots), None)
+    has_empty_slot = expected_slot is not None
     valid_gear = gear_type in GEAR_LABELS
     enough_material = (materials >= 1 if material_source == "tool" else universal_materials >= 5)
-    confirm_id = state_id("auto_affix_confirm")
+    confirm_id = f"{state_id('auto_affix_confirm')}:{expected_slot if expected_slot is not None else 'none'}"
     rows.append(disnake.ui.ActionRow(
         disnake.ui.Button(label="✅ 開始自動抽取", style=disnake.ButtonStyle.success,
                           custom_id=confirm_id, disabled=not (valid_gear and complete and has_empty_slot and enough_material)),

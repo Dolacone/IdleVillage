@@ -1502,8 +1502,10 @@ class TestAutoAffixComponents(unittest.TestCase):
         self.assertTrue(selects[1].options[-1].default)
         self.assertTrue(selects[2].options[3].default)
         self.assertTrue(selects[3].options[1].default)
-        self.assertTrue(all(c.custom_id.endswith(":research:specific:cycle_time_reduce:4:universal")
-                            for row in rows for c in row.children if c.custom_id.startswith("auto_affix_")))
+        selector_ids = [c.custom_id for row in rows for c in row.children if c.custom_id.startswith("auto_affix_") and not c.custom_id.startswith("auto_affix_confirm:")]
+        self.assertTrue(all(cid.endswith(":research:specific:cycle_time_reduce:4:universal") for cid in selector_ids))
+        confirm = next(c for row in rows for c in row.children if c.custom_id.startswith("auto_affix_confirm:"))
+        self.assertTrue(confirm.custom_id.endswith(":research:specific:cycle_time_reduce:4:universal:0"))
 
     def test_confirm_needs_real_empty_slot_and_valid_gear(self):
         from cogs.ui_renderer import build_auto_affix_components
@@ -1535,6 +1537,20 @@ class TestAutoAffixComponents(unittest.TestCase):
                 for row in rows:
                     for component in row.children:
                         self.assertLessEqual(len(component.custom_id), 100)
+
+    def test_confirmation_binds_first_empty_slot_and_stays_within_limit(self):
+        from cogs.ui_renderer import build_auto_affix_components
+        settings = ("specific", "upgrade_material_refund", 5, "universal")
+        rows = build_auto_affix_components("research", 0, 5, 2, [{"slot_index": 0}], *settings)
+        confirm = next(c for row in rows for c in row.children if c.custom_id.startswith("auto_affix_confirm:"))
+        self.assertEqual(confirm.custom_id, "auto_affix_confirm:research:specific:upgrade_material_refund:5:universal:1")
+        self.assertFalse(confirm.disabled)
+        rows = build_auto_affix_components("research", 0, 5, 2, [{"slot_index": 0}, {"slot_index": 1}], *settings)
+        confirm = next(c for row in rows for c in row.children if c.custom_id.startswith("auto_affix_confirm:"))
+        self.assertTrue(confirm.disabled)
+        self.assertTrue(confirm.custom_id.endswith(":none"))
+        longest_id = "auto_affix_confirm:research:specific:upgrade_material_refund:5:universal:2147483647"
+        self.assertLessEqual(len(longest_id), 100)
 
 
 class TestAffixRouteRegistration(unittest.TestCase):
@@ -1613,7 +1629,7 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         with patch("cogs.actions.affix_manager.random.choice", return_value="cycle_time_reduce"), patch(
             "cogs.actions.affix_manager.random.randint", return_value=4
         ):
-            confirm = self._inter("auto_affix_confirm:research:specific:cycle_time_reduce:4:tool")
+            confirm = self._inter("auto_affix_confirm:research:specific:cycle_time_reduce:4:tool:0")
             await cog.on_button_click(confirm)
         self.assertTrue(confirm.response.defer.awaited)
         self.assertEqual(sent.await_count, 1)
@@ -1633,7 +1649,7 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         with patch("cogs.actions.affix_manager.random.choice", side_effect=["efficiency", "cycle_time_reduce"]), patch(
             "cogs.actions.affix_manager.random.randint", side_effect=[1, 3]
         ):
-            await cog.on_button_click(self._inter("auto_affix_confirm:research:any:upgrade_success:3:tool"))
+            await cog.on_button_click(self._inter("auto_affix_confirm:research:any:upgrade_success:3:tool:0"))
         self.assertEqual(sent.await_count, 1)
         async with get_connection() as db:
             self.assertEqual(await (await db.execute("SELECT materials_research FROM players WHERE user_id='12345'")).fetchone(), (3,))
@@ -1646,7 +1662,7 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         sent = AsyncMock()
         bot.get_channel.return_value.send = sent
         cog = ActionsCog(bot)
-        for cid in ("auto_affix_confirm:research:none:none:none:none", "auto_affix_confirm:research:any:bogus:1:tool", "auto_affix_confirm:research:any:none:1:tool:extra"):
+        for cid in ("auto_affix_confirm:research:none:none:none:none:0", "auto_affix_confirm:research:any:bogus:1:tool:0", "auto_affix_confirm:research:any:none:1:tool:0:extra:0", "auto_affix_confirm:research:any:none:1:tool", "auto_affix_confirm:research:any:none:1:tool:-1"):
             await cog.on_button_click(self._inter(cid))
         malformed_select = self._inter("auto_affix_value:research:any:none:1:tool")
         malformed_select.values = []
@@ -1664,7 +1680,7 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         with patch("cogs.actions.affix_manager.random.choice", return_value="efficiency"), patch(
             "cogs.actions.affix_manager.random.randint", return_value=1
         ):
-            await cog.on_button_click(self._inter("auto_affix_confirm:research:any:none:2:universal"))
+            await cog.on_button_click(self._inter("auto_affix_confirm:research:any:none:2:universal:0"))
         self.assertEqual(sent.await_count, 1)
         self.assertIn("未抽到目標詞條，抽選次數2 (10萬能素材)", sent.call_args.args[0])
         self.assertEqual(await self.fetchone("SELECT materials_research, materials_universal FROM players WHERE user_id='12345'"), (8, 4))
@@ -1679,7 +1695,7 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         with patch("cogs.actions.affix_manager.random.choice", side_effect=["efficiency", "upgrade_success"]), patch(
             "cogs.actions.affix_manager.random.randint", side_effect=[1, 5]
         ):
-            await ActionsCog(bot).on_button_click(self._inter("auto_affix_confirm:research:specific:efficiency:2:tool"))
+            await ActionsCog(bot).on_button_click(self._inter("auto_affix_confirm:research:specific:efficiency:2:tool:0"))
         self.assertEqual(sent.await_count, 1)
         self.assertIn("未抽到目標詞條，抽選次數2 (2工具素材)", sent.call_args.args[0])
         self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (0,))
@@ -1695,31 +1711,57 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
             await db.execute("INSERT INTO gear_affixes VALUES ('12345', 'research', 0, 'efficiency', 2)")
             await db.commit()
         cog = ActionsCog(bot)
-        await cog.on_button_click(self._inter("auto_affix_confirm:research:any:none:1:universal"))
+        await cog.on_button_click(self._inter("auto_affix_confirm:research:any:none:1:universal:0"))
         self.assertEqual(await self.fetchone("SELECT materials_universal FROM players WHERE user_id='12345'"), (20,))
         self.assertEqual(await self.fetchone("SELECT COUNT(*) FROM gear_affixes WHERE user_id='12345'"), (1,))
         async with schema.get_connection() as db:
             await db.execute("DELETE FROM gear_affixes WHERE user_id='12345'")
             await db.commit()
-        await cog.on_button_click(self._inter("auto_affix_confirm:research:any:none:1:tool"))
+        await cog.on_button_click(self._inter("auto_affix_confirm:research:any:none:1:tool:0"))
         self.assertEqual(await self.fetchone("SELECT materials_universal, materials_research FROM players WHERE user_id='12345'"), (20, 0))
         self.assertEqual(sent.await_count, 0)
 
-    async def test_parallel_confirmations_pay_for_only_one_empty_slot(self):
+    async def test_slot_bound_confirmation_blocks_repeat_and_allows_next_slot(self):
         from cogs.actions import ActionsCog
-        await self._player(tool=4)
+        await self._player(tool=4, level=10)
         sent = AsyncMock()
         bot = MagicMock()
         bot.get_channel.return_value.send = sent
         cog = ActionsCog(bot)
-        cid = "auto_affix_confirm:research:any:none:1:tool"
+        setup_page = self._inter("open_auto_affix:research")
+        await cog.on_button_click(setup_page)
+        await cog._render_auto_affix(setup_page, "research", target_mode="any", min_value=1, material_source="tool")
+        first_id = next(
+            component.custom_id for row in setup_page.edit_original_response.call_args.kwargs["components"]
+            for component in row.children if component.custom_id.startswith("auto_affix_confirm:")
+        )
+        self.assertEqual(first_id, "auto_affix_confirm:research:any:none:1:tool:0")
         with patch("cogs.actions.affix_manager.random.choice", return_value="efficiency"), patch(
             "cogs.actions.affix_manager.random.randint", return_value=1
         ):
-            await __import__("asyncio").gather(cog.on_button_click(self._inter(cid)), cog.on_button_click(self._inter(cid)))
+            import asyncio
+            await asyncio.gather(cog.on_button_click(self._inter(first_id)), cog.on_button_click(self._inter(first_id)))
         self.assertEqual(sent.await_count, 1)
         self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (3,))
-        self.assertEqual(await self.fetchone("SELECT COUNT(*) FROM gear_affixes WHERE user_id='12345'"), (1,))
+        self.assertEqual(await self.fetchall("SELECT slot_index FROM gear_affixes WHERE user_id='12345' ORDER BY slot_index"), [(0,)])
+
+        await cog.on_button_click(self._inter(first_id))
+        self.assertEqual(sent.await_count, 1)
+        self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (3,))
+        self.assertEqual(await self.fetchall("SELECT slot_index FROM gear_affixes WHERE user_id='12345' ORDER BY slot_index"), [(0,)])
+
+        reopened = self._inter("open_auto_affix:research")
+        await cog.on_button_click(reopened)
+        await cog._render_auto_affix(reopened, "research", target_mode="any", min_value=1, material_source="tool")
+        second_id = next(
+            component.custom_id for row in reopened.edit_original_response.call_args.kwargs["components"]
+            for component in row.children if component.custom_id.startswith("auto_affix_confirm:")
+        )
+        self.assertEqual(second_id, "auto_affix_confirm:research:any:none:1:tool:1")
+        await cog.on_button_click(self._inter(second_id))
+        self.assertEqual(sent.await_count, 2)
+        self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (2,))
+        self.assertEqual(await self.fetchall("SELECT slot_index FROM gear_affixes WHERE user_id='12345' ORDER BY slot_index"), [(0,), (1,)])
 
     async def test_failure_after_real_deduction_rolls_back_and_sends_nothing(self):
         from cogs.actions import ActionsCog
@@ -1735,7 +1777,7 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         with patch("cogs.actions.affix_manager.random.choice", return_value="efficiency"), patch(
             "cogs.actions.affix_manager.random.randint", return_value=1
         ), patch("managers.player_manager.spend_material", new=deduct_then_fail):
-            await ActionsCog(bot).on_button_click(self._inter("auto_affix_confirm:research:any:none:1:tool"))
+            await ActionsCog(bot).on_button_click(self._inter("auto_affix_confirm:research:any:none:1:tool:0"))
         self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (3,))
         self.assertIsNone(await self.fetchone("SELECT * FROM gear_affixes WHERE user_id='12345'"))
         self.assertEqual(sent.await_count, 0)
@@ -1750,7 +1792,7 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         with patch("cogs.actions.affix_manager.random.choice", return_value="efficiency"), patch(
             "cogs.actions.affix_manager.random.randint", return_value=1
         ), patch.object(aiosqlite.core.Connection, "commit", new=AsyncMock(side_effect=RuntimeError("injected commit failure"))):
-            await ActionsCog(bot).on_button_click(self._inter("auto_affix_confirm:research:any:none:1:tool"))
+            await ActionsCog(bot).on_button_click(self._inter("auto_affix_confirm:research:any:none:1:tool:0"))
         self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (3,))
         self.assertIsNone(await self.fetchone("SELECT * FROM gear_affixes WHERE user_id='12345'"))
         self.assertEqual(sent.await_count, 0)
