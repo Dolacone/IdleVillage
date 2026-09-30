@@ -381,12 +381,6 @@ def build_main_components(
     active_auto_tools: set | list | None = None,
 ) -> list:
     ap = player_row.get("_ap", 0)
-    gear_cap = buildings.get("research_lab", {}).get("level", 0)
-    all_gear_at_cap = all(
-        player_row.get(f"gear_{gear_type}", 0) >= gear_cap
-        for gear_type in ("gathering", "building", "combat", "research")
-    )
-
     trial_data = trial_data or {}
     can_start_trial = not trial_data.get("is_active")
     if can_start_trial:
@@ -430,7 +424,6 @@ def build_main_components(
                 label="🔨 強化工具",
                 style=disnake.ButtonStyle.primary,
                 custom_id="open_gear_upgrade",
-                disabled=all_gear_at_cap,
             ),
             disnake.ui.Button(
                 label="🏆 開啟試煉",
