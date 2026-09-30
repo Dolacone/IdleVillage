@@ -259,7 +259,7 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
   - 選項描述：`{±value}%`
 - **Button**：`🗑️ 清除詞條`（Red，custom_id: `affix_clear:{gear_type}:{slot_index}`，禁用條件：尚未選定槽位）
 - **Button**：`✨ 抽取詞條`（Blue，custom_id: `affix_extract:{gear_type}`，禁用條件：詞條槽已滿）
-- **Button**：`✨ 自動抽取`（Blue，custom_id: `open_auto_affix:{gear_type}`，禁用條件：無空槽或工具等級未解鎖詞條槽）
+- **Button**：`✨ 自動抽取`（Green，custom_id: `open_auto_affix:{gear_type}`，禁用條件：無空槽或工具等級未解鎖詞條槽）
 - **Button**：`← 返回`（Gray，custom_id: `back_to_gear:{gear_type}`）
 
 抽取/清除的素材消耗若該類型素材不足，自動用萬能素材補足差額（兩者相加仍不足時執行才報錯），比照工具強化子選單；按鈕 disabled 條件不含素材是否足夠的判斷。

@@ -1909,12 +1909,18 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         bot.get_channel.return_value.send = sent
         cog = ActionsCog(bot)
         cid, _ = await self._render_confirm(cog)
-        await cog.on_button_click(self._inter("back_to_affix:research"))
+        navigation = self._inter("back_to_affix:research")
+        stale_click = self._inter(cid)
+
+        async def replay_during_navigation_defer(*args, **kwargs):
+            self.assertNotIn("12345", cog._auto_affix_confirmations)
+            await cog.on_button_click(stale_click)
+
+        navigation.response.defer = AsyncMock(side_effect=replay_during_navigation_defer)
         with patch("cogs.actions.affix_manager.random.choice", return_value="efficiency") as draw_type, patch(
             "cogs.actions.affix_manager.random.randint", return_value=1
         ) as draw_value:
-            stale_click = self._inter(cid)
-            await cog.on_button_click(stale_click)
+            await cog.on_button_click(navigation)
         draw_type.assert_not_called()
         draw_value.assert_not_called()
         self.assertTrue(stale_click.response.defer.awaited)
@@ -1964,17 +1970,30 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         bot.get_channel.return_value.send = sent
         cog = ActionsCog(bot)
         first_id, _ = await self._render_confirm(cog)
-        await cog.on_button_click(self._inter("back_to_main"))
+        navigation = self._inter("back_to_main")
+        stale_click = self._inter(first_id)
+
+        async def replay_during_main_defer(*args, **kwargs):
+            self.assertNotIn("12345", cog._auto_affix_confirmations)
+            await cog.on_button_click(stale_click)
+
+        navigation.response.defer = AsyncMock(side_effect=replay_during_main_defer)
         with patch("cogs.actions.affix_manager.random.choice", return_value="efficiency") as draw_type:
-            await cog.on_button_click(self._inter(first_id))
+            await cog.on_button_click(navigation)
         draw_type.assert_not_called()
         self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (3,))
 
         current_id, _ = await self._render_confirm(cog)
         slash_inter = self._inter("unused")
-        await ActionsCog.idlevillage.callback(cog, slash_inter)
+        stale_slash_click = self._inter(current_id)
+
+        async def replay_during_slash_defer(*args, **kwargs):
+            self.assertNotIn("12345", cog._auto_affix_confirmations)
+            await cog.on_button_click(stale_slash_click)
+
+        slash_inter.response.defer = AsyncMock(side_effect=replay_during_slash_defer)
         with patch("cogs.actions.affix_manager.random.choice", return_value="efficiency") as reopened_draw:
-            await cog.on_button_click(self._inter(current_id))
+            await ActionsCog.idlevillage.callback(cog, slash_inter)
         reopened_draw.assert_not_called()
         self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (3,))
         self.assertEqual(sent.await_count, 0)

@@ -143,18 +143,19 @@ Task 1 (manager) + Task 2 (UI/events) --> Task 3 (handler/integration) --> Revie
   - Acceptance: 補上回歸測試並先取得失敗證據。修正後執行完整測試。
   - Evidence: `UV_CACHE_DIR=/private/tmp/idlevillage-uv-cache uv run --no-project python -m unittest discover -s tests -q` — `Ran 652 tests in 8.495s`; `OK`. `test_returning_to_affix_management_invalidates_pending_confirmation`, `test_main_navigation_and_slash_reopen_invalidate_before_confirmation`, `test_navigation_invalidation_is_per_user`, and `test_selector_change_invalidates_confirmation_before_defer` verify real handler navigation, SQLite, renderer IDs and notification dispatch.
 
-- [ ] Task 9: 驗證導覽撤銷時序與按鈕文件。[Review/Major、Minor]
+- [x] Task 9: 驗證導覽撤銷時序與按鈕文件。[Review/Major、Minor]
   - Tests: `tests/test_discord_commands.py`。
   - Docs: `docs/discord/ui-renderer.md`。
   - Acceptance: 返回詞條管理、主介面與 slash 重開時，在 defer 開始就拒絕舊確認。
   - Acceptance: 從真實 renderer 取得 ID。在 defer side effect 重送舊 ID，不抽選、不扣款、不填槽、不公告。
   - Acceptance: 重新渲染的確認仍可使用。其他玩家的確認仍有效。
   - Acceptance: 按鈕文件描述目前 success 綠色樣式。執行完整測試。
+  - Evidence: `UV_CACHE_DIR=/private/tmp/idlevillage-uv-cache uv run --no-project python -m unittest discover -s tests -q` — `Ran 652 tests in 8.352s`; `OK`. `test_returning_to_affix_management_invalidates_pending_confirmation` and `test_main_navigation_and_slash_reopen_invalidate_before_confirmation` replay renderer-issued IDs inside navigation defer callbacks and assert revocation before the stale callback runs. `test_navigation_invalidation_is_per_user` confirms another player's ID remains valid.
 
 ## Review Issues
 
-- [ ] [Review/Major] 導覽與 `/idlevillage` 重開必須在首次 await 前撤銷確認。`tests/test_discord_commands.py:1904-1932,1959-1980` 只在操作完成後檢查舊 ID；`tests/test_discord_commands.py:1946-1951` 只驗證設定選單的 defer 時序。若將 `src/cogs/actions.py:432-433,419-420` 的撤銷移到 defer 後，現有導覽測試仍會通過。補上在 defer 邊界檢查 registry 的回歸測試。
-- [ ] [Review/Minor] `docs/discord/ui-renderer.md:262` 將自動抽取按鈕寫成 Blue；`src/cogs/ui_renderer.py:822-826` 使用 `ButtonStyle.success`。文件須改為 Green。
+- [x] [Review/Major] 導覽按鈕與 `/idlevillage` 必須在 defer 前撤銷確認。`test_returning_to_affix_management_invalidates_pending_confirmation` 與 `test_main_navigation_and_slash_reopen_invalidate_before_confirmation` 在 defer callback 內重送真實 renderer 確認 ID，並於 callback 前檢查 registry 已清除。
+- [x] [Review/Minor] 自動抽取入口按鈕使用 Green 樣式。`docs/discord/ui-renderer.md` 現在記錄 Green，與 `ButtonStyle.success` 相符。
 - [x] [Review] 獨立審查執行 `UV_CACHE_DIR=/private/tmp/idlevillage-uv-cache uv run --no-project python -m unittest discover -s tests -q`；Python 3.11.14、disnake 2.12.0、aiosqlite 0.22.1，輸出 `Ran 652 tests in 8.816s`、`OK`。完整證據見 `/private/tmp/idlevillage-review-final-tests.log`，審查報告見 `/private/tmp/idlevillage-review-final.md`。
 - [x] [Review/Major] 離開自動抽取設定時，在首次 await 前撤銷該玩家未使用的確認。`test_returning_to_affix_management_invalidates_pending_confirmation`, `test_main_navigation_and_slash_reopen_invalidate_before_confirmation`, `test_navigation_invalidation_is_per_user`, and `test_selector_change_invalidates_confirmation_before_defer` 驗證導覽、設定選單與 slash reopen 後的確認失效；玩家間確認彼此獨立。
 - [x] [Review/Major] 一次性確認必須綁定玩家目前 renderer 產生的完整 ID，並在首次 await 前消耗。`test_confirmation_replay_after_clear_is_rejected_and_new_render_works` 驗證成功後清槽再重送不扣款、不公告；`test_exhausted_confirmation_replay_after_refill_is_rejected` 驗證耗盡後加素材仍拒絕舊 ID。
