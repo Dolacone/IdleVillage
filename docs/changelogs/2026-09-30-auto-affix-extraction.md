@@ -71,12 +71,13 @@ Task 2 (UI/events) --+
 
 ## Tasks
 
-- [ ] Task 1: 自動抽取 manager。[可與 Task 2 平行]
+- [x] Task 1: 自動抽取 manager。[可與 Task 2 平行]
   - Source: `src/managers/affix_manager.py`。
   - Tests: `tests/test_affix_manager.py`。
   - Acceptance: 任意效果與特定效果均與最低數值共同判斷。失敗結果不入庫。成功只填第一空槽。滿槽與無槽拒絕。
   - Acceptance: 工具素材耗盡不扣萬能素材。萬能素材每次扣 5，不扣工具素材。餘數保留。次數與花費包含成功那次。
   - Acceptance: 未達標保持空槽。既有詞條不變。所有無效參數與起始素材不足不扣款。單抽補足測試維持通過。
+  - Evidence: `UV_CACHE_DIR=/private/tmp/idlevillage-uv-cache uv run --no-project python -m unittest tests.test_affix_manager -q` — 44 tests, OK.
 - [ ] Task 2: 設定介面與批次公告。[可與 Task 1 平行]
   - Source: `src/cogs/ui_renderer.py`、`src/core/notification.py`。
   - Tests: `tests/test_discord_commands.py`、`tests/test_discord_notifications.py`。
