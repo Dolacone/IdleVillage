@@ -18,6 +18,7 @@ source_paths:
   - docs/discord/command-handler.md
   - docs/discord/notification.md
   - docs/README.md
+  - README.md
 scope: "Tracks automatic affix extraction from design through review."
 ---
 
@@ -167,6 +168,7 @@ Task 1 (manager) + Task 2 (UI/events) --> Task 3 (handler/integration) --> Revie
 - [x] [Plan/Major] 補上扣款後失敗、提交失敗與並行競爭的真實 SQLite 測試。
 - [x] [Plan/Minor] 素材 canonical 文件納入更新。新增自動抽取規則的交叉連結。
 - [x] [Plan] 獨立 Codex 複審結果為 Approved。
+- [x] [Doc] 根目錄 README 連至文件索引。索引連至變更紀錄與五個 canonical 文件。審計報告見 `/private/tmp/idlevillage-doc-audit.md`。
 
 ## Key Assumptions
 
