@@ -6,7 +6,7 @@ Mechanics reference: docs/managers/affix-manager.md
 import os
 import unittest
 from datetime import datetime, timezone
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from tests.support import ALL_TEST_ENV, DatabaseTestCase
 from database import schema
@@ -215,6 +215,50 @@ class TestAutoExtractAffix(DatabaseTestCase):
                 result = await affix_manager.auto_extract_affix(
                     db, USER, GEAR, 10, NOW, min_value=2, material_source="universal"
                 )
+            await db.commit()
+        self.assertEqual(result["attempts"], 3)
+        self.assertEqual(result["material_spent"], 15)
+        self.assertIsNone(result["affix"])
+        self.assertEqual(await self._balances(), (20, 2))
+
+    async def test_tool_batch_calls_real_debit_once_after_rejected_draws(self):
+        real_spend_tool = player_manager.spend_material
+        real_spend_universal = player_manager.spend_universal_material
+        async with schema.get_connection() as db:
+            await player_manager.set_material(db, USER, GEAR, 20, NOW)
+            await player_manager.set_universal_material(db, USER, 12, NOW)
+            await db.commit()
+            with patch.object(player_manager, "spend_material", new=AsyncMock(wraps=real_spend_tool)) as spend_tool, \
+                 patch.object(player_manager, "spend_universal_material", new=AsyncMock(wraps=real_spend_universal)) as spend_universal, \
+                 patch("random.choice", side_effect=["material_drop", "upgrade_cost_reduce", "efficiency"]), \
+                 patch("random.randint", side_effect=[5, 4, 3]):
+                result = await affix_manager.auto_extract_affix(
+                    db, USER, GEAR, 10, NOW, target_affix_type="efficiency", min_value=3
+                )
+                spend_tool.assert_awaited_once()
+                spend_universal.assert_not_awaited()
+                self.assertEqual(spend_tool.await_args.args[3], 3)
+            await db.commit()
+        self.assertEqual(result["attempts"], 3)
+        self.assertEqual(result["material_spent"], 3)
+        self.assertEqual(await self._balances(), (17, 12))
+
+    async def test_universal_exhaustion_calls_real_debit_once_for_total_cost(self):
+        real_spend_tool = player_manager.spend_material
+        real_spend_universal = player_manager.spend_universal_material
+        async with schema.get_connection() as db:
+            await player_manager.set_material(db, USER, GEAR, 20, NOW)
+            await player_manager.set_universal_material(db, USER, 17, NOW)
+            await db.commit()
+            with patch.object(player_manager, "spend_material", new=AsyncMock(wraps=real_spend_tool)) as spend_tool, \
+                 patch.object(player_manager, "spend_universal_material", new=AsyncMock(wraps=real_spend_universal)) as spend_universal, \
+                 patch("random.choice", return_value="material_drop"), patch("random.randint", return_value=1):
+                result = await affix_manager.auto_extract_affix(
+                    db, USER, GEAR, 10, NOW, target_affix_type="efficiency", material_source="universal"
+                )
+                spend_universal.assert_awaited_once()
+                spend_tool.assert_not_awaited()
+                self.assertEqual(spend_universal.await_args.args[2], 15)
             await db.commit()
         self.assertEqual(result["attempts"], 3)
         self.assertEqual(result["material_spent"], 15)

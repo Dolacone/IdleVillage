@@ -127,16 +127,16 @@ Task 1 (manager) + Task 2 (UI/events) --> Task 3 (handler/integration) --> Revie
   - Acceptance: 特定效果 -> 任意 -> 特定效果保留效果、門檻與素材來源。從真實渲染 ID 執行切換。
   - Acceptance: 所有 ID 不超過 100 字元。現有整合測試必須從真實 handler 渲染取得有效確認，不手動注入 registry。
   - Evidence: `UV_CACHE_DIR=/private/tmp/idlevillage-uv-cache uv run --no-project python -m unittest discover -s tests -q` — `Ran 646 tests in 8.794s`; `OK`. Full runner output: `/private/tmp/idlevillage-task6.log`. `test_confirmation_replay_after_clear_is_rejected_and_new_render_works`, `test_exhausted_confirmation_replay_after_refill_is_rejected`, `test_obsolete_other_user_and_tampered_ids_do_not_consume_current_confirmation`, and `test_kind_switch_round_trip_uses_rendered_dropdown_ids_and_retains_settings` exercise the live handler/renderer registry with real SQLite and notification dispatch.
-- [ ] Task 7: 批次扣款次數驗證。[Review/Major]
+- [x] Task 7: 批次扣款次數驗證。[Review/Major]
   - Tests: `tests/test_affix_manager.py`。
   - Acceptance: 工具素材與萬能素材均使用真實扣款函式。spy 或 SQLite trace 必須證明每批次只有一次扣款。
   - Acceptance: 含失敗抽選的批次仍只扣一次總成本。單純改成逐次扣款時測試必須失敗。
-  - Evidence: `UV_CACHE_DIR=/private/tmp/idlevillage-uv-cache uv run --no-project python -m unittest discover -s tests -q` — `Ran 642 tests in 8.053s`; `OK`. Full runner output: `/private/tmp/idlevillage-task5.log`.
+  - Evidence: `UV_CACHE_DIR=/private/tmp/idlevillage-uv-cache uv run --no-project python -m unittest tests.test_affix_manager -q` — `Ran 50 tests in 0.949s`; `OK`. Output: `/private/tmp/idlevillage-task7.log`.
 
 ## Review Issues
 
 - [x] [Review/Major] 一次性確認必須綁定玩家目前 renderer 產生的完整 ID，並在首次 await 前消耗。`test_confirmation_replay_after_clear_is_rejected_and_new_render_works` 驗證成功後清槽再重送不扣款、不公告；`test_exhausted_confirmation_replay_after_refill_is_rejected` 驗證耗盡後加素材仍拒絕舊 ID。
-- [ ] [Review/Major] `tests/test_affix_manager.py:193-207` 只核對總餘額與回傳成本，無法驗證 `docs/changelogs/2026-09-30-auto-affix-extraction.md:103` 的「扣款次數固定為一次」。需直接驗證一次批次只呼叫一次所選素材扣款或只執行一次扣款 UPDATE。
+- [x] [Review/Major] 批次扣款次數固定為一次。`test_tool_batch_calls_real_debit_once_after_rejected_draws` 與 `test_universal_exhaustion_calls_real_debit_once_for_total_cost` 使用 wraps 執行真實素材扣款與 SQLite，並檢查所選扣款只呼叫一次、金額等於總成本、另一來源未呼叫及最終餘額。
 - [x] [Review/Major] 任意與特定效果切換必須由當前 renderer custom_id 驅動，並保留效果、門檻與素材來源。`test_kind_switch_round_trip_uses_rendered_dropdown_ids_and_retains_settings` 驗證特定 -> 任意 -> 特定切換期間資料庫素材不變。
 - [x] [Review/Major] 每個自動抽取確認 ID 必須綁定當下第一個空槽。`test_slot_bound_confirmation_blocks_repeat_and_allows_next_slot` 驗證等級 10 的並行確認只扣一次並填槽 0；重送同 ID 不扣款、不公告；重新渲染後的槽 1 確認可成功。`test_confirmation_binds_first_empty_slot_and_stays_within_limit` 驗證最早空槽與滿槽 ID。
 - [x] [Plan/Major] 抽選不得長時間持有寫入鎖。抽選先在交易外完成。交易內只重讀狀態、一次扣款與最終填槽。
