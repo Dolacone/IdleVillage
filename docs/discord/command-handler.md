@@ -71,12 +71,12 @@ source_paths:
 | `back_to_gear:{gear_type}` | 點擊返回 | 回到工具強化子選單 |
 | `open_auto_affix:{gear_type}` | 開啟自動抽取 | 載入等級、槽位與兩類素材持有量 |
 | `auto_affix_kind/effect/value/material:{gear}:{mode}:{effect}:{value}:{source}` | 選擇設定 | 替換所選欄位並保留其他設定 |
-| `auto_affix_confirm:{gear}:{mode}:{effect}:{value}:{source}:{expected_slot}` | 確認批次 | 延後回應，驗證目標槽並呼叫 affix-manager；交易提交後發送一則摘要 |
+| `auto_affix_run:{gear}:{mode}:{effect}:{value}:{source}:{expected_slot}:{token}` | 確認批次 | 比對玩家目前完整確認 ID 並先消耗，再驗證目標槽與呼叫 affix-manager；交易提交後發送一則摘要 |
 | `back_to_affix:{gear_type}` | 返回詞條管理 | 返回詞條管理畫面 |
 
 ### 自動抽取確認
 
-確認時驗證 custom_id 的欄位數與每個值，包含非負整數 `expected_slot`。缺值、非法值、目標槽過期與素材不足時回滾或不開始交易，顯示錯誤並重新渲染設定畫面。Manager 在抽選完成後才開啟寫入交易；handler 提交成功後才 dispatch `affix_auto_extracted`。
+每次設定畫面渲染都產生 8 字元 URL-safe token，並將 renderer 輸出的完整確認 ID 存入該玩家目前確認表。確認 ID 必須符合 `auto_affix_run:{gear}:{mode}:{effect}:{value}:{source}:{expected_slot}:{token}` 且與玩家目前 ID 完全相同。handler 在第一次 await 前消耗 ID。重複、過期、跨玩家或欄位被改寫的 ID 只 defer 並返回。有效 ID 還須包含非負整數 `expected_slot`。目標槽過期與素材不足時回滾並重新渲染新 ID。Manager 在抽選完成後才開啟寫入交易；handler 提交成功後才 dispatch `affix_auto_extracted`。
 
 ### 管理員介面（資源管理）
 | 元件 ID | 觸發條件 | 處理邏輯 |

@@ -1,3 +1,4 @@
+import secrets
 from datetime import datetime, timedelta, timezone
 
 import disnake
@@ -30,7 +31,7 @@ from database.schema import get_connection
 from managers import affix_manager, auto_tool_manager, building_manager, gear_manager, player_manager, trial_manager
 
 _OWN_BUTTONS = frozenset({"burst_execute", "open_gear_upgrade", "open_trial_start", "open_auto_tool", "back_to_main"})
-_OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:", "clear_affix:", "sacrifice_material:", "open_affix_mgmt:", "affix_extract:", "affix_clear:", "back_to_gear:", "auto_tool_confirm:", "trial_target_page:", "open_auto_affix:", "back_to_affix:", "auto_affix_confirm:")
+_OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:", "clear_affix:", "sacrifice_material:", "open_affix_mgmt:", "affix_extract:", "affix_clear:", "back_to_gear:", "auto_tool_confirm:", "trial_target_page:", "open_auto_affix:", "back_to_affix:", "auto_affix_run:")
 _OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "gear_type_select", "affix_gear_select", "auto_tool_type_select", "trial_target_select"})
 _OWN_DROPDOWN_PREFIXES = ("upgrade_mode_select:", "affix_slot_select:", "auto_tool_target_select:", "auto_tool_add_select:", "auto_tool_sub_select:", "auto_affix_kind:", "auto_affix_effect:", "auto_affix_value:", "auto_affix_material:")
 _OWN_MODAL_PREFIXES = ("modal_sacrifice:",)
@@ -78,6 +79,7 @@ def _make_player_gear(row):
 class ActionsCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self._auto_affix_confirmations: dict[str, str] = {}
 
     def _check_guild(self, inter) -> bool:
         return str(inter.guild_id) == get_discord_guild_id()
@@ -287,9 +289,17 @@ class ActionsCog(commands.Cog):
             gear_type, materials, universal_materials, max_slots, affixes,
             target_mode, target_affix_type, min_value, material_source, error,
         )
+        confirmation_token = secrets.token_urlsafe(6)
         components = build_auto_affix_components(
             gear_type, materials, universal_materials, max_slots, affixes,
             target_mode, target_affix_type, min_value, material_source, error,
+            confirmation_token=confirmation_token,
+        )
+        user_id = str(inter.user.id)
+        self._auto_affix_confirmations[user_id] = next(
+            component.custom_id
+            for row in components for component in row.children
+            if component.custom_id.startswith("auto_affix_run:")
         )
         await inter.edit_original_response(embed=embed, components=components)
 
@@ -601,11 +611,20 @@ class ActionsCog(commands.Cog):
             await inter.response.defer()
             await self._render_affix(inter, None if parts[1] == "none" else parts[1])
 
-        elif cid.startswith("auto_affix_confirm:"):
+        elif cid.startswith("auto_affix_run:"):
+            registered_id = self._auto_affix_confirmations.get(user_id)
+            if cid != registered_id:
+                await inter.response.defer()
+                return
+            self._auto_affix_confirmations.pop(user_id, None)
             parts = cid.split(":")
-            state = _parse_auto_affix_state(parts[:6]) if len(parts) == 7 else None
-            expected_slot_text = parts[6] if len(parts) == 7 else ""
-            if state is None or not expected_slot_text.isdecimal():
+            state = _parse_auto_affix_state(parts[:6]) if len(parts) == 8 else None
+            expected_slot_text = parts[6] if len(parts) == 8 else ""
+            token = parts[7] if len(parts) == 8 else ""
+            valid_token = len(token) == 8 and all(
+                character.isascii() and (character.isalnum() or character in "-_") for character in token
+            )
+            if state is None or not expected_slot_text.isdecimal() or not valid_token:
                 await inter.response.defer()
                 gear = parts[1] if len(parts) > 1 else "none"
                 gear = gear if gear in _VALID_GEAR_TYPES else None

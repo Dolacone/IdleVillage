@@ -36,7 +36,7 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 | 工具強化失敗 | gear-manager 回傳失敗 | `{user_display_name} 的 {gear_name} 升級失敗 :boom: Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）` | Public |
 | 詞條抽取 | `extract_affix` handler 成功後 | `{user_display_name} 的 {gear_name} 抽到詞條：{affix_label}（{sign}{value}%）`，sign 為 `-`（reduce 類型）或 `+`（其他） | Public |
 | 詞條清除 | `clear_affix` handler 成功後 | `{user_display_name} 的 {gear_name} 清除詞條：{affix_label}（{sign}{value}%）`，sign 為 `-`（reduce 類型）或 `+`（其他） | Public |
-| 詞條自動抽取 | `auto_affix_confirm` 提交成功後 | 成功或未達標摘要，列出總次數與所選素材實際花費；格式見下方範本 | Public |
+| 詞條自動抽取 | `auto_affix_run` 提交成功後 | 成功或未達標摘要，列出總次數與所選素材實際花費；格式見下方範本 | Public |
 | 試煉開始 | `trial_target_select` 成功開啟試煉 | 玩家選定的目標值 + 系統隨機選定的扣款資源 + 期限 + 獎勵池大小；不顯示發起者 | Public |
 | 試煉達成 | trial-manager 判定進度達標 | 目標值（行動產出總計）+ 各參與者貢獻與獲得數量列表（依貢獻降冪） | Public |
 | 試煉失敗（逾時） | trial-manager 判定 12 小時內未達標 | 目標值（行動產出總計）+ 逾時當下進度，說明資源不退還 | Public |

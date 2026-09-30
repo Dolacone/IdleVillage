@@ -876,6 +876,7 @@ def build_auto_affix_components(
     min_value: int | None = None,
     material_source: str | None = None,
     error: str | None = None,
+    confirmation_token: str | None = None,
 ) -> list:
     gear = gear_type or "none"
     mode = target_mode or "none"
@@ -918,10 +919,14 @@ def build_auto_affix_components(
     has_empty_slot = expected_slot is not None
     valid_gear = gear_type in GEAR_LABELS
     enough_material = (materials >= 1 if material_source == "tool" else universal_materials >= 5)
-    confirm_id = f"{state_id('auto_affix_confirm')}:{expected_slot if expected_slot is not None else 'none'}"
+    valid_token = (
+        isinstance(confirmation_token, str) and len(confirmation_token) == 8
+        and all(character.isascii() and (character.isalnum() or character in "-_") for character in confirmation_token)
+    )
+    confirm_id = f"{state_id('auto_affix_run')}:{expected_slot if expected_slot is not None else 'none'}:{confirmation_token or 'none'}"
     rows.append(disnake.ui.ActionRow(
         disnake.ui.Button(label="✅ 開始自動抽取", style=disnake.ButtonStyle.success,
-                          custom_id=confirm_id, disabled=not (valid_gear and complete and has_empty_slot and enough_material)),
+                          custom_id=confirm_id, disabled=not (valid_gear and complete and has_empty_slot and enough_material and valid_token)),
         disnake.ui.Button(label="← 返回詞條管理", style=disnake.ButtonStyle.secondary,
                           custom_id=f"back_to_affix:{gear}"),
     ))

@@ -62,7 +62,7 @@ scope: "Tracks automatic affix extraction from design through review."
 - 交易: manager 在讀取起始素材後抽選，不持有寫入鎖。抽選完成後以 `BEGIN IMMEDIATE` 重讀工具等級、槽位與素材。依最新餘額縮減可扣次數。成功結果超過可扣次數時丟棄。總成本只扣一次。handler 提交或回滾。
 - 並行: 本批次只使用開始時持有的素材。抽選期間新增的素材保留。抽選期間素材減少時縮減次數。最新槽位全滿時拒絕且不扣款。
 - 目標槽: 設定頁將第一空槽寫入確認 ID。manager 在抽選前與交易內檢查目標槽。目標槽改變時拒絕確認，不移至下一個空槽。
-- 一次性確認: handler 為每次渲染產生 8 字元 token。確認 ID 使用 `auto_affix_run` 前綴。每位玩家只保留目前介面的完整確認 ID。handler 在首次 await 前消耗 ID。已消耗或過期確認不扣款、不公告。
+- 一次性確認: renderer 接收每次渲染產生的 8 字元 URL-safe token。確認 ID 格式為 `auto_affix_run:{gear}:{mode}:{effect}:{value}:{source}:{expected_slot}:{token}`。handler 依玩家只保留目前介面的完整 ID，並在首次 await 前消耗。已消耗、過期、跨玩家或遭改寫的確認不扣款、不公告。
 - 介面: 「目標種類」選任意或特定效果。選特定效果後顯示七種效果選單。另有「目標數值」與「花費素材」。設定未齊時停用確認。
 - 介面狀態: 沿用 custom_id 帶選擇值的慣例。四個選單與按鈕共用最多五列。每個 custom_id 必須不超過 100 字元。
 - 提交: handler 延後回應，再提交批次。重新檢查滿槽與素材。起始素材不足時顯示錯誤，不送零次公告。
@@ -117,7 +117,7 @@ Task 1 (manager) + Task 2 (UI/events) --> Task 3 (handler/integration) --> Revie
   - Acceptance: 確認 ID 附帶設定頁第一空槽。handler 驗證並傳入 `expected_slot`。完整 ID 仍不超過 100 字元。
   - Acceptance: 同一確認在兩個空槽上並行時只扣一次、填一槽、發一則公告。完成後再次提交同一確認不得扣款。
   - Acceptance: 重新開啟設定頁可對下一個空槽正常抽取。所有既有確認測試配合新 ID。完整測試套件通過。
-- [ ] Task 6: 一次性確認與目標種類切換驗證。[Review/Major]
+- [x] Task 6: 一次性確認與目標種類切換驗證。[Review/Major]
   - Source: `src/cogs/actions.py`、`src/cogs/ui_renderer.py`。
   - Tests: `tests/test_discord_commands.py`。
   - Docs: `docs/discord/command-handler.md`、`docs/discord/ui-renderer.md`。
@@ -126,6 +126,7 @@ Task 1 (manager) + Task 2 (UI/events) --> Task 3 (handler/integration) --> Revie
   - Acceptance: 重新開啟設定頁取得新確認，可正常使用原空槽。舊介面與其他玩家的確認不得消耗素材。
   - Acceptance: 特定效果 -> 任意 -> 特定效果保留效果、門檻與素材來源。從真實渲染 ID 執行切換。
   - Acceptance: 所有 ID 不超過 100 字元。現有整合測試必須從真實 handler 渲染取得有效確認，不手動注入 registry。
+  - Evidence: `UV_CACHE_DIR=/private/tmp/idlevillage-uv-cache uv run --no-project python -m unittest discover -s tests -q` — `Ran 646 tests in 8.794s`; `OK`. Full runner output: `/private/tmp/idlevillage-task6.log`. `test_confirmation_replay_after_clear_is_rejected_and_new_render_works`, `test_exhausted_confirmation_replay_after_refill_is_rejected`, `test_obsolete_other_user_and_tampered_ids_do_not_consume_current_confirmation`, and `test_kind_switch_round_trip_uses_rendered_dropdown_ids_and_retains_settings` exercise the live handler/renderer registry with real SQLite and notification dispatch.
 - [ ] Task 7: 批次扣款次數驗證。[Review/Major]
   - Tests: `tests/test_affix_manager.py`。
   - Acceptance: 工具素材與萬能素材均使用真實扣款函式。spy 或 SQLite trace 必須證明每批次只有一次扣款。
@@ -134,9 +135,9 @@ Task 1 (manager) + Task 2 (UI/events) --> Task 3 (handler/integration) --> Revie
 
 ## Review Issues
 
-- [ ] [Review/Major] `src/cogs/actions.py:604-660` 與 `src/managers/affix_manager.py:138-175` 只用槽位判斷確認是否過期。槽 0 成功後若被清除，重送同一個 `auto_affix_confirm:...:0` 會再次扣款、填槽並公告。真實 handler、SQLite 與 mocked 公告重現兩次扣款及兩則公告；同一確認必須保持一次性。
+- [x] [Review/Major] 一次性確認必須綁定玩家目前 renderer 產生的完整 ID，並在首次 await 前消耗。`test_confirmation_replay_after_clear_is_rejected_and_new_render_works` 驗證成功後清槽再重送不扣款、不公告；`test_exhausted_confirmation_replay_after_refill_is_rejected` 驗證耗盡後加素材仍拒絕舊 ID。
 - [ ] [Review/Major] `tests/test_affix_manager.py:193-207` 只核對總餘額與回傳成本，無法驗證 `docs/changelogs/2026-09-30-auto-affix-extraction.md:103` 的「扣款次數固定為一次」。需直接驗證一次批次只呼叫一次所選素材扣款或只執行一次扣款 UPDATE。
-- [ ] [Review/Major] `tests/test_discord_commands.py:1620-1628` 只走「未選擇 -> 特定效果」設定序列，未覆蓋 `docs/changelogs/2026-09-30-auto-affix-extraction.md:99` 指定的任意與特定效果來回切換。需從渲染後的 custom_id 實際切換模式並斷言效果、門檻與素材來源均保留。
+- [x] [Review/Major] 任意與特定效果切換必須由當前 renderer custom_id 驅動，並保留效果、門檻與素材來源。`test_kind_switch_round_trip_uses_rendered_dropdown_ids_and_retains_settings` 驗證特定 -> 任意 -> 特定切換期間資料庫素材不變。
 - [x] [Review/Major] 每個自動抽取確認 ID 必須綁定當下第一個空槽。`test_slot_bound_confirmation_blocks_repeat_and_allows_next_slot` 驗證等級 10 的並行確認只扣一次並填槽 0；重送同 ID 不扣款、不公告；重新渲染後的槽 1 確認可成功。`test_confirmation_binds_first_empty_slot_and_stays_within_limit` 驗證最早空槽與滿槽 ID。
 - [x] [Plan/Major] 抽選不得長時間持有寫入鎖。抽選先在交易外完成。交易內只重讀狀態、一次扣款與最終填槽。
 - [x] [Plan/Major] 補上扣款後失敗、提交失敗與並行競爭的真實 SQLite 測試。

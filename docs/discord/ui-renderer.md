@@ -268,7 +268,7 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 
 - 目標種類選任意或特定效果；特定效果時顯示七種效果選單。另選最低數值（1+ 至 5）與花費來源（工具素材或萬能素材）。
 - 下拉選單與確認按鈕在 custom_id 中攜帶完整狀態。確認按鈕在設定不完整、沒有空槽或所選素材不足時停用。
-- `auto_affix_confirm:{gear}:{mode}:{effect}:{value}:{source}:{expected_slot}` 會執行一次批次。確認 ID 綁定設定頁顯示的第一個空槽；沒有空槽時使用 `none` 並停用按鈕。成功只保存第一條符合條件的詞條；耗盡時保持空槽。兩種結果都由 notification 模組發布一則摘要。
+- `auto_affix_run:{gear}:{mode}:{effect}:{value}:{source}:{expected_slot}:{token}` 會執行一次批次。renderer 接收 8 字元 URL-safe token，並將確認 ID 綁定設定頁顯示的第一個空槽；沒有空槽時使用 `none` 並停用按鈕。沒有有效 token 時確認也停用。成功只保存第一條符合條件的詞條；耗盡時保持空槽。兩種結果都由 notification 模組發布一則摘要。
 
 ## 管理員介面 Embed（/idlevillage-manage）
 
