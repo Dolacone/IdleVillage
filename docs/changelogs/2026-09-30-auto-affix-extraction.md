@@ -1,6 +1,6 @@
 ---
 title: "詞條自動抽取"
-status: Ready-to-review
+status: Reviewed
 created: 2026-09-30
 doc_type: change
 last_reviewed: 2026-09-30
@@ -154,6 +154,7 @@ Task 1 (manager) + Task 2 (UI/events) --> Task 3 (handler/integration) --> Revie
 
 ## Review Issues
 
+- [x] [Review] 獨立複審沒有 Critical、Major 或 Minor 發現。`UV_CACHE_DIR=/private/tmp/idlevillage-uv-cache uv run --no-project python -m unittest discover -s tests -q` 在 Python 3.11.14、disnake 2.12.0、aiosqlite 0.22.1 執行，輸出 `Ran 652 tests in 8.278s` 與 `OK`。完整輸出見 `/private/tmp/idlevillage-review-final-2-tests.log`，逐項行號證據見 `/private/tmp/idlevillage-review-final-2.md`。
 - [x] [Review/Major] 導覽按鈕與 `/idlevillage` 必須在 defer 前撤銷確認。`test_returning_to_affix_management_invalidates_pending_confirmation` 與 `test_main_navigation_and_slash_reopen_invalidate_before_confirmation` 在 defer callback 內重送真實 renderer 確認 ID，並於 callback 前檢查 registry 已清除。
 - [x] [Review/Minor] 自動抽取入口按鈕使用 Green 樣式。`docs/discord/ui-renderer.md` 現在記錄 Green，與 `ButtonStyle.success` 相符。
 - [x] [Review] 獨立審查執行 `UV_CACHE_DIR=/private/tmp/idlevillage-uv-cache uv run --no-project python -m unittest discover -s tests -q`；Python 3.11.14、disnake 2.12.0、aiosqlite 0.22.1，輸出 `Ran 652 tests in 8.816s`、`OK`。完整證據見 `/private/tmp/idlevillage-review-final-tests.log`，審查報告見 `/private/tmp/idlevillage-review-final.md`。
