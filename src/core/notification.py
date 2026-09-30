@@ -197,6 +197,23 @@ def _format_event(event: dict, name_map: dict[str, str] | None = None) -> str | 
         sign = "-" if affix_type in REDUCE_AFFIX_TYPES else "+"
         return f"{user_name} 的 {gear_name} {verb}詞條：{affix_label}（{sign}{value}%）"
 
+    if kind == "affix_auto_extracted":
+        user_name = event.get("user_display_name", "")
+        gear_name = GEAR_LABELS.get(event.get("gear_type", ""), event.get("gear_type", ""))
+        affix = event.get("affix")
+        attempts = event.get("attempts", 0)
+        spent = event.get("material_spent", 0)
+        source = event.get("material_source", "tool")
+        cost_label = "工具素材" if source == "tool" else "萬能素材"
+        if affix:
+            affix_type = affix.get("affix_type", "")
+            affix_label = AFFIX_TYPE_LABELS.get(affix_type, affix_type)
+            sign = "-" if affix_type in REDUCE_AFFIX_TYPES else "+"
+            result = f"抽到詞條：{affix_label}（{sign}{affix.get('value', 0)}%）"
+        else:
+            result = "未抽到目標詞條"
+        return f"{user_name} 的 {gear_name} {result}，抽選次數{attempts} ({spent}{cost_label})"
+
     if kind == "trial_start":
         resource_type = event.get("resource_type", "")
         target = event.get("target", 0)

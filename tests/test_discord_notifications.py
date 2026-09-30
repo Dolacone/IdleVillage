@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.dirname(__file__))
 
 import disnake
 from support import ALL_TEST_ENV, DatabaseTestCase
@@ -1022,6 +1023,32 @@ class TestAffixNotificationSign(unittest.TestCase):
         }
         text = _format_event(ev)
         self.assertIn("+5%", text)
+
+    def test_auto_affix_success_matches_summary_example(self):
+        from core.notification import _format_event
+        text = _format_event({
+            "type": "affix_auto_extracted", "user_display_name": "Player", "gear_type": "research",
+            "affix": {"affix_type": "cycle_time_reduce", "value": 4}, "attempts": 50,
+            "material_spent": 250, "material_source": "universal",
+        })
+        self.assertEqual(text, "Player 的 研究工具 抽到詞條：行動週期縮短（+4%），抽選次數50 (250萬能素材)")
+
+    def test_auto_affix_exhaustion_and_tool_cost(self):
+        from core.notification import _format_event
+        text = _format_event({
+            "type": "affix_auto_extracted", "user_display_name": "Player", "gear_type": "research",
+            "affix": None, "attempts": 50, "material_spent": 50, "material_source": "tool",
+        })
+        self.assertEqual(text, "Player 的 研究工具 未抽到目標詞條，抽選次數50 (50工具素材)")
+
+    def test_auto_affix_reduce_sign_is_negative(self):
+        from core.notification import _format_event
+        text = _format_event({
+            "type": "affix_auto_extracted", "user_display_name": "Player", "gear_type": "research",
+            "affix": {"affix_type": "upgrade_cost_reduce", "value": 3}, "attempts": 2,
+            "material_spent": 2, "material_source": "tool",
+        })
+        self.assertIn("強化素材消耗（-3%）", text)
 
 
 if __name__ == "__main__":

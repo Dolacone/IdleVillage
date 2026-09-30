@@ -78,7 +78,7 @@ Task 2 (UI/events) --+
   - Acceptance: 工具素材耗盡不扣萬能素材。萬能素材每次扣 5，不扣工具素材。餘數保留。次數與花費包含成功那次。
   - Acceptance: 未達標保持空槽。既有詞條不變。所有無效參數與起始素材不足不扣款。單抽補足測試維持通過。
   - Evidence: `UV_CACHE_DIR=/private/tmp/idlevillage-uv-cache uv run --no-project python -m unittest tests.test_affix_manager -q` — 44 tests, OK.
-- [ ] Task 2: 設定介面與批次公告。[可與 Task 1 平行]
+- [x] Task 2: 設定介面與批次公告。[可與 Task 1 平行]
   - Source: `src/cogs/ui_renderer.py`、`src/core/notification.py`。
   - Tests: `tests/test_discord_commands.py`、`tests/test_discord_notifications.py`。
   - Acceptance: 新增自動抽取入口。無工具、無槽或滿槽停用。設定頁列出任意與特定效果、七種效果、五個數值門檻與兩種素材。

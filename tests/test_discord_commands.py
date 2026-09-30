@@ -1462,6 +1462,81 @@ class TestAffixComponentsBlankState(unittest.TestCase):
         self.assertIn("back_to_gear:none", custom_ids)
 
 
+class TestAutoAffixComponents(unittest.TestCase):
+    def test_entry_requires_selected_gear_and_empty_slot(self):
+        from cogs.ui_renderer import build_affix_components
+        gear = {"gathering": 0, "building": 5}
+        for selected, affixes, slots, disabled in ((None, [], 1, True), ("gathering", [], 1, True),
+                                                     ("building", [], 0, True), ("building", [{"slot_index": 0, "affix_type": "efficiency", "value": 1}], 1, True),
+                                                     ("building", [], 1, False)):
+            rows = build_affix_components(selected, gear, 10, affixes, slots)
+            button = next(c for row in rows for c in row.children if c.custom_id.startswith("open_auto_affix:"))
+            self.assertEqual(button.disabled, disabled)
+
+    def test_settings_require_complete_choices_and_selected_balance(self):
+        from cogs.ui_renderer import build_auto_affix_components
+        common = ("research", 0, 0, 1, [])
+        rows = build_auto_affix_components(*common)
+        confirm = next(c for row in rows for c in row.children if c.custom_id.startswith("auto_affix_confirm:"))
+        self.assertTrue(confirm.disabled)
+        rows = build_auto_affix_components("research", 1, 0, 1, [], "any", None, 1, "tool")
+        confirm = next(c for row in rows for c in row.children if c.custom_id.startswith("auto_affix_confirm:"))
+        self.assertFalse(confirm.disabled)
+        rows = build_auto_affix_components("research", 99, 4, 1, [], "any", None, 1, "universal")
+        confirm = next(c for row in rows for c in row.children if c.custom_id.startswith("auto_affix_confirm:"))
+        self.assertTrue(confirm.disabled)
+        rows = build_auto_affix_components("research", 0, 5, 1, [], "specific", "efficiency", 5, "universal")
+        confirm = next(c for row in rows for c in row.children if c.custom_id.startswith("auto_affix_confirm:"))
+        self.assertFalse(confirm.disabled)
+
+    def test_choices_and_selected_state_are_rendered_in_custom_ids(self):
+        from cogs.ui_renderer import build_auto_affix_components, AFFIX_TYPE_LABELS
+        rows = build_auto_affix_components("research", 3, 25, 2, [], "specific", "cycle_time_reduce", 4, "universal")
+        self.assertEqual(len(rows), 5)
+        selects = [row.children[0] for row in rows if isinstance(row.children[0], __import__("disnake").ui.StringSelect)]
+        self.assertEqual([o.label for o in selects[0].options], ["任意", "特定效果"])
+        self.assertEqual([o.label for o in selects[1].options], list(AFFIX_TYPE_LABELS.values()))
+        self.assertEqual([o.label for o in selects[2].options], ["1+", "2+", "3+", "4+", "5"])
+        self.assertEqual([o.label for o in selects[3].options], ["工具素材", "萬能素材"])
+        self.assertTrue(selects[0].options[1].default)
+        self.assertTrue(selects[1].options[-1].default)
+        self.assertTrue(selects[2].options[3].default)
+        self.assertTrue(selects[3].options[1].default)
+        self.assertTrue(all(c.custom_id.endswith(":research:specific:cycle_time_reduce:4:universal")
+                            for row in rows for c in row.children if c.custom_id.startswith("auto_affix_")))
+
+    def test_confirm_needs_real_empty_slot_and_valid_gear(self):
+        from cogs.ui_renderer import build_auto_affix_components
+        settings = ("any", None, 1, "tool")
+        for gear, affixes, slots in ((None, [], 1), ("invalid", [], 1),
+                                     ("research", [{"slot_index": 0}], 1)):
+            rows = build_auto_affix_components(gear, 1, 0, slots, affixes, *settings)
+            confirm = next(c for row in rows for c in row.children if c.custom_id.startswith("auto_affix_confirm:"))
+            self.assertTrue(confirm.disabled)
+        rows = build_auto_affix_components("research", 1, 0, 1, [{"slot_index": 8}], *settings)
+        confirm = next(c for row in rows for c in row.children if c.custom_id.startswith("auto_affix_confirm:"))
+        self.assertFalse(confirm.disabled)
+
+    def test_auto_affix_embed_shows_fifth_threshold_and_cost(self):
+        from cogs.ui_renderer import build_auto_affix_embed
+        embed = build_auto_affix_embed("research", 1, 5, 1, [], "any", None, 5, "universal")
+        self.assertIn("目標數值：5", embed.description)
+        self.assertIn("每次抽選：1 工具素材或 5 萬能素材", embed.description)
+
+    def test_custom_ids_stay_within_limit_for_all_setting_combinations(self):
+        from itertools import product
+        from cogs.ui_renderer import build_auto_affix_components
+        for mode, effect, value, source in product((None, "any", "specific"), (None, "upgrade_material_refund"),
+                                                    (None, 1, 2, 3, 4, 5), (None, "tool", "universal")):
+            for candidate_effect in ((None, "upgrade_material_refund") if mode == "specific" else (None,)):
+                rows = build_auto_affix_components("research", 999, 999, 3, [], mode,
+                                                   candidate_effect, value, source)
+                self.assertLessEqual(len(rows), 5)
+                for row in rows:
+                    for component in row.children:
+                        self.assertLessEqual(len(component.custom_id), 100)
+
+
 class TestAffixRouteRegistration(unittest.TestCase):
     """Affix interface interaction routes are registered."""
 
