@@ -10,6 +10,8 @@ scope: "Documentation entry point. All repository docs are reachable from this i
 
 This directory is the v2 design preview. v2 is a fresh restart and replaces v1 gameplay rules.
 
+變更日誌：[CHANGELOG](../CHANGELOG.md)。
+
 ## SSOT Rules
 
 - Each gameplay rule belongs to exactly one functional module file.

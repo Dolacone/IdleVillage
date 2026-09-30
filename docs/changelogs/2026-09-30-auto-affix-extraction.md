@@ -1,6 +1,6 @@
 ---
 title: "詞條自動抽取"
-status: Refactored
+status: Done
 created: 2026-09-30
 doc_type: change
 last_reviewed: 2026-09-30
@@ -19,6 +19,7 @@ source_paths:
   - docs/discord/notification.md
   - docs/README.md
   - README.md
+  - CHANGELOG.md
 scope: "Tracks automatic affix extraction from design through review."
 ---
 
