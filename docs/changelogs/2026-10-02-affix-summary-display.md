@@ -1,6 +1,6 @@
 ---
 title: "詞條合計顯示與四字名稱"
-status: Ready-to-review
+status: Reviewed
 created: 2026-10-02
 doc_type: change
 last_reviewed: 2026-10-02
@@ -129,3 +129,9 @@ Task 2 匯入 Task 1 的對照表，必須依序執行，不可平行。
 重新審查：R1 已解決。`tests/test_discord_commands.py:1359-1368` 傳入 `affixes=[]` 與 `max_slots=2`，斷言合計標題、`（尚無詞條）` 與兩個空槽。記憶體變體在 `affixes` 為空時移除合計。變體執行結果：`ERROR: test_empty_affixes_still_show_summary_before_empty_slot_list`。R2 已解決。`docs/README.md:37` 連結此變更文件。
 
 重新審查全套測試：`uv run python -m pytest -q`。結果：`656 passed, 24 subtests passed in 8.76s`。
+
+第二次重新審查：R1、R2 維持已解決。R3 已解決。`tests/test_discord_commands.py:1370-1377` 傳入選定工具與 `max_slots=0`，斷言不含 `詞條合計`、`（尚無詞條）` 與 `詞條槽`。`src/cogs/ui_renderer.py:741-744` 在 `_build_affix_section` 回傳空字串時隱藏合計。記憶體變體在選定工具且 `max_slots == 0` 時附加 `詞條合計` 與 `（尚無詞條）`。命令：`uv run python <scratchpad>/r3probe.py --mutated`。基準輸出：`failures 0 errors 0`。變體輸出：`FAIL: test_summary_hidden_when_no_slot_unlocked`、`failures 1 errors 0`。
+
+- [ ] [Minor] R4: 詞條管理畫面測試未斷言 `詞條合計` 前的空行。本文件:100 的 AC4 要求持有素材列之後顯示空行。`src/cogs/ui_renderer.py:743` 以 `"\n詞條合計\n"` 產生空行。`tests/test_discord_commands.py:1342-1357` 只斷言持有素材、合計與分隔線的先後順序。若移除該前置 `\n`，現有測試不會失敗。可斷言 `"個\n\n詞條合計"` 出現在 description 中。
+
+第二次重新審查全套測試：`uv run python -m pytest -q`。結果：`657 passed, 24 subtests passed in 8.88s`。
