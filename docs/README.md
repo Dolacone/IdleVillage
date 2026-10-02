@@ -1,7 +1,7 @@
 ---
 title: IdleVillage v2 Preview SSOT Map
 doc_type: index
-last_reviewed: 2026-07-17
+last_reviewed: 2026-09-30
 source_paths: []
 scope: "Documentation entry point. All repository docs are reachable from this index."
 ---
@@ -9,6 +9,8 @@ scope: "Documentation entry point. All repository docs are reachable from this i
 # IdleVillage v2 Preview SSOT Map
 
 This directory is the v2 design preview. v2 is a fresh restart and replaces v1 gameplay rules.
+
+變更日誌：[CHANGELOG](../CHANGELOG.md)。
 
 ## SSOT Rules
 
@@ -27,13 +29,14 @@ This directory is the v2 design preview. v2 is a fresh restart and replaces v1 g
 | Stage sequence, targets, overtime, clears | `managers/stage-manager.md` |
 | Village trial: goal, timing, contribution, rewards | `managers/trial-manager.md` |
 | Building XP, level cap, capped progress | `managers/building-manager.md` |
-| Player state, AP, materials | `managers/player-manager.md` |
+| Player state, AP, materials | [managers/player-manager.md](managers/player-manager.md) |
 | Auto-tool background action streams | `managers/auto-tool-manager.md` |
 | Gear upgrade rates, pity, costs | `managers/gear-manager.md` |
-| Tool affix slots, extraction, bonuses | `managers/affix-manager.md` |
+| Tool affix slots, extraction, bonuses | [managers/affix-manager.md](managers/affix-manager.md) |
+| Automatic affix extraction change record | [changelogs/2026-09-30-auto-affix-extraction.md](changelogs/2026-09-30-auto-affix-extraction.md) |
 | Village resources | `managers/resource-manager.md` |
 | SQLite schema | `db-schema.md` |
-| Slash command routing | `discord/command-handler.md` |
-| Embed and component rendering | `discord/ui-renderer.md` |
-| Public notifications and ordering | `discord/notification.md` |
+| Slash command routing | [discord/command-handler.md](discord/command-handler.md) |
+| Embed and component rendering | [discord/ui-renderer.md](discord/ui-renderer.md) |
+| Public notifications and ordering | [discord/notification.md](discord/notification.md) |
 | Deployment and infrastructure | `deployment.md` |

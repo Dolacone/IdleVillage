@@ -6,7 +6,7 @@ Mechanics reference: docs/managers/affix-manager.md
 import os
 import unittest
 from datetime import datetime, timezone
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from tests.support import ALL_TEST_ENV, DatabaseTestCase
 from database import schema
@@ -175,6 +175,343 @@ class TestExtractAffix(DatabaseTestCase):
         self.assertEqual(mats, cost - 1 if cost > 0 else 0)
         self.assertEqual(universal, 0)
         self.assertEqual(affixes, [])
+
+
+class TestAutoExtractAffix(DatabaseTestCase):
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        async with schema.get_connection() as db:
+            await _insert_player(db, USER, gear_level=10, materials=10_000)
+
+    async def _balances(self, user_id=USER):
+        async with schema.get_connection() as db:
+            return (
+                await player_manager.get_material(db, user_id, GEAR),
+                await player_manager.get_universal_material(db, user_id),
+            )
+
+    async def test_tool_source_spends_only_tool_material_and_counts_success_attempt(self):
+        async with schema.get_connection() as db:
+            await player_manager.set_universal_material(db, USER, 25, NOW)
+            await db.commit()
+            with patch("random.choice", side_effect=["material_drop", "efficiency"]), \
+                 patch("random.randint", side_effect=[5, 3]):
+                result = await affix_manager.auto_extract_affix(
+                    db, USER, GEAR, 10, NOW, target_affix_type="efficiency", min_value=3
+                )
+            await db.commit()
+        self.assertEqual(result, {
+            "affix": {"slot_index": 0, "affix_type": "efficiency", "value": 3},
+            "attempts": 2, "material_spent": 2, "material_source": "tool",
+        })
+        self.assertEqual(await self._balances(), (9_998, 25))
+
+    async def test_universal_source_spends_five_per_attempt_and_preserves_remainder(self):
+        async with schema.get_connection() as db:
+            await player_manager.set_material(db, USER, GEAR, 20, NOW)
+            await player_manager.set_universal_material(db, USER, 17, NOW)
+            await db.commit()
+            with patch("random.choice", return_value="efficiency"), patch("random.randint", return_value=1):
+                result = await affix_manager.auto_extract_affix(
+                    db, USER, GEAR, 10, NOW, min_value=2, material_source="universal"
+                )
+            await db.commit()
+        self.assertEqual(result["attempts"], 3)
+        self.assertEqual(result["material_spent"], 15)
+        self.assertIsNone(result["affix"])
+        self.assertEqual(await self._balances(), (20, 2))
+
+    async def test_tool_batch_calls_real_debit_once_after_rejected_draws(self):
+        real_spend_tool = player_manager.spend_material
+        real_spend_universal = player_manager.spend_universal_material
+        async with schema.get_connection() as db:
+            await player_manager.set_material(db, USER, GEAR, 20, NOW)
+            await player_manager.set_universal_material(db, USER, 12, NOW)
+            await db.commit()
+            with patch.object(player_manager, "spend_material", new=AsyncMock(wraps=real_spend_tool)) as spend_tool, \
+                 patch.object(player_manager, "spend_universal_material", new=AsyncMock(wraps=real_spend_universal)) as spend_universal, \
+                 patch("random.choice", side_effect=["material_drop", "upgrade_cost_reduce", "efficiency"]), \
+                 patch("random.randint", side_effect=[5, 4, 3]):
+                result = await affix_manager.auto_extract_affix(
+                    db, USER, GEAR, 10, NOW, target_affix_type="efficiency", min_value=3
+                )
+                spend_tool.assert_awaited_once()
+                spend_universal.assert_not_awaited()
+                self.assertEqual(spend_tool.await_args.args[3], 3)
+            await db.commit()
+        self.assertEqual(result["attempts"], 3)
+        self.assertEqual(result["material_spent"], 3)
+        self.assertEqual(await self._balances(), (17, 12))
+
+    async def test_universal_exhaustion_calls_real_debit_once_for_total_cost(self):
+        real_spend_tool = player_manager.spend_material
+        real_spend_universal = player_manager.spend_universal_material
+        async with schema.get_connection() as db:
+            await player_manager.set_material(db, USER, GEAR, 20, NOW)
+            await player_manager.set_universal_material(db, USER, 17, NOW)
+            await db.commit()
+            with patch.object(player_manager, "spend_material", new=AsyncMock(wraps=real_spend_tool)) as spend_tool, \
+                 patch.object(player_manager, "spend_universal_material", new=AsyncMock(wraps=real_spend_universal)) as spend_universal, \
+                 patch("random.choice", return_value="material_drop"), patch("random.randint", return_value=1):
+                result = await affix_manager.auto_extract_affix(
+                    db, USER, GEAR, 10, NOW, target_affix_type="efficiency", material_source="universal"
+                )
+                spend_universal.assert_awaited_once()
+                spend_tool.assert_not_awaited()
+                self.assertEqual(spend_universal.await_args.args[2], 15)
+            await db.commit()
+        self.assertEqual(result["attempts"], 3)
+        self.assertEqual(result["material_spent"], 15)
+        self.assertIsNone(result["affix"])
+        self.assertEqual(await self._balances(), (20, 2))
+
+    async def test_any_type_still_requires_threshold(self):
+        async with schema.get_connection() as db:
+            with patch("random.choice", side_effect=["efficiency", "cycle_time_reduce"]), \
+                 patch("random.randint", side_effect=[2, 4]):
+                result = await affix_manager.auto_extract_affix(db, USER, GEAR, 10, NOW, min_value=4)
+            await db.commit()
+        self.assertEqual(result["attempts"], 2)
+        self.assertEqual(result["affix"]["affix_type"], "cycle_time_reduce")
+        self.assertEqual(result["affix"]["value"], 4)
+
+    async def test_target_type_and_threshold_both_must_match(self):
+        async with schema.get_connection() as db:
+            with patch("random.choice", side_effect=["material_drop", "efficiency", "efficiency"]), \
+                 patch("random.randint", side_effect=[5, 2, 4]):
+                result = await affix_manager.auto_extract_affix(
+                    db, USER, GEAR, 10, NOW, target_affix_type="efficiency", min_value=4
+                )
+            await db.commit()
+        self.assertEqual(result["attempts"], 3)
+        self.assertEqual(result["affix"]["value"], 4)
+
+    async def test_failure_keeps_slot_empty_and_preserves_existing_affixes(self):
+        async with schema.get_connection() as db:
+            await db.execute(
+                "INSERT INTO gear_affixes (user_id, gear_type, slot_index, affix_type, value) VALUES (?,?,?,?,?)",
+                (USER, GEAR, 1, "efficiency", 2),
+            )
+            await db.commit()
+            with patch("random.choice", return_value="material_drop"), patch("random.randint", return_value=1):
+                result = await affix_manager.auto_extract_affix(
+                    db, USER, GEAR, 10, NOW, target_affix_type="efficiency"
+                )
+            await db.commit()
+            affixes = await affix_manager.get_affixes(db, USER, GEAR)
+        self.assertIsNone(result["affix"])
+        self.assertEqual(affixes, [{"slot_index": 1, "affix_type": "efficiency", "value": 2}])
+
+    async def test_success_fills_first_hole_only(self):
+        async with schema.get_connection() as db:
+            await db.execute(
+                "INSERT INTO gear_affixes (user_id, gear_type, slot_index, affix_type, value) VALUES (?,?,?,?,?)",
+                (USER, GEAR, 1, "efficiency", 2),
+            )
+            await db.commit()
+            with patch("random.choice", return_value="cycle_time_reduce"), patch("random.randint", return_value=5):
+                result = await affix_manager.auto_extract_affix(db, USER, GEAR, 10, NOW)
+            await db.commit()
+        self.assertEqual(result["affix"], {"slot_index": 0, "affix_type": "cycle_time_reduce", "value": 5})
+
+    async def test_expected_slot_success_fills_requested_first_slot(self):
+        async with schema.get_connection() as db:
+            with patch("random.choice", return_value="efficiency"), patch("random.randint", return_value=4):
+                result = await affix_manager.auto_extract_affix(
+                    db, USER, GEAR, 10, NOW, expected_slot=0
+                )
+            await db.commit()
+        self.assertEqual(result["affix"], {"slot_index": 0, "affix_type": "efficiency", "value": 4})
+        self.assertEqual(await self._balances(), (9_999, 0))
+
+    async def test_invalid_expected_slot_rejects_without_sampling_or_spending(self):
+        for expected_slot in (True, -1, "0"):
+            async with schema.get_connection() as db:
+                with self.subTest(expected_slot=expected_slot), \
+                     patch("random.choice") as choice, self.assertRaises(ValueError):
+                    await affix_manager.auto_extract_affix(
+                        db, USER, GEAR, 10, NOW, expected_slot=expected_slot
+                    )
+                choice.assert_not_called()
+                await db.commit()
+        self.assertEqual(await self._balances(), (10_000, 0))
+
+    async def test_stale_expected_slot_rejects_while_another_slot_is_empty(self):
+        async with schema.get_connection() as db:
+            with patch("random.choice") as choice, self.assertRaises(ValueError):
+                await affix_manager.auto_extract_affix(
+                    db, USER, GEAR, 10, NOW, expected_slot=1
+                )
+            choice.assert_not_called()
+            await db.commit()
+            affixes = await affix_manager.get_affixes(db, USER, GEAR)
+        self.assertEqual(affixes, [])
+        self.assertEqual(await self._balances(), (10_000, 0))
+
+    async def test_filled_target_during_sampling_does_not_move_to_next_slot(self):
+        async with schema.get_connection() as db:
+            await player_manager.set_material(db, USER, GEAR, 150, NOW)
+            await db.commit()
+            did_fill = False
+
+            async def fill_target(_):
+                nonlocal did_fill
+                if not did_fill:
+                    did_fill = True
+                    async with schema.get_connection() as other:
+                        await other.execute(
+                            "INSERT INTO gear_affixes (user_id, gear_type, slot_index, affix_type, value) VALUES (?,?,?,?,?)",
+                            (USER, GEAR, 0, "efficiency", 2),
+                        )
+                        await other.commit()
+
+            with patch("asyncio.sleep", side_effect=fill_target), \
+                 patch("random.choice", return_value="material_drop"), patch("random.randint", return_value=1):
+                with self.assertRaises(ValueError):
+                    await affix_manager.auto_extract_affix(
+                        db, USER, GEAR, 10, NOW, target_affix_type="efficiency", expected_slot=0
+                    )
+            await db.rollback()
+        async with schema.get_connection() as db:
+            affixes = await affix_manager.get_affixes(db, USER, GEAR)
+        self.assertEqual(affixes, [{"slot_index": 0, "affix_type": "efficiency", "value": 2}])
+        self.assertEqual(await self._balances(), (150, 0))
+
+    async def test_invalid_arguments_do_not_spend(self):
+        cases = [
+            {"gear_type": "bad"}, {"target_affix_type": "bad"}, {"min_value": 0},
+            {"min_value": 6}, {"min_value": True}, {"material_source": "mixed"},
+        ]
+        for kwargs in cases:
+            async with schema.get_connection() as db:
+                gear_type = kwargs.pop("gear_type", GEAR)
+                with self.subTest(kwargs=kwargs), self.assertRaises(ValueError):
+                    await affix_manager.auto_extract_affix(db, USER, gear_type, 10, NOW, **kwargs)
+                await db.commit()
+                self.assertEqual(await player_manager.get_material(db, USER, GEAR), 10_000)
+
+    async def test_full_slots_and_no_unlocked_slot_reject_without_spending(self):
+        async with schema.get_connection() as db:
+            await _insert_player(db, "auto_full", gear_level=5, materials=100)
+            await affix_manager.extract_affix(db, "auto_full", GEAR, 5, NOW)
+            await db.commit()
+            with self.assertRaises(ValueError):
+                await affix_manager.auto_extract_affix(db, "auto_full", GEAR, 5, NOW)
+            await db.rollback()
+            self.assertEqual(await player_manager.get_material(db, "auto_full", GEAR), 100 - int(os.environ["AFFIX_EXTRACT_COST"]))
+            with self.assertRaises(ValueError):
+                await affix_manager.auto_extract_affix(db, USER, GEAR, 0, NOW)
+            await db.rollback()
+        self.assertEqual(await self._balances(), (10_000, 0))
+
+    async def test_selected_balance_exhaustion_rejects_without_spending_other_source(self):
+        async with schema.get_connection() as db:
+            await player_manager.set_material(db, USER, GEAR, 0, NOW)
+            await player_manager.set_universal_material(db, USER, 4, NOW)
+            await db.commit()
+            with self.assertRaises(ValueError):
+                await affix_manager.auto_extract_affix(db, USER, GEAR, 10, NOW, material_source="universal")
+            await db.rollback()
+        self.assertEqual(await self._balances(), (0, 4))
+
+    async def test_material_added_during_sampling_is_outside_budget_snapshot(self):
+        async with schema.get_connection() as db:
+            await player_manager.set_material(db, USER, GEAR, 150, NOW)
+            await db.commit()
+            first_yield = True
+
+            async def add_material(_):
+                nonlocal first_yield
+                if first_yield:
+                    first_yield = False
+                    async with schema.get_connection() as other:
+                        await player_manager.set_material(other, USER, GEAR, 200, NOW)
+                        await other.commit()
+
+            with patch("asyncio.sleep", side_effect=add_material) as sleeper, \
+                 patch("random.choice", return_value="material_drop"), patch("random.randint", return_value=1):
+                result = await affix_manager.auto_extract_affix(
+                    db, USER, GEAR, 10, NOW, target_affix_type="efficiency"
+                )
+            await db.commit()
+        self.assertEqual(sleeper.call_count, 1)
+        self.assertEqual(result["attempts"], 150)
+        self.assertEqual(await self._balances(), (50, 0))
+
+    async def test_material_reduced_during_sampling_truncates_attempts(self):
+        async with schema.get_connection() as db:
+            await player_manager.set_material(db, USER, GEAR, 150, NOW)
+            await db.commit()
+            did_reduce = False
+
+            async def reduce_material(_):
+                nonlocal did_reduce
+                if not did_reduce:
+                    did_reduce = True
+                    async with schema.get_connection() as other:
+                        await player_manager.set_material(other, USER, GEAR, 30, NOW)
+                        await other.commit()
+
+            with patch("asyncio.sleep", side_effect=reduce_material), \
+                 patch("random.choice", return_value="material_drop"), patch("random.randint", return_value=1):
+                result = await affix_manager.auto_extract_affix(
+                    db, USER, GEAR, 10, NOW, target_affix_type="efficiency"
+                )
+            await db.commit()
+        self.assertEqual(result["attempts"], 30)
+        self.assertEqual(result["material_spent"], 30)
+        self.assertIsNone(result["affix"])
+        self.assertEqual(await self._balances(), (0, 0))
+
+    async def test_match_past_reduced_budget_is_discarded(self):
+        async with schema.get_connection() as db:
+            await player_manager.set_material(db, USER, GEAR, 150, NOW)
+            await db.commit()
+            did_reduce = False
+
+            async def reduce_material(_):
+                nonlocal did_reduce
+                if not did_reduce:
+                    did_reduce = True
+                    async with schema.get_connection() as other:
+                        await player_manager.set_material(other, USER, GEAR, 30, NOW)
+                        await other.commit()
+
+            with patch("asyncio.sleep", side_effect=reduce_material), \
+                 patch("random.choice", side_effect=["material_drop"] * 100 + ["efficiency"]), \
+                 patch("random.randint", side_effect=[1] * 100 + [5]):
+                result = await affix_manager.auto_extract_affix(
+                    db, USER, GEAR, 10, NOW, target_affix_type="efficiency"
+                )
+            await db.commit()
+        self.assertEqual(result["attempts"], 30)
+        self.assertIsNone(result["affix"])
+
+    async def test_latest_full_slots_reject_and_caller_rolls_back(self):
+        async with schema.get_connection() as db:
+            await player_manager.set_material(db, USER, GEAR, 150, NOW)
+            await db.commit()
+            did_fill = False
+
+            async def fill_slots(_):
+                nonlocal did_fill
+                if not did_fill:
+                    did_fill = True
+                    async with schema.get_connection() as other:
+                        await other.executemany(
+                            "INSERT INTO gear_affixes (user_id, gear_type, slot_index, affix_type, value) VALUES (?,?,?,?,?)",
+                            [(USER, GEAR, i, "efficiency", i + 1) for i in range(2)],
+                        )
+                        await other.commit()
+
+            with patch("asyncio.sleep", side_effect=fill_slots), \
+                 patch("random.choice", return_value="material_drop"), patch("random.randint", return_value=1):
+                with self.assertRaises(ValueError):
+                    await affix_manager.auto_extract_affix(
+                        db, USER, GEAR, 10, NOW, target_affix_type="efficiency"
+                    )
+            await db.rollback()
+        self.assertEqual(await self._balances(), (150, 0))
 
 
 class TestClearAffix(DatabaseTestCase):

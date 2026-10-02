@@ -1,7 +1,7 @@
 ---
 title: "Module: affix-manager"
 doc_type: module
-last_reviewed: 2026-07-17
+last_reviewed: 2026-09-30
 source_paths:
   - src/managers/affix_manager.py
 ---
@@ -35,6 +35,7 @@ source_paths:
 - `get_affix_bonuses(db, user_id, gear_type) -> dict[str, int]` — 彙總各類型總加成
 - `extract_affix(db, user_id, gear_type, gear_level, now) -> dict` — 消耗 `AFFIX_EXTRACT_COST` 對應素材，隨機抽一條詞條填入第一個空槽；回傳 `{slot_index, affix_type, value}`；滿槽時 raise ValueError
 - `clear_affix(db, user_id, gear_type, slot_index, gear_level, now) -> dict` — 消耗 `AFFIX_CLEAR_COST` 對應素材，清除指定槽；回傳 `{affix_type, value}`；空槽時 raise ValueError
+- `auto_extract_affix(db, user_id, gear_type, gear_level, now, *, target_affix_type=None, min_value=1, material_source="tool", expected_slot=None) -> dict` — 僅消耗選定素材，抽到符合條件的第一條詞條後填入指定的第一空槽；回傳 `{affix, attempts, material_spent, material_source}`。`expected_slot` 必須等於開始抽選與交易內重讀時的第一空槽。工具素材每次扣 1，萬能素材每次扣 5；未達標時保持空槽。抽選期間不持有寫入鎖，最後以一次交易重讀槽位與餘額並扣款。
 
 素材消耗規則（`extract_affix`/`clear_affix` 共用）：先扣該工具類型自身素材（最多扣至消耗量），不足差額由萬能素材（`materials_universal`）補足；兩者相加仍不足時 raise ValueError，不扣除任何素材、不改變詞條。詞條系統無素材退還效果，故不需區分自身/萬能來源。萬能素材詳見 `managers/player-manager.md`。`clear_all_affixes` 無素材成本，不受此規則影響。
 - `clear_all_affixes(db, user_id, gear_type, now)` — 清除所有詞條（無素材成本，鐵齒炸裂時呼叫）
@@ -48,6 +49,8 @@ source_paths:
 | `AFFIX_CLEAR_COST` | 清除消耗對應素材數量（預設 3） |
 
 ## Changelog
+
+- 2026-09-30: 新增指定素材來源的自動抽取。抽中時只填第一空槽，否則保留空槽；成本與抽選規則由 affix-manager 擁有。
 
 - 2026-07-17: `extract_affix`/`clear_affix` 素材消耗改為「自身素材優先、差額由萬能素材補足」；前置檢查由 `mats >= cost` 改為 `mats + universal >= cost`，不足時 raise ValueError 且不扣除任何資源。
 - 2026-05-22: 新增模組。

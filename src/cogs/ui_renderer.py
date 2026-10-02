@@ -771,6 +771,9 @@ def build_affix_components(
 
     is_full = len(affixes) >= max_slots
     _gt = gear_type or "none"
+    has_selected_gear = gear_type is not None and player_gear.get(gear_type, 0) > 0
+    occupied_slots = {a.get("slot_index") for a in affixes if 0 <= a.get("slot_index", -1) < max_slots}
+    has_empty_slot = any(slot not in occupied_slots for slot in range(max_slots))
 
     rows = [
         disnake.ui.ActionRow(
@@ -817,6 +820,12 @@ def build_affix_components(
                 disabled=is_full,
             ),
             disnake.ui.Button(
+                label="✨ 自動抽取",
+                style=disnake.ButtonStyle.success,
+                custom_id=f"open_auto_affix:{_gt}",
+                disabled=not (has_selected_gear and has_empty_slot),
+            ),
+            disnake.ui.Button(
                 label="← 返回",
                 style=disnake.ButtonStyle.secondary,
                 custom_id=f"back_to_gear:{_gt}",
@@ -824,6 +833,103 @@ def build_affix_components(
         )
     )
 
+    return rows
+
+
+def build_auto_affix_embed(
+    gear_type: str | None,
+    materials: int,
+    universal_materials: int,
+    max_slots: int,
+    affixes: list,
+    target_mode: str | None = None,
+    target_affix_type: str | None = None,
+    min_value: int | None = None,
+    material_source: str | None = None,
+    error: str | None = None,
+) -> disnake.Embed:
+    label = GEAR_LABELS.get(gear_type, gear_type or "")
+    lines = [f"✨ 自動抽取 — {label}", f"持有素材：{materials} 個 ｜ 🌟 萬能素材：{universal_materials} 個"]
+    lines.append(f"詞條槽（{len(affixes)}/{max_slots}）")
+    if error:
+        lines.append(error)
+    lines.append(f"目標種類：{'任意' if target_mode == 'any' else '特定效果' if target_mode == 'specific' else '未選擇'}")
+    if target_mode == "specific":
+        effect = AFFIX_TYPE_LABELS.get(target_affix_type, "未選擇")
+        lines.append(f"目標效果：{effect}")
+    value_label = str(min_value) if min_value == 5 else f"{min_value}+" if min_value is not None else "未選擇"
+    lines.append(f"目標數值：{value_label}")
+    source = {"tool": "工具素材", "universal": "萬能素材"}.get(material_source, "未選擇")
+    lines.append(f"花費素材：{source}")
+    lines.append("每次抽選：1 工具素材或 5 萬能素材")
+    return disnake.Embed(description="\n".join(lines), color=disnake.Color.purple())
+
+
+def build_auto_affix_components(
+    gear_type: str | None,
+    materials: int,
+    universal_materials: int,
+    max_slots: int,
+    affixes: list,
+    target_mode: str | None = None,
+    target_affix_type: str | None = None,
+    min_value: int | None = None,
+    material_source: str | None = None,
+    error: str | None = None,
+    confirmation_token: str | None = None,
+) -> list:
+    gear = gear_type or "none"
+    mode = target_mode or "none"
+    effect = target_affix_type or "none"
+    value = str(min_value) if min_value is not None else "none"
+    source = material_source or "none"
+
+    def state_id(prefix: str) -> str:
+        return f"{prefix}:{gear}:{mode}:{effect}:{value}:{source}"
+
+    rows = [disnake.ui.ActionRow(disnake.ui.StringSelect(
+        custom_id=state_id("auto_affix_kind"), placeholder="選擇目標種類...",
+        options=[
+            disnake.SelectOption(label="任意", value="any", default=target_mode == "any"),
+            disnake.SelectOption(label="特定效果", value="specific", default=target_mode == "specific"),
+        ],
+    ))]
+    if target_mode == "specific":
+        rows.append(disnake.ui.ActionRow(disnake.ui.StringSelect(
+            custom_id=state_id("auto_affix_effect"), placeholder="選擇目標效果...",
+            options=[disnake.SelectOption(label=AFFIX_TYPE_LABELS[t], value=t, default=target_affix_type == t)
+                     for t in AFFIX_TYPE_LABELS],
+        )))
+    rows.append(disnake.ui.ActionRow(disnake.ui.StringSelect(
+        custom_id=state_id("auto_affix_value"), placeholder="選擇目標數值...",
+        options=[disnake.SelectOption(label=(str(n) if n == 5 else f"{n}+"), value=str(n), default=min_value == n) for n in range(1, 6)],
+    )))
+    rows.append(disnake.ui.ActionRow(disnake.ui.StringSelect(
+        custom_id=state_id("auto_affix_material"), placeholder="選擇花費素材...",
+        options=[
+            disnake.SelectOption(label="工具素材", value="tool", default=material_source == "tool"),
+            disnake.SelectOption(label="萬能素材", value="universal", default=material_source == "universal"),
+        ],
+    )))
+    complete = target_mode in ("any", "specific") and min_value in range(1, 6) and material_source in ("tool", "universal")
+    if target_mode == "specific":
+        complete = complete and target_affix_type in AFFIX_TYPE_LABELS
+    occupied_slots = {a.get("slot_index") for a in affixes if 0 <= a.get("slot_index", -1) < max_slots}
+    expected_slot = next((slot for slot in range(max_slots) if slot not in occupied_slots), None)
+    has_empty_slot = expected_slot is not None
+    valid_gear = gear_type in GEAR_LABELS
+    enough_material = (materials >= 1 if material_source == "tool" else universal_materials >= 5)
+    valid_token = (
+        isinstance(confirmation_token, str) and len(confirmation_token) == 8
+        and all(character.isascii() and (character.isalnum() or character in "-_") for character in confirmation_token)
+    )
+    confirm_id = f"{state_id('auto_affix_run')}:{expected_slot if expected_slot is not None else 'none'}:{confirmation_token or 'none'}"
+    rows.append(disnake.ui.ActionRow(
+        disnake.ui.Button(label="✅ 開始自動抽取", style=disnake.ButtonStyle.success,
+                          custom_id=confirm_id, disabled=not (valid_gear and complete and has_empty_slot and enough_material and valid_token)),
+        disnake.ui.Button(label="← 返回詞條管理", style=disnake.ButtonStyle.secondary,
+                          custom_id=f"back_to_affix:{gear}"),
+    ))
     return rows
 
 

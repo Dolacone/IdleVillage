@@ -1,7 +1,7 @@
 ---
 title: "Module: notification"
 doc_type: module
-last_reviewed: 2026-08-15
+last_reviewed: 2026-09-30
 source_paths:
   - src/core/notification.py
   - src/cogs/actions.py
@@ -36,6 +36,7 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 | 工具強化失敗 | gear-manager 回傳失敗 | `{user_display_name} 的 {gear_name} 升級失敗 :boom: Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）` | Public |
 | 詞條抽取 | `extract_affix` handler 成功後 | `{user_display_name} 的 {gear_name} 抽到詞條：{affix_label}（{sign}{value}%）`，sign 為 `-`（reduce 類型）或 `+`（其他） | Public |
 | 詞條清除 | `clear_affix` handler 成功後 | `{user_display_name} 的 {gear_name} 清除詞條：{affix_label}（{sign}{value}%）`，sign 為 `-`（reduce 類型）或 `+`（其他） | Public |
+| 詞條自動抽取 | `auto_affix_run` 提交成功後 | 成功或未達標摘要，列出總次數與所選素材實際花費；格式見下方範本 | Public |
 | 試煉開始 | `trial_target_select` 成功開啟試煉 | 玩家選定的目標值 + 系統隨機選定的扣款資源 + 期限 + 獎勵池大小；不顯示發起者 | Public |
 | 試煉達成 | trial-manager 判定進度達標 | 目標值（行動產出總計）+ 各參與者貢獻與獲得數量列表（依貢獻降冪） | Public |
 | 試煉失敗（逾時） | trial-manager 判定 12 小時內未達標 | 目標值（行動產出總計）+ 逾時當下進度，說明資源不退還 | Public |
@@ -49,7 +50,7 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 - 建築升級通知只在升級處理瞬間發送。
 - 建築一次升多級時，每個等級分開發送。
 - 工具強化成功/失敗為 Public 訊息，只在強化處理瞬間發送，不需要持久去重。
-- 詞條抽取/清除通知只在操作瞬間發送，不需持久去重。
+- 詞條抽取/清除與自動抽取通知只在操作瞬間發送，不需持久去重。
 - 試煉開始通知只在 `trial_target_select` 通過提交驗證後發送一次。開啟選單與翻頁都不通知。
 - 試煉達成/失敗通知只在 trial-manager 判定當下（settlement 內或 Watcher tick）發送一次，不需持久去重。
 
@@ -113,6 +114,13 @@ sign 為 `-`（reduce 類型，如 `upgrade_cost_reduce`）或 `+`（其他類�
 ```
 sign 為 `-`（reduce 類型，如 `upgrade_cost_reduce`）或 `+`（其他類型）。
 
+### 詞條自動抽取
+```
+{user_display_name} 的 {gear_name} 抽到詞條：{affix_label}（{sign}{value}%），抽選次數{attempts} ({material_spent}{cost_label})
+{user_display_name} 的 {gear_name} 未抽到目標詞條，抽選次數{attempts} ({material_spent}{cost_label})
+```
+`cost_label` 為「工具素材」或「萬能素材」。成功與耗盡均 dispatch 一個 `affix_auto_extracted` 事件。
+
 ### 試煉開始
 ```
 🏆 村莊試煉開始！花費 {target} 個 {resource_emoji}{resource_label}
@@ -148,6 +156,8 @@ sign 為 `-`（reduce 類型，如 `upgrade_cost_reduce`）或 `+`（其他類�
 - `failure_count`: 總失敗次數。成功時顯示成功前累積失敗次數；失敗時顯示含本次失敗後的累積失敗次數。
 
 ## Changelog
+
+- 2026-09-30: 新增自動抽取結果通知；handler 在資料庫提交後 dispatch 一次，訊息格式由 notification 擁有。
 
 - 2026-08-15: 試煉開始通知改由目標選取成功觸發。通知使用動態 target 與實際隨機扣除的資源。
 - 2026-08-09: 試煉達成通知每行欄位順序調整，由 `{display_name}：貢獻 {contribution}，獲得 {reward} 個` 改為 `貢獻 {contribution} ({reward} 素材)：{display_name}`。純顯示格式調整，跨行排序（依貢獻降冪）、截斷規則、名稱解析機制皆未變動。

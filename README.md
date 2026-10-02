@@ -1,14 +1,14 @@
 ---
 title: Idle Colony
 doc_type: overview
-last_reviewed: 2026-05-15
+last_reviewed: 2026-09-30
 source_paths: []
 scope: "Service overview: features, architecture, top-level folders, and link to docs/README.md."
 ---
 
 # Idle Colony
 
-這是一個以 Discord 為平台的社群驅動 (Community-Driven) 集體協作掛機遊戲. 
+這是一個以 Discord 為平台的社群驅動 (Community-Driven) 集體協作掛機遊戲. 文件入口：[文件入口](docs/README.md)。
 
 ## 1. 核心理念: 社群提案, AI 實作
 
