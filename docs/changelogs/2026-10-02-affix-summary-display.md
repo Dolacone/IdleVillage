@@ -11,6 +11,7 @@ source_paths:
   - tests/test_discord_notifications.py
   - docs/discord/ui-renderer.md
   - docs/discord/notification.md
+  - docs/README.md
 scope: "Tracks the affix summary display and four-character affix labels from design through review."
 ---
 
@@ -118,7 +119,7 @@ Task 2 匯入 Task 1 的對照表，必須依序執行，不可平行。
 ## Review Issues
 
 - [x] [Major] R1: 詞條管理畫面缺少空詞條合計的測試斷言。`docs/changelogs/2026-10-02-affix-summary-display.md:98-99` 要求合計與 `（尚無詞條）`。`tests/test_discord_commands.py:1341-1357` 只驗證已有詞條的管理畫面。`tests/test_discord_commands.py:1482-1485` 傳入空詞條，但只斷言持有素材。`tests/test_discord_commands.py:1304-1309` 的空詞條斷言只涵蓋工具強化畫面。`src/cogs/ui_renderer.py:741-744` 是管理畫面的合計入口。若入口錯誤地排除空詞條，現有測試不會失敗。必須新增選定工具、已解鎖槽位、`affixes=[]` 的管理畫面測試。必須斷言合計標題、`（尚無詞條）` 與保留的空槽清單。此為測試缺漏，現行實作符合空詞條規格。無需新增實作錯誤的失敗重現測試。覆蓋率驗證使用記憶體中的錯誤變體，不修改儲存庫程式碼。基準命令：`UV_CACHE_DIR=/private/tmp/idlevillage-review-uv-cache uv run python /private/tmp/affix-summary-coverage-probe.py`。變體命令只增加 `--mutated`。變體把該入口改成 `if affix_section and affixes:`。基準輸出：`Original empty management summary: present`。變體輸出：`Mutated empty management summary: absent`。兩次測試輸出均為 `655 passed, 24 subtests passed in 12.13s`。
-- [ ] [Minor] R2: 新變更文件缺少導覽連結。`docs/changelogs/2026-10-02-affix-summary-display.md:1-14` 建立此變更文件。`docs/README.md:35-41` 未連結此文件。修改的 `docs/discord/ui-renderer.md:358` 與 `docs/discord/notification.md:160` 也未連結此文件。`AGENTS.md:29` 要求所有文件能從文件入口到達。搜尋此檔名只命中變更文件本身。必須從文件入口或其連結的文件加入導覽連結。此為文件導覽問題，無需重現測試。
+- [x] [Minor] R2: 新變更文件缺少導覽連結。`docs/changelogs/2026-10-02-affix-summary-display.md:1-14` 建立此變更文件。`docs/README.md:35-41` 未連結此文件。修改的 `docs/discord/ui-renderer.md:358` 與 `docs/discord/notification.md:160` 也未連結此文件。`AGENTS.md:29` 要求所有文件能從文件入口到達。搜尋此檔名只命中變更文件本身。必須從文件入口或其連結的文件加入導覽連結。此為文件導覽問題，無需重現測試。
 
 原始分支全套測試：`UV_CACHE_DIR=/private/tmp/idlevillage-review-uv-cache uv run python -m pytest -q`。結果：`655 passed, 24 subtests passed in 10.30s`。
 
