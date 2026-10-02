@@ -1,6 +1,6 @@
 ---
 title: "詞條合計顯示與四字名稱"
-status: Issues-confirmed
+status: Ready-to-review
 created: 2026-10-02
 doc_type: change
 last_reviewed: 2026-10-02
