@@ -1703,7 +1703,7 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
             await cog.on_button_click(confirm)
         self.assertTrue(confirm.response.defer.awaited)
         self.assertEqual(sent.await_count, 1)
-        self.assertIn("抽到詞條：行動週期縮短（+4%）", sent.call_args.args[0])
+        self.assertIn("抽到詞條：週期縮短（+4%）", sent.call_args.args[0])
         async with get_connection() as db:
             self.assertEqual(await (await db.execute("SELECT materials_research FROM players WHERE user_id='12345'")).fetchone(), (2,))
             self.assertEqual(await (await db.execute("SELECT slot_index, affix_type, value FROM gear_affixes WHERE user_id='12345'")).fetchone(), (0, "cycle_time_reduce", 4))

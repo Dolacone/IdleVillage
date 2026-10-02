@@ -100,7 +100,7 @@ Task 2 匯入 Task 1 的對照表，必須依序執行，不可平行。
   - AC5: 逐槽清單、槽位下拉描述與即將清除提示一律為 `+{value}%`，`upgrade_cost_reduce` 也不顯示 `-`。
   - AC6: 自動抽取效果選單選項使用新名稱。
   - Tests: 只更新 `tests/test_discord_commands.py` 中 renderer 輸出的詞條斷言，保留通知文字斷言（`tests/test_discord_commands.py:1667`）；Task 1 完成時通知仍使用舊名稱，完整測試必須通過；新增合計加總、排序、排除 0、`（尚無詞條）`、兩畫面版面與 `素材減免` 正數的測試。
-- [ ] Task 2: 通知共用名稱對照表與正數
+- [x] Task 2: 通知共用名稱對照表與正數
   - Files: `src/core/notification.py`, `tests/test_discord_notifications.py`, `tests/test_discord_commands.py`
   - AC1: `notification.py` 從 `cogs.ui_renderer` 匯入 `AFFIX_TYPE_LABELS`，本地對照表與 `REDUCE_AFFIX_TYPES` 已刪除。
   - AC2: 詞條抽取、清除與自動抽取通知使用四字名稱，數值一律為 `+{value}%`，例如 `清除詞條：素材減免（+3%）`。
