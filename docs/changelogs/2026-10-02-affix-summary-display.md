@@ -1,6 +1,6 @@
 ---
 title: "詞條合計顯示與四字名稱"
-status: In-Progress
+status: Ready-to-review
 created: 2026-10-02
 doc_type: change
 last_reviewed: 2026-10-02
@@ -105,7 +105,7 @@ Task 2 匯入 Task 1 的對照表，必須依序執行，不可平行。
   - AC1: `notification.py` 從 `cogs.ui_renderer` 匯入 `AFFIX_TYPE_LABELS`，本地對照表與 `REDUCE_AFFIX_TYPES` 已刪除。
   - AC2: 詞條抽取、清除與自動抽取通知使用四字名稱，數值一律為 `+{value}%`，例如 `清除詞條：素材減免（+3%）`。
   - Tests: 更新 `tests/test_discord_notifications.py` 與 `tests/test_discord_commands.py` 中依賴舊通知名稱的斷言。反轉 `tests/test_discord_notifications.py:998`、`:999`、`:1012`、`:1013` 的負號斷言為正號，並同步更新測試名稱與 :985 的說明。抽取、清除與自動抽取通知都要驗證新名稱與正號。
-- [ ] Task 3: 執行完整測試
+- [x] Task 3: 執行完整測試
   - AC: `uv run python -m pytest` 全部通過。
 
 ## Plan Review Issues
