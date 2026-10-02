@@ -1367,6 +1367,15 @@ class TestAffixManagementEmbed(unittest.TestCase):
         self.assertIn("槽 0: ─ 空槽", embed.description)
         self.assertIn("槽 1: ─ 空槽", embed.description)
 
+    def test_summary_hidden_when_no_slot_unlocked(self):
+        from cogs.ui_renderer import build_affix_embed
+        player_gear = {"gathering": 1, "building": 0, "combat": 0, "research": 0}
+        embed = build_affix_embed("gathering", player_gear, [], 0, selected_slot=None, materials=7)
+        self.assertNotIn("詞條合計", embed.description)
+        self.assertNotIn("（尚無詞條）", embed.description)
+        self.assertNotIn("詞條槽", embed.description)
+        self.assertIn("持有素材：7 個", embed.description)
+
 
 class TestAffixComponents(unittest.TestCase):
     """Affix management interface components (build_affix_components) and gear upgrade button changes."""
