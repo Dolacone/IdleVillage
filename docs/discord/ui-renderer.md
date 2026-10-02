@@ -1,7 +1,7 @@
 ---
 title: "Module: ui-renderer"
 doc_type: module
-last_reviewed: 2026-09-30
+last_reviewed: 2026-10-02
 source_paths:
   - src/cogs/ui_renderer.py
 ---
@@ -215,7 +215,14 @@ Embed 顯示標題、運行中自動工具清單（`{工具}：到期 <t:{unix}:
 持有素材：{material_count} 個 ｜ 🌟 萬能素材：{universal_material_count} 個
 ⚡ AP：{ap} / {ap_cap}
 工具等級上限：Lv{cap}（研究所 Lv{n}）
+
+─────────────────────────────
+詞條槽（{used}/{max_slots}）
+{affix_label}: {total}%
+...
 ```
+
+詞條槽區塊只在 `max_slots > 0` 時顯示。區塊下方顯示詞條合計，不逐槽列出，規則見「詞條顯示」。
 
 若該類型素材不足消耗量，強化時自動用萬能素材補足差額（不足以補足時強化按鈕維持 disabled）；UI 不另外顯示扣除細節，僅顯示兩者持有量。
 
@@ -252,17 +259,52 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 
 選定工具類型後，Embed 標題下方顯示持有素材列，格式與工具強化子選單一致：`持有素材：{該類型素材} 個 ｜ 🌟 萬能素材：{materials_universal} 個`（工具類型未選定時不顯示）。
 
+```
+🔮 詞條管理 — {emoji} {gear_name}
+持有素材：{material_count} 個 ｜ 🌟 萬能素材：{universal_material_count} 個
+
+詞條合計
+{affix_label}: {total}%
+...
+
+─────────────────────────────
+詞條槽（{used}/{max_slots}）
+槽 {n}: ✨ {affix_label} +{value}%
+槽 {n}: ─ 空槽
+```
+
+`詞條合計` 與逐槽清單只在 `max_slots > 0` 時顯示。合計規則見「詞條顯示」。
+
 - **Dropdown**：工具類型（custom_id: `affix_gear_select`）
   - 選項描述沿用工具強化畫面的等級/效率預覽
 - **Dropdown**：詞條槽選擇（custom_id: `affix_slot_select:{gear_type}`；僅有現存詞條時出現）
   - 選項格式：`槽 {n}: {詞條類型}`
-  - 選項描述：`{±value}%`
+  - 選項描述：`+{value}%`
 - **Button**：`🗑️ 清除詞條`（Red，custom_id: `affix_clear:{gear_type}:{slot_index}`，禁用條件：尚未選定槽位）
 - **Button**：`✨ 抽取詞條`（Blue，custom_id: `affix_extract:{gear_type}`，禁用條件：詞條槽已滿）
 - **Button**：`✨ 自動抽取`（Green，custom_id: `open_auto_affix:{gear_type}`，禁用條件：無空槽或工具等級未解鎖詞條槽）
 - **Button**：`← 返回`（Gray，custom_id: `back_to_gear:{gear_type}`）
 
 抽取/清除的素材消耗若該類型素材不足，自動用萬能素材補足差額（兩者相加仍不足時執行才報錯），比照工具強化子選單；按鈕 disabled 條件不含素材是否足夠的判斷。
+
+### 詞條顯示
+
+詞條名稱介面與 Public 通知共用同一份對照表，全部為四字：
+
+| 代碼 | 名稱 |
+| :--- | :--- |
+| `efficiency` | 行動效率 |
+| `material_drop` | 素材掉落 |
+| `upgrade_success` | 強化成功 |
+| `upgrade_cost_reduce` | 素材減免 |
+| `upgrade_ap_refund` | ＡＰ退還 |
+| `upgrade_material_refund` | 素材退還 |
+| `cycle_time_reduce` | 週期縮短 |
+
+- 詞條數值一律顯示為正數，包含 `upgrade_cost_reduce`。逐槽清單、槽位下拉描述與即將清除提示使用 `+{value}%`。
+- 合計每種類型一行，格式 `{affix_label}: {total}%`，`{total}` 為該類型所有槽位數值總和。
+- 合計只列總和大於 0 的類型，依上表順序排列。
+- 有解鎖槽位但沒有任何詞條時，合計顯示 `（尚無詞條）`。
 
 ### 自動抽取設定畫面
 
@@ -312,6 +354,8 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
 `{target_user_id}` 為目標玩家的 Discord user ID（字串）。
 
 ## Changelog
+
+- 2026-10-02: 工具強化子選單詞條槽改為顯示合計；詞條管理畫面新增詞條合計區塊；詞條名稱統一為四字並與通知共用；數值一律顯示為正數。
 
 - 2026-09-30: 新增詞條自動抽取入口與完整狀態選單；成本與批次規則由 affix-manager 擁有。
 

@@ -1,10 +1,16 @@
 ---
 title: "詞條合計顯示與四字名稱"
-status: Draft
+status: Ready-to-implement
 created: 2026-10-02
 doc_type: change
 last_reviewed: 2026-10-02
-source_paths: []
+source_paths:
+  - src/cogs/ui_renderer.py
+  - src/core/notification.py
+  - tests/test_discord_commands.py
+  - tests/test_discord_notifications.py
+  - docs/discord/ui-renderer.md
+  - docs/discord/notification.md
 scope: "Tracks the affix summary display and four-character affix labels from design through review."
 ---
 
@@ -70,6 +76,43 @@ Not doing:
 
 ## Architecture Decisions
 
+- `src/cogs/ui_renderer.py` 的 `AFFIX_TYPE_LABELS` 是唯一的名稱對照表，dict 順序即合計排序。`src/core/notification.py` 已從 `cogs.ui_renderer` 匯入常數，改為匯入同一份 `AFFIX_TYPE_LABELS`，並刪除本地的 `AFFIX_TYPE_LABELS` 與 `REDUCE_AFFIX_TYPES`。
+- 數值一律正數後 `REDUCE_AFFIX_TYPES` 沒有用途，兩個模組都刪除。
+- renderer 新增一個合計函式，回傳合計行清單；工具強化子選單與詞條管理畫面共用。逐槽清單沿用現有 `_build_affix_section` 的逐槽邏輯，只供詞條管理畫面使用。
+- 不改 custom_id、manager 介面或資料表。
+
 ## Tasks
+
+依賴關係：
+
+```
+Task 1 (ui_renderer.py) ──> Task 2 (notification.py)
+```
+
+Task 2 匯入 Task 1 的對照表，必須依序執行，不可平行。
+
+- [ ] Task 1: renderer 詞條名稱、正數與合計顯示
+  - Files: `src/cogs/ui_renderer.py`, `tests/test_discord_commands.py`
+  - AC1: `AFFIX_TYPE_LABELS` 依 Clarifications 對照表順序包含七種四字名稱；`REDUCE_AFFIX_TYPES` 已刪除。
+  - AC2: 工具強化子選單 `max_slots > 0` 時顯示分隔線、`詞條槽（{used}/{max_slots}）` 與合計行，不顯示 `槽 {n}:` 逐槽行；`max_slots == 0` 時不顯示詞條區塊。
+  - AC3: 合計行格式 `{label}: {total}%`，同類型數值相加，只列總和大於 0 的類型，依對照表順序；有槽位但無詞條時顯示 `（尚無詞條）`。
+  - AC4: 詞條管理畫面在持有素材列之後、分隔線之前顯示空行、`詞條合計` 與合計行；分隔線後的逐槽清單保留。
+  - AC5: 逐槽清單、槽位下拉描述與即將清除提示一律為 `+{value}%`，`upgrade_cost_reduce` 也不顯示 `-`。
+  - AC6: 自動抽取效果選單選項使用新名稱。
+  - Tests: 只更新 `tests/test_discord_commands.py` 中 renderer 輸出的詞條斷言，保留通知文字斷言（`tests/test_discord_commands.py:1667`）；Task 1 完成時通知仍使用舊名稱，完整測試必須通過；新增合計加總、排序、排除 0、`（尚無詞條）`、兩畫面版面與 `素材減免` 正數的測試。
+- [ ] Task 2: 通知共用名稱對照表與正數
+  - Files: `src/core/notification.py`, `tests/test_discord_notifications.py`, `tests/test_discord_commands.py`
+  - AC1: `notification.py` 從 `cogs.ui_renderer` 匯入 `AFFIX_TYPE_LABELS`，本地對照表與 `REDUCE_AFFIX_TYPES` 已刪除。
+  - AC2: 詞條抽取、清除與自動抽取通知使用四字名稱，數值一律為 `+{value}%`，例如 `清除詞條：素材減免（+3%）`。
+  - Tests: 更新 `tests/test_discord_notifications.py` 與 `tests/test_discord_commands.py` 中依賴舊通知名稱的斷言。反轉 `tests/test_discord_notifications.py:998`、`:999`、`:1012`、`:1013` 的負號斷言為正號，並同步更新測試名稱與 :985 的說明。抽取、清除與自動抽取通知都要驗證新名稱與正號。
+- [ ] Task 3: 執行完整測試
+  - AC: `uv run python -m pytest` 全部通過。
+
+## Plan Review Issues
+
+- [x] P1: Task 2 實際涉及三個邏輯檔案，超過每項任務兩檔上限。證據：本文件:104 列出 `src/core/notification.py` 與 `tests/test_discord_notifications.py`；本文件:107 又要求修改 `tests/test_discord_commands.py`。後者:1667 斷言通知使用 `行動週期縮短`。`src/core/notification.py:210` 決定該通知名稱。Task 2 共用新對照表後，該斷言必須同步改為 `週期縮短`。必須重新拆分任務並列出完整檔案範圍。Task 1 必須明訂只更新 renderer 的斷言，保留 :1667 的通知斷言。若 Task 1 提前更新該斷言，尚未修改的 notification 仍回傳舊名稱。Task 1 單獨通過測試的條件必須寫入計畫。此為任務分界問題，無需新增重現測試；尚未執行實作後測試。
+  - Resolution: 測試檔不計入兩檔上限，Task 2 只有一個邏輯檔。Task 2 Files 補列 `tests/test_discord_commands.py`；Task 1 Tests 明訂保留 :1667 通知斷言，且 Task 1 完成時完整測試必須通過。
+- [x] P2: Task 2 漏列通知正負號測試更新。證據：`docs/changelogs/2026-10-02-affix-summary-display.md:107` 的 Tests 僅列舊通知名稱斷言。`tests/test_discord_notifications.py:998` 與 `tests/test_discord_notifications.py:1012` 要求負號。`tests/test_discord_notifications.py:999` 與 `tests/test_discord_notifications.py:1013` 排除正號。這四個斷言不依賴詞條名稱。它們與本文件:106 的正數 AC 衝突。Task 2 必須明列反轉這四個斷言。測試名稱與 `tests/test_discord_notifications.py:985` 的說明必須同步改為正數。抽取、清除與自動抽取均須驗證新名稱與正號。此為測試計畫缺漏，無需新增重現測試。尚未執行實作後測試。
+  - Resolution: Task 2 Tests 明列反轉四個負號斷言、更新測試名稱與說明，並涵蓋三種通知的新名稱與正號。
 
 ## Review Issues

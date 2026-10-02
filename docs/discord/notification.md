@@ -1,7 +1,7 @@
 ---
 title: "Module: notification"
 doc_type: module
-last_reviewed: 2026-09-30
+last_reviewed: 2026-10-02
 source_paths:
   - src/core/notification.py
   - src/cogs/actions.py
@@ -34,8 +34,8 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 | 建築升級 | building-manager 觸發升級 | `{建築名稱}` 從 Lv{x} 變成 Lv{y}，下一等級需求 {z} | Public |
 | 工具強化成功 | gear-manager 回傳成功 | `{user_display_name} 的 {gear_name} 升級成功 :tada: Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）` | Public |
 | 工具強化失敗 | gear-manager 回傳失敗 | `{user_display_name} 的 {gear_name} 升級失敗 :boom: Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）` | Public |
-| 詞條抽取 | `extract_affix` handler 成功後 | `{user_display_name} 的 {gear_name} 抽到詞條：{affix_label}（{sign}{value}%）`，sign 為 `-`（reduce 類型）或 `+`（其他） | Public |
-| 詞條清除 | `clear_affix` handler 成功後 | `{user_display_name} 的 {gear_name} 清除詞條：{affix_label}（{sign}{value}%）`，sign 為 `-`（reduce 類型）或 `+`（其他） | Public |
+| 詞條抽取 | `extract_affix` handler 成功後 | `{user_display_name} 的 {gear_name} 抽到詞條：{affix_label}（+{value}%）` | Public |
+| 詞條清除 | `clear_affix` handler 成功後 | `{user_display_name} 的 {gear_name} 清除詞條：{affix_label}（+{value}%）` | Public |
 | 詞條自動抽取 | `auto_affix_run` 提交成功後 | 成功或未達標摘要，列出總次數與所選素材實際花費；格式見下方範本 | Public |
 | 試煉開始 | `trial_target_select` 成功開啟試煉 | 玩家選定的目標值 + 系統隨機選定的扣款資源 + 期限 + 獎勵池大小；不顯示發起者 | Public |
 | 試煉達成 | trial-manager 判定進度達標 | 目標值（行動產出總計）+ 各參與者貢獻與獲得數量列表（依貢獻降冪） | Public |
@@ -104,19 +104,19 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 
 ### 詞條抽取
 ```
-{user_display_name} 的 {gear_name} 抽到詞條：{affix_label}（{sign}{value}%）
+{user_display_name} 的 {gear_name} 抽到詞條：{affix_label}（+{value}%）
 ```
-sign 為 `-`（reduce 類型，如 `upgrade_cost_reduce`）或 `+`（其他類型）。
+數值一律顯示為正數，包含 `upgrade_cost_reduce`。`{affix_label}` 使用 `discord/ui-renderer.md` 的詞條名稱對照表。
 
 ### 詞條清除
 ```
-{user_display_name} 的 {gear_name} 清除詞條：{affix_label}（{sign}{value}%）
+{user_display_name} 的 {gear_name} 清除詞條：{affix_label}（+{value}%）
 ```
-sign 為 `-`（reduce 類型，如 `upgrade_cost_reduce`）或 `+`（其他類型）。
+數值一律顯示為正數，包含 `upgrade_cost_reduce`。`{affix_label}` 使用 `discord/ui-renderer.md` 的詞條名稱對照表。
 
 ### 詞條自動抽取
 ```
-{user_display_name} 的 {gear_name} 抽到詞條：{affix_label}（{sign}{value}%），抽選次數{attempts} ({material_spent}{cost_label})
+{user_display_name} 的 {gear_name} 抽到詞條：{affix_label}（+{value}%），抽選次數{attempts} ({material_spent}{cost_label})
 {user_display_name} 的 {gear_name} 未抽到目標詞條，抽選次數{attempts} ({material_spent}{cost_label})
 ```
 `cost_label` 為「工具素材」或「萬能素材」。成功與耗盡均 dispatch 一個 `affix_auto_extracted` 事件。
@@ -156,6 +156,8 @@ sign 為 `-`（reduce 類型，如 `upgrade_cost_reduce`）或 `+`（其他類�
 - `failure_count`: 總失敗次數。成功時顯示成功前累積失敗次數；失敗時顯示含本次失敗後的累積失敗次數。
 
 ## Changelog
+
+- 2026-10-02: 詞條通知改用四字名稱，數值一律顯示為正數。
 
 - 2026-09-30: 新增自動抽取結果通知；handler 在資料庫提交後 dispatch 一次，訊息格式由 notification 擁有。
 
