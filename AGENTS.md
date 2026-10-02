@@ -21,7 +21,7 @@ When implemented behavior is described, update `source_paths` with repository-re
 - Auto-advance to the next stage; no user approval required between stages.
 - Only the `code` stage may change source code, configuration files, or any file that affects runtime behavior.
 - `refine` is the only stage where user interaction is permitted. All subsequent stages run autonomously without waiting for user input.
-- Whenever doing reviews, use a **different** agent than the one currently running. Since the primary agent is `claude`, use `codex` first, then fall back to `copilot`. Both are Bash CLI tools — invoke via `codex exec review` or `copilot -p "..." --allow-all-tools`. Do not use the `Agent` tool with `subagent_type: "claude"` for review.
+- Reviews use the reviewer agent that the running skill names (for example `opus-5.5`). Each review round runs in a new, independent agent session.
 
 ## Documentation Rules
 
