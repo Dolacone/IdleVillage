@@ -51,6 +51,7 @@ STAGE_TYPE_LABELS = {
 }
 RESOURCE_LABELS = {"food": "食物", "wood": "木頭", "knowledge": "知識"}
 RESOURCE_EMOJIS = {"food": "🌾", "wood": "🪵", "knowledge": "🧠"}
+
 AFFIX_TYPE_LABELS = {
     "efficiency": "行動效率",
     "material_drop": "素材掉落",
@@ -601,10 +602,11 @@ def build_gear_embed(
     ])
 
     if max_slots > 0:
+        current_affixes = affixes or []
         lines.append(
             "\n─────────────────────────────\n"
-            f"詞條槽（{len(affixes or [])}/{max_slots}）\n"
-            + "\n".join(_build_affix_summary(affixes or []))
+            f"詞條槽（{len(current_affixes)}/{max_slots}）\n"
+            + "\n".join(_build_affix_summary(current_affixes))
         )
 
     if result is not None:
