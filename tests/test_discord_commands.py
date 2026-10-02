@@ -1351,6 +1351,7 @@ class TestAffixManagementEmbed(unittest.TestCase):
         divider_index = embed.description.index("─────────────────────────────")
         self.assertLess(embed.description.index("持有素材：7 個"), summary_index)
         self.assertLess(summary_index, divider_index)
+        self.assertIn("個\n\n詞條合計", embed.description)
         self.assertIn("素材減免: 5%", embed.description)
         self.assertIn("槽 0: ✨ 素材減免 +5%", embed.description)
         self.assertIn("槽 1: ─ 空槽", embed.description)
