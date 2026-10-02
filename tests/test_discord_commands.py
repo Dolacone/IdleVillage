@@ -1305,29 +1305,56 @@ class TestAffixEmbedSection(unittest.TestCase):
         from cogs.ui_renderer import build_gear_embed
         embed = build_gear_embed(self._make_info(gear_level=5), "gathering", affixes=[], max_slots=1)
         self.assertIn("詞條槽（0/1）", embed.description)
-        self.assertIn("空槽", embed.description)
+        self.assertIn("（尚無詞條）", embed.description)
+        self.assertNotIn("槽 0:", embed.description)
 
     def test_filled_slot_shows_affix_type_and_value(self):
         from cogs.ui_renderer import build_gear_embed
         affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
         embed = build_gear_embed(self._make_info(gear_level=5), "gathering", affixes=affixes, max_slots=1)
         self.assertIn("詞條槽（1/1）", embed.description)
-        self.assertIn("效率 +3%", embed.description)
+        self.assertIn("行動效率: 3%", embed.description)
+        self.assertNotIn("槽 0:", embed.description)
 
-    def test_multiple_slots_mixed(self):
+    def test_same_type_slots_are_summed_in_fixed_label_order(self):
         from cogs.ui_renderer import build_gear_embed
-        affixes = [{"slot_index": 0, "affix_type": "cycle_time_reduce", "value": 2}]
-        embed = build_gear_embed(self._make_info(gear_level=10), "gathering", affixes=affixes, max_slots=2)
-        self.assertIn("詞條槽（1/2）", embed.description)
-        self.assertIn("週期縮短 +2%", embed.description)
-        self.assertIn("空槽", embed.description)
+        affixes = [
+            {"slot_index": 0, "affix_type": "cycle_time_reduce", "value": 2},
+            {"slot_index": 1, "affix_type": "efficiency", "value": 3},
+            {"slot_index": 2, "affix_type": "efficiency", "value": 4},
+            {"slot_index": 3, "affix_type": "upgrade_success", "value": 0},
+        ]
+        embed = build_gear_embed(self._make_info(gear_level=10), "gathering", affixes=affixes, max_slots=5)
+        self.assertIn("詞條槽（4/5）", embed.description)
+        self.assertLess(embed.description.index("行動效率: 7%"), embed.description.index("週期縮短: 2%"))
+        self.assertNotIn("強化成功:", embed.description)
+        self.assertNotIn("槽 ", embed.description)
 
-    def test_upgrade_cost_reduce_slot_uses_negative_sign(self):
+    def test_upgrade_cost_reduce_uses_positive_sign_and_new_label(self):
         from cogs.ui_renderer import build_gear_embed
         affixes = [{"slot_index": 0, "affix_type": "upgrade_cost_reduce", "value": 5}]
         embed = build_gear_embed(self._make_info(gear_level=5), "gathering", affixes=affixes, max_slots=1)
-        self.assertIn("強化素材減免 -5%", embed.description)
-        self.assertNotIn("+5%", embed.description)
+        self.assertIn("素材減免: 5%", embed.description)
+        self.assertNotIn("素材減免: -5%", embed.description)
+
+
+class TestAffixManagementEmbed(unittest.TestCase):
+    def test_summary_precedes_divider_and_slot_list_remains(self):
+        from cogs.ui_renderer import build_affix_embed
+        player_gear = {"gathering": 5, "building": 0, "combat": 0, "research": 0}
+        affixes = [
+            {"slot_index": 0, "affix_type": "upgrade_cost_reduce", "value": 5},
+            {"slot_index": 2, "affix_type": "efficiency", "value": 3},
+        ]
+        embed = build_affix_embed("gathering", player_gear, affixes, 3, selected_slot=0, materials=7)
+        summary_index = embed.description.index("詞條合計")
+        divider_index = embed.description.index("─────────────────────────────")
+        self.assertLess(embed.description.index("持有素材：7 個"), summary_index)
+        self.assertLess(summary_index, divider_index)
+        self.assertIn("素材減免: 5%", embed.description)
+        self.assertIn("槽 0: ✨ 素材減免 +5%", embed.description)
+        self.assertIn("槽 1: ─ 空槽", embed.description)
+        self.assertIn("即將清除：槽 0 — 素材減免 +5%", embed.description)
 
 
 class TestAffixComponents(unittest.TestCase):
@@ -1390,6 +1417,14 @@ class TestAffixComponents(unittest.TestCase):
         rows = build_affix_components("gathering", self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1)
         custom_ids = [c.custom_id for row in rows for c in row.children if hasattr(c, "custom_id")]
         self.assertIn("affix_slot_select:gathering", custom_ids)
+
+    def test_affix_slot_dropdown_description_uses_positive_value_and_new_label(self):
+        from cogs.ui_renderer import build_affix_components
+        affixes = [{"slot_index": 0, "affix_type": "upgrade_cost_reduce", "value": 5}]
+        rows = build_affix_components("gathering", self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1)
+        slot_select = next(c for row in rows for c in row.children if c.custom_id == "affix_slot_select:gathering")
+        self.assertEqual(slot_select.options[0].label, "槽 0: 素材減免")
+        self.assertEqual(slot_select.options[0].description, "+5%")
 
     def test_affix_components_clear_disabled_without_selection(self):
         from cogs.ui_renderer import build_affix_components
@@ -1497,6 +1532,10 @@ class TestAutoAffixComponents(unittest.TestCase):
         selects = [row.children[0] for row in rows if isinstance(row.children[0], __import__("disnake").ui.StringSelect)]
         self.assertEqual([o.label for o in selects[0].options], ["任意", "特定效果"])
         self.assertEqual([o.label for o in selects[1].options], list(AFFIX_TYPE_LABELS.values()))
+        self.assertEqual(
+            [o.label for o in selects[1].options],
+            ["行動效率", "素材掉落", "強化成功", "素材減免", "ＡＰ退還", "素材退還", "週期縮短"],
+        )
         self.assertEqual([o.label for o in selects[2].options], ["1+", "2+", "3+", "4+", "5"])
         self.assertEqual([o.label for o in selects[3].options], ["工具素材", "萬能素材"])
         self.assertTrue(selects[0].options[1].default)

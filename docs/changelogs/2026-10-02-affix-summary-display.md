@@ -1,6 +1,6 @@
 ---
 title: "詞條合計顯示與四字名稱"
-status: Ready-to-implement
+status: In-Progress
 created: 2026-10-02
 doc_type: change
 last_reviewed: 2026-10-02
@@ -91,7 +91,7 @@ Task 1 (ui_renderer.py) ──> Task 2 (notification.py)
 
 Task 2 匯入 Task 1 的對照表，必須依序執行，不可平行。
 
-- [ ] Task 1: renderer 詞條名稱、正數與合計顯示
+- [x] Task 1: renderer 詞條名稱、正數與合計顯示
   - Files: `src/cogs/ui_renderer.py`, `tests/test_discord_commands.py`
   - AC1: `AFFIX_TYPE_LABELS` 依 Clarifications 對照表順序包含七種四字名稱；`REDUCE_AFFIX_TYPES` 已刪除。
   - AC2: 工具強化子選單 `max_slots > 0` 時顯示分隔線、`詞條槽（{used}/{max_slots}）` 與合計行，不顯示 `槽 {n}:` 逐槽行；`max_slots == 0` 時不顯示詞條區塊。
