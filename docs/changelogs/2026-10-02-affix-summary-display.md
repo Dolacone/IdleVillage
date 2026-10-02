@@ -1,6 +1,6 @@
 ---
 title: "詞條合計顯示與四字名稱"
-status: Refactored
+status: Done
 created: 2026-10-02
 doc_type: change
 last_reviewed: 2026-10-02
@@ -11,6 +11,7 @@ source_paths:
   - tests/test_discord_notifications.py
   - docs/discord/ui-renderer.md
   - docs/discord/notification.md
+  - CHANGELOG.md
   - docs/README.md
 scope: "Tracks the affix summary display and four-character affix labels from design through review."
 ---
