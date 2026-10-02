@@ -29,6 +29,7 @@ When implemented behavior is described, update `source_paths` with repository-re
 - `docs/README.md` is the documentation entry point. All repository docs must be reachable from it.
 - Keep change lifecycle records in `docs/changelogs/`; do not use them as user-facing guides.
 - Prefer one canonical owner for each topic; cross-link instead of duplicating details.
+- Only documents under `docs/` carry frontmatter metadata (`doc_type`, `last_reviewed`, and the rest). `CHANGELOG.md` and root `README.md` are not documents and must have no frontmatter.
 
 ## Python Rules
 
