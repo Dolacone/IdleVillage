@@ -1,11 +1,3 @@
----
-title: Changelog
-doc_type: changelog
-last_reviewed: 2026-09-30
-source_paths: []
-scope: "Records repository changes."
----
-
 # Changelog
 
 ## 2026-09-30
