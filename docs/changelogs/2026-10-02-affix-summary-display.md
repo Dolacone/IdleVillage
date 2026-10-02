@@ -1,6 +1,6 @@
 ---
 title: "詞條合計顯示與四字名稱"
-status: Ready-to-review
+status: Issues-confirmed
 created: 2026-10-02
 doc_type: change
 last_reviewed: 2026-10-02
@@ -120,7 +120,12 @@ Task 2 匯入 Task 1 的對照表，必須依序執行，不可平行。
 
 - [x] [Major] R1: 詞條管理畫面缺少空詞條合計的測試斷言。`docs/changelogs/2026-10-02-affix-summary-display.md:98-99` 要求合計與 `（尚無詞條）`。`tests/test_discord_commands.py:1341-1357` 只驗證已有詞條的管理畫面。`tests/test_discord_commands.py:1482-1485` 傳入空詞條，但只斷言持有素材。`tests/test_discord_commands.py:1304-1309` 的空詞條斷言只涵蓋工具強化畫面。`src/cogs/ui_renderer.py:741-744` 是管理畫面的合計入口。若入口錯誤地排除空詞條，現有測試不會失敗。必須新增選定工具、已解鎖槽位、`affixes=[]` 的管理畫面測試。必須斷言合計標題、`（尚無詞條）` 與保留的空槽清單。此為測試缺漏，現行實作符合空詞條規格。無需新增實作錯誤的失敗重現測試。覆蓋率驗證使用記憶體中的錯誤變體，不修改儲存庫程式碼。基準命令：`UV_CACHE_DIR=/private/tmp/idlevillage-review-uv-cache uv run python /private/tmp/affix-summary-coverage-probe.py`。變體命令只增加 `--mutated`。變體把該入口改成 `if affix_section and affixes:`。基準輸出：`Original empty management summary: present`。變體輸出：`Mutated empty management summary: absent`。兩次測試輸出均為 `655 passed, 24 subtests passed in 12.13s`。
 - [x] [Minor] R2: 新變更文件缺少導覽連結。`docs/changelogs/2026-10-02-affix-summary-display.md:1-14` 建立此變更文件。`docs/README.md:35-41` 未連結此文件。修改的 `docs/discord/ui-renderer.md:358` 與 `docs/discord/notification.md:160` 也未連結此文件。`AGENTS.md:29` 要求所有文件能從文件入口到達。搜尋此檔名只命中變更文件本身。必須從文件入口或其連結的文件加入導覽連結。此為文件導覽問題，無需重現測試。
+- [ ] [Major] R3: 詞條管理畫面缺少未解鎖槽位時隱藏合計的測試。`docs/discord/ui-renderer.md:276` 規定 `詞條合計` 只在 `max_slots > 0` 時顯示。本文件:41 規定未解鎖詞條槽時維持現有顯示。`src/cogs/ui_renderer.py:741-743` 以 `affix_section` 為空字串隱藏合計。`src/cogs/actions.py:253-259` 以 `affix_manager.slot_count(gear_level)` 傳入 `max_slots`。`src/managers/affix_manager.py:32-35` 在低等級回傳 0，因此正式流程可達此情境。`tests/test_discord_commands.py:1299-1302` 只涵蓋工具強化畫面的 `max_slots=0`。`tests/test_discord_commands.py:1342-1368` 只傳入 `max_slots` 為 3 與 2。`tests/test_discord_commands.py:1486-1489` 傳入 `gear_type=None`，提早回傳。若管理畫面在 `max_slots == 0` 時錯誤顯示合計，現有測試不會失敗。必須新增選定工具、`max_slots=0` 的管理畫面測試，斷言不含 `詞條合計` 與 `詞條槽`。覆蓋率驗證使用記憶體中的錯誤變體，不修改儲存庫程式碼。變體在選定工具且 `max_slots == 0` 時附加 `詞條合計` 與 `（尚無詞條）`。命令：`uv run python <scratchpad>/probe.py --mutated`。基準與變體輸出均為 `failures 0 errors 0`。
 
 原始分支全套測試：`UV_CACHE_DIR=/private/tmp/idlevillage-review-uv-cache uv run python -m pytest -q`。結果：`655 passed, 24 subtests passed in 10.30s`。
 
 獨立 CLI 審查未完成。受限環境無法啟動 `codex exec review`。`copilot` 缺少驗證資訊。自動核准拒絕外部 Codex 審查。拒絕原因為未授權將私有程式碼與文件傳至該服務。
+
+重新審查：R1 已解決。`tests/test_discord_commands.py:1359-1368` 傳入 `affixes=[]` 與 `max_slots=2`，斷言合計標題、`（尚無詞條）` 與兩個空槽。記憶體變體在 `affixes` 為空時移除合計。變體執行結果：`ERROR: test_empty_affixes_still_show_summary_before_empty_slot_list`。R2 已解決。`docs/README.md:37` 連結此變更文件。
+
+重新審查全套測試：`uv run python -m pytest -q`。結果：`656 passed, 24 subtests passed in 8.76s`。
