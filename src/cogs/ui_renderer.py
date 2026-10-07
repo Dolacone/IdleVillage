@@ -511,6 +511,7 @@ def _build_affix_summary(affixes: list) -> list[str]:
 
 
 _MAX_SELECT_OPTIONS = 25
+_AFFIX_TYPE_ORDER = {t: i for i, t in enumerate(AFFIX_TYPE_LABELS)}
 
 
 def _group_affixes(affixes: list) -> list[tuple[str, int, int]]:
@@ -519,8 +520,7 @@ def _group_affixes(affixes: list) -> list[tuple[str, int, int]]:
     for a in affixes:
         key = (a["affix_type"], a["value"])
         counts[key] = counts.get(key, 0) + 1
-    type_order = {t: i for i, t in enumerate(AFFIX_TYPE_LABELS)}
-    keys = sorted(counts, key=lambda k: (type_order.get(k[0], len(type_order)), -k[1]))
+    keys = sorted(counts, key=lambda k: (_AFFIX_TYPE_ORDER.get(k[0], len(_AFFIX_TYPE_ORDER)), -k[1]))
     return [(t, v, counts[(t, v)]) for t, v in keys]
 
 
@@ -818,9 +818,8 @@ def build_affix_components(
         groups = _group_affixes(affixes)
         hidden = max(0, len(groups) - _MAX_SELECT_OPTIONS)
         if hidden:
-            type_order = {t: i for i, t in enumerate(AFFIX_TYPE_LABELS)}
             kept = sorted(
-                groups, key=lambda g: (g[1], type_order.get(g[0], len(type_order)))
+                groups, key=lambda g: (g[1], _AFFIX_TYPE_ORDER.get(g[0], len(_AFFIX_TYPE_ORDER)))
             )[:_MAX_SELECT_OPTIONS]
             groups = [g for g in groups if g in kept]
         placeholder = "選擇要清除的詞條..." + (f"（另有 {hidden} 組未列出）" if hidden else "")

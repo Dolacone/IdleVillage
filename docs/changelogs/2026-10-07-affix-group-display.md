@@ -120,7 +120,7 @@ Task 1 (ui_renderer.py + _render_affix 轉傳 + affix_slot_select) -> Task 2 (af
     - 指令：`uv run python <scratchpad>/e2e/run.py`（腳本在 scratch，不在 repo；`DATABASE_PATH` 與 `schema.DB_PATH` 指向快照副本，其餘設定取 `tests.support.ALL_TEST_ENV`，未啟動 bot、未連 Discord）。
     - 分組清單：`詞條槽（26/26）`、`素材掉落（+5%） x 8`、`週期縮短（+5%） x 18`。
     - 下拉選項數：`affix_gear_select options = 4`、`affix_slot_select:gathering options = 2`，皆不超過 25。
-    - 清除前：`cycle_time_reduce` 5 共 18 條，`material_drop` 5 共 8 條（合計 26）。兩組數值皆為 5，選定排序第一的 `cycle_time_reduce:5`。
+    - 清除前：`cycle_time_reduce` 5 共 18 條，`material_drop` 5 共 8 條（合計 26）。兩組數值皆為 5，選定 `cycle_time_reduce:5`。
     - 事件：`{'type': 'affix_cleared', 'user_display_name': 'tester', 'gear_type': 'gathering', 'affix_type': 'cycle_time_reduce', 'value': 5}`，僅 1 個。
     - 清除後：`cycle_time_reduce` 5 共 17 條（減 1），`material_drop` 5 仍 8 條；Embed 顯示 `週期縮短（+5%） x 17`、`空槽 x 1`。
     - Discord 是否接受 payload 未驗證，需上線後人工確認。
@@ -141,9 +141,9 @@ Task 1 (ui_renderer.py + _render_affix 轉傳 + affix_slot_select) -> Task 2 (af
 
 ## Review Issues
 
-- [ ] [Minor] `tests/test_discord_commands.py:573-574`: 註解仍寫 `currently fails due to bug in src/cogs/ui_renderer.py`，修正後該測試已通過，註解過時。
-- [ ] [Minor] `src/cogs/actions.py:720`: `affix_clear` 以寫死的 `("1", "2", "3", "4", "5")` 驗證數值，同檔 `affix_slot_select`（`src/cogs/actions.py:826`）用 `_VALID_AUTO_AFFIX_VALUES`；同一個 1-5 規則有兩份定義。
-- [ ] [Minor] `src/cogs/actions.py:724-729`: 分組查找與 `_execute_clear_affix` 在兩個不同 DB 連線執行，清除時不再確認該槽仍屬所選分組；查找與清除之間若該槽被清空又被自動抽取填入，會清除到另一個詞條。實務機率低。
-- [ ] [Minor] `src/cogs/ui_renderer.py:365` 與 `src/cogs/ui_renderer.py:438`: 類型順序 `type_order` 在 `_group_affixes` 與截斷邏輯各建一次，與 Architecture Decisions「分組與排序由單一 helper 產生」不完全一致。
-- [ ] [Minor] `docs/discord/ui-renderer.md:311-312`: 第 311 行寫空槽為「最後一行」，第 312 行寫選定分組時 `即將清除` 為「Embed 最後一行」；兩者同時出現時第 311 行不成立，需改為「分組清單最後一行」。
-- [ ] [Minor] `docs/changelogs/2026-10-07-affix-group-display.md:123`: 寫「選定排序第一的 `cycle_time_reduce:5`」，但依 `AFFIX_TYPE_LABELS` 順序（`src/cogs/ui_renderer.py:55-63`）`material_drop:5` 排第一，同段第 121 行的分組清單輸出也是 `素材掉落` 在前。
+- [x] [Minor] `tests/test_discord_commands.py:573-574`: 註解仍寫 `currently fails due to bug in src/cogs/ui_renderer.py`，修正後該測試已通過，註解過時。
+- [x] [Minor] `src/cogs/actions.py:720`: `affix_clear` 以寫死的 `("1", "2", "3", "4", "5")` 驗證數值，同檔 `affix_slot_select`（`src/cogs/actions.py:826`）用 `_VALID_AUTO_AFFIX_VALUES`；同一個 1-5 規則有兩份定義。
+- [ ] [Minor] `src/cogs/actions.py:724-729`: 分組查找與 `_execute_clear_affix` 在兩個不同 DB 連線執行，清除時不再確認該槽仍屬所選分組；查找與清除之間若該槽被清空又被自動抽取填入，會清除到另一個詞條。實務機率低。 保留：修正會改變行為，不在 refactor 範圍。
+- [x] [Minor] `src/cogs/ui_renderer.py:365` 與 `src/cogs/ui_renderer.py:438`: 類型順序 `type_order` 在 `_group_affixes` 與截斷邏輯各建一次，與 Architecture Decisions「分組與排序由單一 helper 產生」不完全一致。
+- [x] [Minor] `docs/discord/ui-renderer.md:311-312`: 第 311 行寫空槽為「最後一行」，第 312 行寫選定分組時 `即將清除` 為「Embed 最後一行」；兩者同時出現時第 311 行不成立，需改為「分組清單最後一行」。
+- [x] [Minor] `docs/changelogs/2026-10-07-affix-group-display.md:123`: 寫「選定 `cycle_time_reduce:5`」，但依 `AFFIX_TYPE_LABELS` 順序（`src/cogs/ui_renderer.py:55-63`）`material_drop:5` 排第一，同段第 121 行的分組清單輸出也是 `素材掉落` 在前。

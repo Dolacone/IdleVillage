@@ -714,7 +714,7 @@ class ActionsCog(commands.Cog):
             gear_type, affix_type = parts[1], parts[2]
             if gear_type not in _VALID_GEAR_TYPES or affix_type not in _VALID_AFFIX_TYPES:
                 return
-            if parts[3] not in ("1", "2", "3", "4", "5"):
+            if parts[3] not in _VALID_AUTO_AFFIX_VALUES:
                 return
             value = int(parts[3])
             await inter.response.defer()

@@ -1480,7 +1480,6 @@ class TestAffixComponents(unittest.TestCase):
         self.assertIsNone(slot_select.options[0].description)
 
     def test_affix_components_with_26_filled_slots_fit_discord_select_limit(self):
-        # Test for correct design — currently fails due to bug in src/cogs/ui_renderer.py.
         # Discord rejects a select with more than 25 options, so the management screen never opens.
         from cogs.ui_renderer import build_affix_components
         affixes = [{"slot_index": i, "affix_type": "efficiency", "value": 1} for i in range(26)]
