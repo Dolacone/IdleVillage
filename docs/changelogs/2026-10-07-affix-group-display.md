@@ -83,15 +83,16 @@ Not Doing:
 依賴關係：
 
 ```
-Task 1 (ui_renderer.py + _render_affix 轉傳) -> Task 2 (actions.py 路由) -> Task 3 (端對端)
+Task 1 (ui_renderer.py + _render_affix 轉傳 + affix_slot_select) -> Task 2 (affix_clear 路由) -> Task 3 (端對端)
 ```
 
 三個 task 依序執行，不可平行：Task 2 使用 Task 1 改名後的 `selected_group` 參數；Task 3 驗證前兩者。
 
-- [ ] Task 1: renderer 改為分組顯示（`src/cogs/ui_renderer.py`、`src/cogs/actions.py` 的 `_render_affix` 轉傳，測試 `tests/test_discord_commands.py`）
+- [ ] Task 1: renderer 改為分組顯示（`src/cogs/ui_renderer.py`、`src/cogs/actions.py` 的 `_render_affix` 轉傳與 `affix_slot_select` 分支，測試 `tests/test_discord_commands.py`）
   - 新增分組 helper；`_build_affix_section` 輸出 `詞條槽（{used}/{max_slots}）`、分組行 `{affix_label}（+{value}%） x {count}`、有空槽時最後一行 `空槽 x {empty}`；不再輸出 `槽 {n}:`。
   - `build_affix_embed` / `build_affix_components` 的 `selected_slot` 改為 `selected_group`；即將清除提示為 `即將清除：{affix_label}（+{value}%）`。
-  - `actions.py` 的 `_render_affix` 參數同步改為 `selected_group` 並轉傳給 renderer，避免 Task 1 commit 後畫面 `TypeError`；此 task 不改路由解析。
+  - `actions.py` 的 `_render_affix` 參數同步改為 `selected_group` 並轉傳給 renderer，避免 Task 1 commit 後畫面 `TypeError`。
+  - `on_dropdown` 的 `affix_slot_select` 分支解析 `{affix_type}:{value}`；類型不在 `_VALID_AFFIX_TYPES` 或數值不是 1-5 整數時忽略；合法時以 `selected_group=(affix_type, int(value))` 呼叫 `_render_affix`。
   - 選定分組不在現存詞條中時，Embed 不顯示 `即將清除` 提示。
   - 分組下拉選項 label `{affix_label}（+{value}%） x {count}`、value `{affix_type}:{value}`、無 description；選定分組時該選項 default。超過 25 組依 Architecture Decisions 截斷並設定 placeholder。
   - 清除按鈕 custom_id 為 `affix_clear:{gear}:{affix_type}:{value}`，未選定時 `affix_clear:{gear}:none:none` 且 disabled。
@@ -101,9 +102,9 @@ Task 1 (ui_renderer.py + _render_affix 轉傳) -> Task 2 (actions.py 路由) -> 
   - AC：選定分組時 Embed 含 `即將清除：{affix_label}（+{value}%）` 且不含 `即將清除：槽`。
   - AC：`selected_group=("efficiency", 5)` 且 affixes 無該組時，Embed 不含 `即將清除`。
   - AC：以 mock 的 DB 與 manager 執行真實 `_render_affix(inter, "gathering", selected_group=("efficiency", 3))`，斷言輸出的清除按鈕 custom_id 為 `affix_clear:gathering:efficiency:3` 且未 disabled。
+  - AC：`affix_slot_select:gathering` 選項值 `efficiency:3` 時，`_render_affix` 以 `selected_group=("efficiency", 3)`（數值為 int）被呼叫一次；選項值 `0`、`bogus:3`、`efficiency:6`、`efficiency:x` 時 `_render_affix` 未被呼叫。
   - AC：既有斷言槽號格式的測試改為新格式。
-- [ ] Task 2: handler 改以分組清除（`src/cogs/actions.py`，測試 `tests/test_discord_commands.py`）
-  - `affix_slot_select` 解析 `{affix_type}:{value}`；類型不在 `_VALID_AFFIX_TYPES` 或數值不是 1-5 整數時忽略。
+- [ ] Task 2: `affix_clear` 改以分組清除（`src/cogs/actions.py`，測試 `tests/test_discord_commands.py`）
   - `affix_clear` 解析 `affix_clear:{gear}:{affix_type}:{value}`；類型不合法或數值不是 1-5 整數時（含 `none:none` 與舊格式 `affix_clear:{gear}:{slot}`）忽略；合法時在 `affix_clear` 分支找出該分組槽號最大的一條，再呼叫 `_execute_clear_affix(inter, gear_type, slot_index)`。
   - AC：同分組有槽 0、3、5 三條時，按清除後只剩槽 0、3，並發出一次 `affix_cleared` 事件，內容為該分組的類型與數值。
   - AC：分組已不存在時不清除、不扣素材、不發事件，畫面重新渲染。
@@ -128,6 +129,6 @@ Task 1 (ui_renderer.py + _render_affix 轉傳) -> Task 2 (actions.py 路由) -> 
 - [x] Issue 8: Key Assumptions 與 Recommended Direction 的兩層下拉替代方向都寫「正式環境 2026-10-07 每把工具最多 2 組」，與快照不符。`bak/village.db.26100715` 以 `count(distinct affix_type||value)` 統計，`276190956712230912` 的 `combat` 有 8 組，`1302997409470877700` 與 `151517260622594048` 的 `building` 各 6 組；最多 2 組只對 26 條詞條的 4 把工具成立。修正：兩處改為「26 條詞條的工具各 2 組，全部工具最多 8 組」；「遠低於 25」的結論不變。
 - [x] Issue 9: Task 1 修改 `actions.py` 的 `_render_affix` 轉傳，但驗證這段接線的 AC（執行真實 `_render_affix(inter, "gathering", selected_group=("efficiency", 3))`，斷言清除按鈕 custom_id）放在 Task 2，而 Task 2 不改 `_render_affix`。Task 1 commit 時沒有任何測試覆蓋它對 `actions.py` 的改動。修正：把該 AC 移到 Task 1。
 - [x] Issue 10: 選定分組已不在現存詞條中時（例如舊訊息的下拉、或另一則訊息已清空該組），Task 1 與 `docs/discord/ui-renderer.md` 都沒定義 Embed 行為；`ui-renderer.md` 寫「選定分組後，Embed 最後一行為 `即將清除：...`」，會讓實作對不存在的分組顯示提示。現行 `build_affix_embed` 以 `if a:` 只在槽位存在時顯示。修正：Task 1 與 `ui-renderer.md` 寫明「選定分組不在現存詞條中時不顯示 `即將清除` 提示」，Task 1 加 AC：`selected_group=("efficiency", 5)` 且 affixes 無該組時，Embed 不含 `即將清除`。
-- [ ] Issue 11: `on_dropdown` 的 `affix_slot_select` 分支（`actions.py` 第 826 行）呼叫 `self._render_affix(inter, gear_type, selected_slot=slot_index)`。Task 1 把 `_render_affix` 參數改名為 `selected_group` 且「不改路由解析」，Task 1 commit 後玩家選下拉就 `TypeError`。Task 2 改寫這個分支卻沒有任何 AC，現有測試也沒有 `affix_slot_select` handler 測試；把數值以字串傳入（`("efficiency", "3")`）會讓下拉 default 與 `即將清除` 提示靜默失效，測試抓不到。修正：把 `affix_slot_select` 解析移到 Task 1（同為 `actions.py`，仍在 2 個 source 檔內），Task 2 只改 `affix_clear`；Task 1 加 AC「選項值 `efficiency:3` 時 `_render_affix` 以 `selected_group=("efficiency", 3)`（數值為 int）被呼叫一次；選項值 `0`、`bogus:3`、`efficiency:6`、`efficiency:x` 時 `_render_affix` 未被呼叫」。
+- [x] Issue 11: `on_dropdown` 的 `affix_slot_select` 分支（`actions.py` 第 826 行）呼叫 `self._render_affix(inter, gear_type, selected_slot=slot_index)`。Task 1 把 `_render_affix` 參數改名為 `selected_group` 且「不改路由解析」，Task 1 commit 後玩家選下拉就 `TypeError`。Task 2 改寫這個分支卻沒有任何 AC，現有測試也沒有 `affix_slot_select` handler 測試；把數值以字串傳入（`("efficiency", "3")`）會讓下拉 default 與 `即將清除` 提示靜默失效，測試抓不到。修正：把 `affix_slot_select` 解析移到 Task 1（同為 `actions.py`，仍在 2 個 source 檔內），Task 2 只改 `affix_clear`；Task 1 加 AC「選項值 `efficiency:3` 時 `_render_affix` 以 `selected_group=("efficiency", 3)`（數值為 int）被呼叫一次；選項值 `0`、`bogus:3`、`efficiency:6`、`efficiency:x` 時 `_render_affix` 未被呼叫」。
 
 ## Review Issues
