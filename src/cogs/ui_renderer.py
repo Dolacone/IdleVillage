@@ -51,15 +51,14 @@ STAGE_TYPE_LABELS = {
 }
 RESOURCE_LABELS = {"food": "食物", "wood": "木頭", "knowledge": "知識"}
 RESOURCE_EMOJIS = {"food": "🌾", "wood": "🪵", "knowledge": "🧠"}
-REDUCE_AFFIX_TYPES = {"upgrade_cost_reduce"}
 
 AFFIX_TYPE_LABELS = {
-    "efficiency": "效率",
+    "efficiency": "行動效率",
     "material_drop": "素材掉落",
-    "upgrade_success": "強化成功率",
-    "upgrade_cost_reduce": "強化素材減免",
-    "upgrade_ap_refund": "強化AP退還",
-    "upgrade_material_refund": "強化素材退還",
+    "upgrade_success": "強化成功",
+    "upgrade_cost_reduce": "素材減免",
+    "upgrade_ap_refund": "ＡＰ退還",
+    "upgrade_material_refund": "素材退還",
     "cycle_time_reduce": "週期縮短",
 }
 
@@ -497,6 +496,20 @@ def build_main_components(
     return rows
 
 
+def _build_affix_summary(affixes: list) -> list[str]:
+    totals = {affix_type: 0 for affix_type in AFFIX_TYPE_LABELS}
+    for affix in affixes:
+        affix_type = affix["affix_type"]
+        if affix_type in totals:
+            totals[affix_type] += affix["value"]
+    lines = [
+        f"{label}: {totals[affix_type]}%"
+        for affix_type, label in AFFIX_TYPE_LABELS.items()
+        if totals[affix_type] > 0
+    ]
+    return lines or ["（尚無詞條）"]
+
+
 def _build_affix_section(affixes: list, max_slots: int) -> str:
     """Return affix slot text block, or empty string when no slots unlocked."""
     if max_slots == 0:
@@ -507,8 +520,7 @@ def _build_affix_section(affixes: list, max_slots: int) -> str:
         if i in affix_by_slot:
             a = affix_by_slot[i]
             label = AFFIX_TYPE_LABELS.get(a["affix_type"], a["affix_type"])
-            sign = "-" if a["affix_type"] in REDUCE_AFFIX_TYPES else "+"
-            lines.append(f"槽 {i}: ✨ {label} {sign}{a['value']}%")
+            lines.append(f"槽 {i}: ✨ {label} +{a['value']}%")
         else:
             lines.append(f"槽 {i}: ─ 空槽")
     return "\n" + "\n".join(lines)
@@ -589,9 +601,13 @@ def build_gear_embed(
         f"工具等級上限：Lv{gear_cap}（研究所 Lv{gear_cap}）",
     ])
 
-    affix_section = _build_affix_section(affixes or [], max_slots)
-    if affix_section:
-        lines.append(affix_section)
+    if max_slots > 0:
+        current_affixes = affixes or []
+        lines.append(
+            "\n─────────────────────────────\n"
+            f"詞條槽（{len(current_affixes)}/{max_slots}）\n"
+            + "\n".join(_build_affix_summary(current_affixes))
+        )
 
     if result is not None:
         if result.get("type") == "sacrifice":
@@ -726,14 +742,14 @@ def build_affix_embed(
     ]
     affix_section = _build_affix_section(affixes, max_slots)
     if affix_section:
+        lines.append("\n詞條合計\n" + "\n".join(_build_affix_summary(affixes)))
         lines.append(affix_section)
     if selected_slot is not None:
         affix_by_slot = {a["slot_index"]: a for a in affixes}
         a = affix_by_slot.get(selected_slot)
         if a:
-            sign = "-" if a["affix_type"] in REDUCE_AFFIX_TYPES else "+"
             type_label = AFFIX_TYPE_LABELS.get(a["affix_type"], a["affix_type"])
-            lines.append(f"\n即將清除：槽 {selected_slot} — {type_label} {sign}{a['value']}%")
+            lines.append(f"\n即將清除：槽 {selected_slot} — {type_label} +{a['value']}%")
     embed = disnake.Embed(description="\n".join(lines), color=disnake.Color.purple())
     return embed
 
@@ -790,7 +806,7 @@ def build_affix_components(
             disnake.SelectOption(
                 label=f"槽 {a['slot_index']}: {AFFIX_TYPE_LABELS.get(a['affix_type'], a['affix_type'])}",
                 value=str(a["slot_index"]),
-                description=f"{'-' if a['affix_type'] in REDUCE_AFFIX_TYPES else '+'}{a['value']}%",
+                description=f"+{a['value']}%",
                 default=(a["slot_index"] == selected_slot),
             )
             for a in affixes

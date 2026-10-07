@@ -982,10 +982,9 @@ class TestGearUpgradeEventDispatch(unittest.TestCase):
 
 
 class TestAffixNotificationSign(unittest.TestCase):
-    """upgrade_cost_reduce affix must display with - sign, not +."""
+    """Affix notifications use the shared four-character labels and always show a + sign, including upgrade_cost_reduce."""
 
-    def test_upgrade_cost_reduce_affix_extracted_uses_negative_sign(self):
-        # Test for correct design — currently fails due to bug in src/core/notification.py:182
+    def test_upgrade_cost_reduce_affix_extracted_uses_plus_sign(self):
         from core.notification import _format_event
         ev = {
             "type": "affix_extracted",
@@ -995,11 +994,10 @@ class TestAffixNotificationSign(unittest.TestCase):
             "value": 5,
         }
         text = _format_event(ev)
-        self.assertIn("-5%", text)
-        self.assertNotIn("+5%", text)
+        self.assertIn("抽到詞條：素材減免（+5%）", text)
+        self.assertNotIn("-5%", text)
 
-    def test_upgrade_cost_reduce_affix_cleared_uses_negative_sign(self):
-        # Test for correct design — currently fails due to bug in src/core/notification.py:182
+    def test_upgrade_cost_reduce_affix_cleared_uses_plus_sign(self):
         from core.notification import _format_event
         ev = {
             "type": "affix_cleared",
@@ -1009,8 +1007,8 @@ class TestAffixNotificationSign(unittest.TestCase):
             "value": 3,
         }
         text = _format_event(ev)
-        self.assertIn("-3%", text)
-        self.assertNotIn("+3%", text)
+        self.assertIn("清除詞條：素材減免（+3%）", text)
+        self.assertNotIn("-3%", text)
 
     def test_positive_affix_still_uses_plus_sign(self):
         from core.notification import _format_event
@@ -1022,7 +1020,19 @@ class TestAffixNotificationSign(unittest.TestCase):
             "value": 5,
         }
         text = _format_event(ev)
-        self.assertIn("+5%", text)
+        self.assertIn("抽到詞條：強化成功（+5%）", text)
+
+    def test_notification_labels_are_the_renderer_labels(self):
+        import core.notification as notification
+        from cogs import ui_renderer
+        self.assertIs(notification.AFFIX_TYPE_LABELS, ui_renderer.AFFIX_TYPE_LABELS)
+        from core.notification import _format_event
+        for affix_type, label in ui_renderer.AFFIX_TYPE_LABELS.items():
+            text = _format_event({
+                "type": "affix_extracted", "user_display_name": "A", "gear_type": "gathering",
+                "affix_type": affix_type, "value": 2,
+            })
+            self.assertIn(f"{label}（+2%）", text)
 
     def test_auto_affix_success_matches_summary_example(self):
         from core.notification import _format_event
@@ -1031,7 +1041,7 @@ class TestAffixNotificationSign(unittest.TestCase):
             "affix": {"affix_type": "cycle_time_reduce", "value": 4}, "attempts": 50,
             "material_spent": 250, "material_source": "universal",
         })
-        self.assertEqual(text, "Player 的 研究工具 抽到詞條：行動週期縮短（+4%），抽選次數50 (250萬能素材)")
+        self.assertEqual(text, "Player 的 研究工具 抽到詞條：週期縮短（+4%），抽選次數50 (250萬能素材)")
 
     def test_auto_affix_exhaustion_and_tool_cost(self):
         from core.notification import _format_event
@@ -1041,14 +1051,15 @@ class TestAffixNotificationSign(unittest.TestCase):
         })
         self.assertEqual(text, "Player 的 研究工具 未抽到目標詞條，抽選次數50 (50工具素材)")
 
-    def test_auto_affix_reduce_sign_is_negative(self):
+    def test_auto_affix_reduce_sign_is_positive(self):
         from core.notification import _format_event
         text = _format_event({
             "type": "affix_auto_extracted", "user_display_name": "Player", "gear_type": "research",
             "affix": {"affix_type": "upgrade_cost_reduce", "value": 3}, "attempts": 2,
             "material_spent": 2, "material_source": "tool",
         })
-        self.assertIn("強化素材消耗（-3%）", text)
+        self.assertIn("抽到詞條：素材減免（+3%）", text)
+        self.assertNotIn("-3%", text)
 
 
 if __name__ == "__main__":
