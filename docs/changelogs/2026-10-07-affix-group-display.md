@@ -1,6 +1,6 @@
 ---
 title: "詞條分組顯示"
-status: Refactored
+status: Done
 created: 2026-10-07
 doc_type: change
 last_reviewed: 2026-10-07
