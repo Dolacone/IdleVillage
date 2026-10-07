@@ -110,12 +110,20 @@ Task 1 (ui_renderer.py + _render_affix 轉傳 + affix_slot_select) -> Task 2 (af
   - AC：分組已不存在時不清除、不扣素材、不發事件，畫面重新渲染。
   - AC：既有 `affix_clear:gathering:0` 格式的 handler 測試改為分組格式。
   - AC：舊路由 `clear_affix:gathering:0` 的兩個既有測試（`test_clear_affix_dispatches_affix_cleared_event`、`test_clear_affix_no_dispatch_on_failure`）不修改仍通過。
-- [ ] Task 3: 端對端驗證（不改 source）
+- [x] Task 3: 端對端驗證（不改 source）
   - 本地 `.env` 的 `DISCORD_TOKEN` 是正式 bot token（Dockerfile 把 `.env` 打包進映像檔）。本地啟動 bot 會與正式 bot 同時接收玩家互動，因此不在本地連 Discord。
   - 複製 `bak/village.db.26100715` 到 scratch 路徑，`DATABASE_PATH` 指向副本，不改動快照本身。
   - 用副本資料與 mock interaction 呼叫真實 `Actions._render_affix`，目標為一把 26 條詞條的工具（快照中 `user_id` 1209024021207982101 的 `gathering`）。可觀察輸出：embed description 含分組清單、每個下拉選項數不超過 25。
   - 再以 `affix_clear:{gear}:{affix_type}:{value}` 走真實 `on_button_click` 分支一次（`notification.dispatch_events` 以 mock 擷取事件）。可觀察輸出：該組數量減 1，擷取到一個 `affix_cleared` 事件，其類型與數值等於所選分組。
   - 在 change document 記錄：Discord 是否接受 payload 未驗證，需上線後人工確認。
+  - 執行結果（2026-10-07）：
+    - 指令：`uv run python <scratchpad>/e2e/run.py`（腳本在 scratch，不在 repo；`DATABASE_PATH` 與 `schema.DB_PATH` 指向快照副本，其餘設定取 `tests.support.ALL_TEST_ENV`，未啟動 bot、未連 Discord）。
+    - 分組清單：`詞條槽（26/26）`、`素材掉落（+5%） x 8`、`週期縮短（+5%） x 18`。
+    - 下拉選項數：`affix_gear_select options = 4`、`affix_slot_select:gathering options = 2`，皆不超過 25。
+    - 清除前：`cycle_time_reduce` 5 共 18 條，`material_drop` 5 共 8 條（合計 26）。兩組數值皆為 5，選定排序第一的 `cycle_time_reduce:5`。
+    - 事件：`{'type': 'affix_cleared', 'user_display_name': 'tester', 'gear_type': 'gathering', 'affix_type': 'cycle_time_reduce', 'value': 5}`，僅 1 個。
+    - 清除後：`cycle_time_reduce` 5 共 17 條（減 1），`material_drop` 5 仍 8 條；Embed 顯示 `週期縮短（+5%） x 17`、`空槽 x 1`。
+    - Discord 是否接受 payload 未驗證，需上線後人工確認。
 
 ## Plan Review Issues
 
