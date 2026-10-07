@@ -67,7 +67,7 @@ source_paths:
 | `affix_gear_select` | 選擇工具類型 | 重新渲染詞條管理畫面，載入該工具的槽位與現有詞條 |
 | `affix_slot_select:{gear_type}` | 選擇要清除的詞條分組 | 選項值 `{affix_type}:{value}` 須為合法類型與 1-5 整數，否則忽略；重新渲染詞條管理畫面，將該分組標記為待清除 |
 | `affix_extract:{gear_type}` | 點擊抽取詞條 | 消耗 `AFFIX_EXTRACT_COST` 個素材（先扣對應素材，不足由萬能素材補足），隨機填入第一個空槽 |
-| `affix_clear:{gear_type}:{affix_type}:{value}` | 點擊清除詞條 | 在該工具現存詞條中找出符合分組、槽號最大的一條，消耗 `AFFIX_CLEAR_COST` 個素材（先扣對應素材，不足由萬能素材補足）並清除；分組已不存在時不清除、只重新渲染 |
+| `affix_clear:{gear_type}:{affix_type}:{value}` | 點擊清除詞條 | 類型不在合法類型或數值不是 1-5 整數時（含 `none:none` 與舊格式）忽略；否則在該工具現存詞條中找出符合分組、槽號最大的一條，消耗 `AFFIX_CLEAR_COST` 個素材（先扣對應素材，不足由萬能素材補足）並清除；分組已不存在時不清除、只重新渲染 |
 | `back_to_gear:{gear_type}` | 點擊返回 | 回到工具強化子選單 |
 | `open_auto_affix:{gear_type}` | 開啟自動抽取 | 載入等級、槽位與兩類素材持有量 |
 | `auto_affix_kind/effect/value/material:{gear}:{mode}:{effect}:{value}:{source}` | 選擇設定 | 替換所選欄位並保留其他設定 |
