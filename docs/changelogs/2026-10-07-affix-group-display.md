@@ -108,4 +108,14 @@ Task 1 (ui_renderer.py) -> Task 2 (actions.py)
   - 以本地 bot 載入正式環境快照 `bak/village.db.26100715`，開啟 26 條詞條工具的詞條管理畫面，記錄畫面成功開啟與分組清單內容。
   - 若無法在本地連 Discord，改用快照資料呼叫 `_render_affix` 等價流程產生的 embed/components payload，並記錄無法端對端的原因。
 
+## Plan Review Issues
+
+- [ ] Issue 1: 舊路由 `clear_affix:{gear_type}:{slot_index}`（`actions.py` 第 582 行，在 `_OWN_BUTTON_PREFIXES`，有 `test_clear_affix_dispatches_affix_cleared_event` 與 `test_clear_affix_no_dispatch_on_failure` 兩個測試）也呼叫 `_execute_clear_affix(inter, gear_type, slot_index)`。Task 2 把分組查找放進 `_execute_clear_affix` 會破壞這條路由，計畫完全沒提。修正：Architecture Decisions 寫明 `_execute_clear_affix` 維持以 `slot_index` 清除、舊路由不變；分組轉槽號放在 `affix_clear` 分支（或新 helper，與清除共用同一個 DB 連線）；Task 2 加 AC「`clear_affix:gathering:0` 兩個既有測試不修改仍通過」。
+- [ ] Issue 2: Task 1 第二條 AC 要求 Embed 含 `空槽 x 10` 又要求「不含 `槽 `」，但 `空槽 x 10` 本身含子字串 `槽 `，AC 無法同時成立。修正：改為「不符合正規式 `槽 \d`，且不含 `即將清除：槽`」。
+- [ ] Issue 3: Task 1 第一條 AC 的選項 `週期縮短（+5%） x 26` 與它引用的未 commit 測試 fixture 不一致：該測試用 `efficiency` 數值 1，預期 label 是 `行動效率（+1%） x 26`，且該測試只斷言選項數不超過 25。修正：AC 改為 `行動效率（+1%） x 26`，並要求在該測試補斷言「分組下拉剛好 1 個選項、label 為 `行動效率（+1%） x 26`、value 為 `efficiency:1`」。
+- [ ] Issue 4: Task 1 截斷 AC「不含 5 組數值最高的分組」在同數值平手時不確定，也沒檢查輸出順序。修正：指定 fixture 為 7 種類型各有數值 1-4（28 組）加 `efficiency:5`、`material_drop:5`（共 30 組）；AC 斷言下拉 25 個選項、排除 `efficiency:5`、`material_drop:5`、`upgrade_ap_refund:4`、`upgrade_material_refund:4`、`cycle_time_reduce:4`、選項順序與分組清單相同（類型順序，同類型數值由高到低）、placeholder 為 `選擇要清除的詞條...（另有 5 組未列出）`。
+- [ ] Issue 5: Task 1 把 renderer 參數改名為 `selected_group`，但 `actions.py` 的 `_render_affix` 仍傳 `selected_slot=`；Task 1 commit 後每次開詞條管理畫面都會 `TypeError`。所有 handler 測試都 patch `_render_affix`，沒有測試跑真實的 `_render_affix`，兩個 task 的測試都抓不到參數接線錯誤。修正：Task 2 加 AC「以 mock 的 DB 與 manager 執行真實 `_render_affix(inter, "gathering", selected_group=("efficiency", 3))`，斷言輸出的清除按鈕 custom_id 為 `affix_clear:gathering:efficiency:3` 且未 disabled」；或讓 Task 1 同時改 `_render_affix` 的轉傳（仍在 2 個 source 檔上限內）。
+- [ ] Issue 6: Task 3 端對端不可照寫執行：快照裡 26 條詞條的工具屬於其他玩家的 `user_id`，本地測試帳號開不到該工具；直接用 `bak/village.db.26100715` 清除詞條會改寫快照；也沒有清除流程的可觀察輸出。修正：步驟寫明「複製快照到 scratch 路徑，`DATABASE_PATH` 指向副本，在副本中把一把 26 條詞條工具的 `gear_affixes` 與 `players` 列改到測試帳號的 `user_id`」；每條 AC 一個可觀察輸出：畫面成功開啟並顯示分組清單、選一組按清除後該組數量減 1 且 Public 通知出現 `清除詞條：{affix_label}（+{value}%）`。fallback 必須呼叫真實 `_render_affix`（不是等價流程），斷言下拉選項數不超過 25，並註明「Discord 是否接受 payload 未驗證」。
+- [ ] Issue 7: `docs/discord/command-handler.md` 的 `affix_clear` 列沒寫不合法輸入的處理，與同表 `affix_slot_select` 列及 Task 2「不合法時忽略」不一致；`none:none` 與部署前舊格式 `affix_clear:{gear}:{slot}` 都會走到這裡。修正：該列補「類型不在合法類型或數值不是 1-5 整數時（含 `none:none` 與舊格式）忽略」。
+
 ## Review Issues
