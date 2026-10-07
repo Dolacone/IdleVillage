@@ -1,16 +1,17 @@
 ---
 title: "詞條分組顯示"
-status: Reviewed
+status: Refactored
 created: 2026-10-07
 doc_type: change
 last_reviewed: 2026-10-07
 source_paths:
-  - src/cogs/ui_renderer.py
-  - src/cogs/actions.py
-  - tests/test_discord_commands.py
-  - docs/discord/ui-renderer.md
-  - docs/discord/command-handler.md
   - docs/README.md
+  - docs/changelogs/2026-10-07-affix-group-display.md
+  - docs/discord/command-handler.md
+  - docs/discord/ui-renderer.md
+  - src/cogs/actions.py
+  - src/cogs/ui_renderer.py
+  - tests/test_discord_commands.py
 scope: "Tracks this change from design through review."
 ---
 
