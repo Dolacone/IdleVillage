@@ -1,6 +1,6 @@
 ---
 title: "詞條分組顯示"
-status: Ready-to-implement
+status: Ready-to-review
 created: 2026-10-07
 doc_type: change
 last_reviewed: 2026-10-07
