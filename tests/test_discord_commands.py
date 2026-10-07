@@ -1346,32 +1346,63 @@ class TestAffixManagementEmbed(unittest.TestCase):
             {"slot_index": 0, "affix_type": "upgrade_cost_reduce", "value": 5},
             {"slot_index": 2, "affix_type": "efficiency", "value": 3},
         ]
-        embed = build_affix_embed("gathering", player_gear, affixes, 3, selected_slot=0, materials=7)
+        embed = build_affix_embed("gathering", player_gear, affixes, 3, selected_group=("upgrade_cost_reduce", 5), materials=7)
         summary_index = embed.description.index("詞條合計")
         divider_index = embed.description.index("─────────────────────────────")
         self.assertLess(embed.description.index("持有素材：7 個"), summary_index)
         self.assertLess(summary_index, divider_index)
         self.assertIn("個\n\n詞條合計", embed.description)
         self.assertIn("素材減免: 5%", embed.description)
-        self.assertIn("槽 0: ✨ 素材減免 +5%", embed.description)
-        self.assertIn("槽 1: ─ 空槽", embed.description)
-        self.assertIn("即將清除：槽 0 — 素材減免 +5%", embed.description)
+        self.assertIn("素材減免（+5%） x 1", embed.description)
+        self.assertIn("行動效率（+3%） x 1", embed.description)
+        self.assertIn("空槽 x 1", embed.description)
+        self.assertIn("即將清除：素材減免（+5%）", embed.description)
+        self.assertNotIn("即將清除：槽", embed.description)
+
+    def test_grouped_list_counts_orders_and_hides_slot_numbers(self):
+        import re
+        from cogs.ui_renderer import build_affix_embed
+        player_gear = {"gathering": 5, "building": 0, "combat": 0, "research": 0}
+        affixes = (
+            [{"slot_index": i, "affix_type": "cycle_time_reduce", "value": 5} for i in range(10)]
+            + [{"slot_index": 10, "affix_type": "cycle_time_reduce", "value": 4}]
+            + [{"slot_index": i, "affix_type": "cycle_time_reduce", "value": 3} for i in range(11, 14)]
+        )
+        desc = build_affix_embed("gathering", player_gear, affixes, 24).description
+        self.assertIn("詞條槽（14/24）", desc)
+        order = ["週期縮短（+5%） x 10", "週期縮短（+4%） x 1", "週期縮短（+3%） x 3", "空槽 x 10"]
+        positions = [desc.index(t) for t in order]
+        self.assertEqual(positions, sorted(positions))
+        self.assertIsNone(re.search(r"槽 \d", desc))
+
+    def test_full_slots_show_no_empty_row(self):
+        from cogs.ui_renderer import build_affix_embed
+        player_gear = {"gathering": 5, "building": 0, "combat": 0, "research": 0}
+        affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
+        self.assertNotIn("空槽", build_affix_embed("gathering", player_gear, affixes, 1).description)
+
+    def test_selected_group_absent_from_affixes_shows_no_pending_clear(self):
+        from cogs.ui_renderer import build_affix_embed
+        player_gear = {"gathering": 5, "building": 0, "combat": 0, "research": 0}
+        affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
+        embed = build_affix_embed("gathering", player_gear, affixes, 2, selected_group=("efficiency", 5))
+        self.assertNotIn("即將清除", embed.description)
 
     def test_empty_affixes_still_show_summary_before_empty_slot_list(self):
         from cogs.ui_renderer import build_affix_embed
         player_gear = {"gathering": 5, "building": 0, "combat": 0, "research": 0}
-        embed = build_affix_embed("gathering", player_gear, [], 2, selected_slot=0, materials=7)
+        embed = build_affix_embed("gathering", player_gear, [], 2, selected_group=("efficiency", 5), materials=7)
         summary_index = embed.description.index("詞條合計")
         divider_index = embed.description.index("─────────────────────────────")
         self.assertLess(summary_index, embed.description.index("（尚無詞條）"))
         self.assertLess(summary_index, divider_index)
-        self.assertIn("槽 0: ─ 空槽", embed.description)
-        self.assertIn("槽 1: ─ 空槽", embed.description)
+        self.assertIn("空槽 x 2", embed.description)
+        self.assertNotIn("即將清除", embed.description)
 
     def test_summary_hidden_when_no_slot_unlocked(self):
         from cogs.ui_renderer import build_affix_embed
         player_gear = {"gathering": 1, "building": 0, "combat": 0, "research": 0}
-        embed = build_affix_embed("gathering", player_gear, [], 0, selected_slot=None, materials=7)
+        embed = build_affix_embed("gathering", player_gear, [], 0, selected_group=None, materials=7)
         self.assertNotIn("詞條合計", embed.description)
         self.assertNotIn("（尚無詞條）", embed.description)
         self.assertNotIn("詞條槽", embed.description)
@@ -1439,29 +1470,81 @@ class TestAffixComponents(unittest.TestCase):
         custom_ids = [c.custom_id for row in rows for c in row.children if hasattr(c, "custom_id")]
         self.assertIn("affix_slot_select:gathering", custom_ids)
 
-    def test_affix_slot_dropdown_description_uses_positive_value_and_new_label(self):
+    def test_affix_group_dropdown_option_uses_positive_value_and_new_label(self):
         from cogs.ui_renderer import build_affix_components
         affixes = [{"slot_index": 0, "affix_type": "upgrade_cost_reduce", "value": 5}]
         rows = build_affix_components("gathering", self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1)
         slot_select = next(c for row in rows for c in row.children if c.custom_id == "affix_slot_select:gathering")
-        self.assertEqual(slot_select.options[0].label, "槽 0: 素材減免")
-        self.assertEqual(slot_select.options[0].description, "+5%")
+        self.assertEqual(slot_select.options[0].label, "素材減免（+5%） x 1")
+        self.assertEqual(slot_select.options[0].value, "upgrade_cost_reduce:5")
+        self.assertIsNone(slot_select.options[0].description)
+
+    def test_affix_components_with_26_filled_slots_fit_discord_select_limit(self):
+        # Test for correct design — currently fails due to bug in src/cogs/ui_renderer.py.
+        # Discord rejects a select with more than 25 options, so the management screen never opens.
+        from cogs.ui_renderer import build_affix_components
+        affixes = [{"slot_index": i, "affix_type": "efficiency", "value": 1} for i in range(26)]
+        rows = build_affix_components("gathering", self._player_gear(), gear_cap=300, affixes=affixes, max_slots=26)
+        option_counts = [len(c.options) for row in rows for c in row.children if hasattr(c, "options")]
+        self.assertEqual([n for n in option_counts if n > 25], [])
+        slot_select = next(c for row in rows for c in row.children if c.custom_id == "affix_slot_select:gathering")
+        self.assertEqual(len(slot_select.options), 1)
+        self.assertEqual(slot_select.options[0].label, "行動效率（+1%） x 26")
+        self.assertEqual(slot_select.options[0].value, "efficiency:1")
+
+    def test_affix_group_dropdown_truncates_to_25_lowest_value_groups_in_list_order(self):
+        from cogs.ui_renderer import AFFIX_TYPE_LABELS, build_affix_components
+        affixes = [
+            {"slot_index": 0, "affix_type": t, "value": v}
+            for t in AFFIX_TYPE_LABELS for v in (1, 2, 3, 4)
+        ]
+        affixes += [
+            {"slot_index": 0, "affix_type": "efficiency", "value": 5},
+            {"slot_index": 0, "affix_type": "material_drop", "value": 5},
+        ]
+        rows = build_affix_components("gathering", self._player_gear(), gear_cap=300, affixes=affixes, max_slots=30)
+        slot_select = next(c for row in rows for c in row.children if c.custom_id == "affix_slot_select:gathering")
+        values = [o.value for o in slot_select.options]
+        self.assertEqual(len(values), 25)
+        for excluded in ("efficiency:5", "material_drop:5", "upgrade_ap_refund:4",
+                         "upgrade_material_refund:4", "cycle_time_reduce:4"):
+            self.assertNotIn(excluded, values)
+        expected = [
+            f"{t}:{v}" for t in AFFIX_TYPE_LABELS for v in (5, 4, 3, 2, 1)
+            if f"{t}:{v}" in values
+        ]
+        self.assertEqual(values, expected)
+        self.assertEqual(slot_select.placeholder, "選擇要清除的詞條...（另有 5 組未列出）")
+
+    def test_affix_group_dropdown_marks_selected_group_default(self):
+        from cogs.ui_renderer import build_affix_components
+        affixes = [
+            {"slot_index": 0, "affix_type": "efficiency", "value": 3},
+            {"slot_index": 1, "affix_type": "efficiency", "value": 2},
+        ]
+        rows = build_affix_components(
+            "gathering", self._player_gear(), gear_cap=10, affixes=affixes, max_slots=2,
+            selected_group=("efficiency", 2),
+        )
+        slot_select = next(c for row in rows for c in row.children if c.custom_id == "affix_slot_select:gathering")
+        self.assertEqual({o.value: o.default for o in slot_select.options}, {"efficiency:3": False, "efficiency:2": True})
+        self.assertEqual(slot_select.placeholder, "選擇要清除的詞條...")
 
     def test_affix_components_clear_disabled_without_selection(self):
         from cogs.ui_renderer import build_affix_components
         affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
         rows = build_affix_components("gathering", self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1)
         buttons = {c.custom_id: c for row in rows for c in row.children if hasattr(c, "custom_id")}
-        self.assertIn("affix_clear:gathering:None", buttons)
-        self.assertTrue(buttons["affix_clear:gathering:None"].disabled)
+        self.assertIn("affix_clear:gathering:none:none", buttons)
+        self.assertTrue(buttons["affix_clear:gathering:none:none"].disabled)
 
     def test_affix_components_clear_enabled_with_selection(self):
         from cogs.ui_renderer import build_affix_components
         affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
-        rows = build_affix_components("gathering", self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1, selected_slot=0)
+        rows = build_affix_components("gathering", self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1, selected_group=("efficiency", 3))
         buttons = {c.custom_id: c for row in rows for c in row.children if hasattr(c, "custom_id")}
-        self.assertIn("affix_clear:gathering:0", buttons)
-        self.assertFalse(buttons["affix_clear:gathering:0"].disabled)
+        self.assertIn("affix_clear:gathering:efficiency:3", buttons)
+        self.assertFalse(buttons["affix_clear:gathering:efficiency:3"].disabled)
 
     def test_affix_components_extract_disabled_when_full(self):
         from cogs.ui_renderer import build_affix_components
@@ -2242,6 +2325,52 @@ class TestAffixHandlerNotification(unittest.IsolatedAsyncioTestCase):
         cm.__aenter__ = AsyncMock(return_value=db_mock)
         cm.__aexit__ = AsyncMock(return_value=False)
         return cm
+
+    async def test_render_affix_forwards_selected_group_to_clear_button(self):
+        from cogs.actions import ActionsCog
+
+        inter = self._make_inter("affix_gear_select")
+        db_mock = AsyncMock()
+        execute_cm = MagicMock()
+        execute_cm.__aenter__ = AsyncMock(return_value=AsyncMock(fetchone=AsyncMock(return_value=(5, 0, 0, 0))))
+        execute_cm.__aexit__ = AsyncMock(return_value=False)
+        db_mock.execute = MagicMock(return_value=execute_cm)
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=db_mock)
+        cm.__aexit__ = AsyncMock(return_value=False)
+        upgrade_info = {"gear_level": 5, "gear_cap": 10, "materials": 0, "universal_materials": 0}
+        affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
+        with (
+            patch("cogs.actions.get_connection", return_value=cm),
+            patch("cogs.actions.gear_manager.get_upgrade_info", new=AsyncMock(return_value=upgrade_info)),
+            patch("cogs.actions.affix_manager.get_affixes", new=AsyncMock(return_value=affixes)),
+        ):
+            await ActionsCog(bot=MagicMock())._render_affix(inter, "gathering", selected_group=("efficiency", 3))
+
+        kwargs = inter.edit_original_response.call_args.kwargs
+        buttons = {c.custom_id: c for row in kwargs["components"] for c in row.children if hasattr(c, "custom_id")}
+        self.assertFalse(buttons["affix_clear:gathering:efficiency:3"].disabled)
+        self.assertIn("即將清除：行動效率（+3%）", kwargs["embed"].description)
+
+    async def test_affix_slot_select_passes_parsed_group_to_render(self):
+        from cogs.actions import ActionsCog
+
+        inter = self._make_inter("affix_slot_select:gathering")
+        inter.values = ["efficiency:3"]
+        with patch.object(ActionsCog, "_render_affix", new=AsyncMock()) as render:
+            await ActionsCog(bot=MagicMock()).on_dropdown(inter)
+        render.assert_awaited_once_with(inter, "gathering", selected_group=("efficiency", 3))
+
+    async def test_affix_slot_select_ignores_invalid_values(self):
+        from cogs.actions import ActionsCog
+
+        for value in ("0", "bogus:3", "efficiency:6", "efficiency:x"):
+            with self.subTest(value=value):
+                inter = self._make_inter("affix_slot_select:gathering")
+                inter.values = [value]
+                with patch.object(ActionsCog, "_render_affix", new=AsyncMock()) as render:
+                    await ActionsCog(bot=MagicMock()).on_dropdown(inter)
+                render.assert_not_awaited()
 
     async def test_affix_extract_dispatches_affix_extracted_event(self):
         from cogs.actions import ActionsCog

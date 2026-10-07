@@ -88,7 +88,7 @@ Task 1 (ui_renderer.py + _render_affix 轉傳 + affix_slot_select) -> Task 2 (af
 
 三個 task 依序執行，不可平行：Task 2 使用 Task 1 改名後的 `selected_group` 參數；Task 3 驗證前兩者。
 
-- [ ] Task 1: renderer 改為分組顯示（`src/cogs/ui_renderer.py`、`src/cogs/actions.py` 的 `_render_affix` 轉傳與 `affix_slot_select` 分支，測試 `tests/test_discord_commands.py`）
+- [x] Task 1: renderer 改為分組顯示（`src/cogs/ui_renderer.py`、`src/cogs/actions.py` 的 `_render_affix` 轉傳與 `affix_slot_select` 分支，測試 `tests/test_discord_commands.py`）
   - 新增分組 helper；`_build_affix_section` 輸出 `詞條槽（{used}/{max_slots}）`、分組行 `{affix_label}（+{value}%） x {count}`、有空槽時最後一行 `空槽 x {empty}`；不再輸出 `槽 {n}:`。
   - `build_affix_embed` / `build_affix_components` 的 `selected_slot` 改為 `selected_group`；即將清除提示為 `即將清除：{affix_label}（+{value}%）`。
   - `actions.py` 的 `_render_affix` 參數同步改為 `selected_group` 並轉傳給 renderer，避免 Task 1 commit 後畫面 `TypeError`。

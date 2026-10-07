@@ -510,19 +510,34 @@ def _build_affix_summary(affixes: list) -> list[str]:
     return lines or ["（尚無詞條）"]
 
 
+_MAX_SELECT_OPTIONS = 25
+
+
+def _group_affixes(affixes: list) -> list[tuple[str, int, int]]:
+    """Return (affix_type, value, count) sorted by type order, then value descending."""
+    counts: dict[tuple[str, int], int] = {}
+    for a in affixes:
+        key = (a["affix_type"], a["value"])
+        counts[key] = counts.get(key, 0) + 1
+    type_order = {t: i for i, t in enumerate(AFFIX_TYPE_LABELS)}
+    keys = sorted(counts, key=lambda k: (type_order.get(k[0], len(type_order)), -k[1]))
+    return [(t, v, counts[(t, v)]) for t, v in keys]
+
+
+def _affix_group_label(affix_type: str, value: int) -> str:
+    return f"{AFFIX_TYPE_LABELS.get(affix_type, affix_type)}（+{value}%）"
+
+
 def _build_affix_section(affixes: list, max_slots: int) -> str:
-    """Return affix slot text block, or empty string when no slots unlocked."""
+    """Return grouped affix text block, or empty string when no slots unlocked."""
     if max_slots == 0:
         return ""
-    affix_by_slot = {a["slot_index"]: a for a in affixes}
     lines = ["─────────────────────────────", f"詞條槽（{len(affixes)}/{max_slots}）"]
-    for i in range(max_slots):
-        if i in affix_by_slot:
-            a = affix_by_slot[i]
-            label = AFFIX_TYPE_LABELS.get(a["affix_type"], a["affix_type"])
-            lines.append(f"槽 {i}: ✨ {label} +{a['value']}%")
-        else:
-            lines.append(f"槽 {i}: ─ 空槽")
+    for affix_type, value, count in _group_affixes(affixes):
+        lines.append(f"{_affix_group_label(affix_type, value)} x {count}")
+    empty = max_slots - len(affixes)
+    if empty > 0:
+        lines.append(f"空槽 x {empty}")
     return "\n" + "\n".join(lines)
 
 
@@ -729,7 +744,7 @@ def build_affix_embed(
     player_gear: dict,
     affixes: list,
     max_slots: int,
-    selected_slot: int | None = None,
+    selected_group: tuple[str, int] | None = None,
     materials: int = 0,
     universal_materials: int = 0,
 ) -> disnake.Embed:
@@ -744,12 +759,10 @@ def build_affix_embed(
     if affix_section:
         lines.append("\n詞條合計\n" + "\n".join(_build_affix_summary(affixes)))
         lines.append(affix_section)
-    if selected_slot is not None:
-        affix_by_slot = {a["slot_index"]: a for a in affixes}
-        a = affix_by_slot.get(selected_slot)
-        if a:
-            type_label = AFFIX_TYPE_LABELS.get(a["affix_type"], a["affix_type"])
-            lines.append(f"\n即將清除：槽 {selected_slot} — {type_label} +{a['value']}%")
+    if selected_group is not None and any(
+        (a["affix_type"], a["value"]) == tuple(selected_group) for a in affixes
+    ):
+        lines.append(f"\n即將清除：{_affix_group_label(*selected_group)}")
     embed = disnake.Embed(description="\n".join(lines), color=disnake.Color.purple())
     return embed
 
@@ -760,7 +773,7 @@ def build_affix_components(
     gear_cap: int,
     affixes: list,
     max_slots: int,
-    selected_slot: int | None = None,
+    selected_group: tuple[str, int] | None = None,
 ) -> list:
     bonus_pct = math.floor(get_env_float("GEAR_BONUS_PER_LEVEL") * 100)
 
@@ -802,20 +815,28 @@ def build_affix_components(
     ]
 
     if affixes:
+        groups = _group_affixes(affixes)
+        hidden = max(0, len(groups) - _MAX_SELECT_OPTIONS)
+        if hidden:
+            type_order = {t: i for i, t in enumerate(AFFIX_TYPE_LABELS)}
+            kept = sorted(
+                groups, key=lambda g: (g[1], type_order.get(g[0], len(type_order)))
+            )[:_MAX_SELECT_OPTIONS]
+            groups = [g for g in groups if g in kept]
+        placeholder = "選擇要清除的詞條..." + (f"（另有 {hidden} 組未列出）" if hidden else "")
         affix_options = [
             disnake.SelectOption(
-                label=f"槽 {a['slot_index']}: {AFFIX_TYPE_LABELS.get(a['affix_type'], a['affix_type'])}",
-                value=str(a["slot_index"]),
-                description=f"+{a['value']}%",
-                default=(a["slot_index"] == selected_slot),
+                label=f"{_affix_group_label(t, v)} x {c}",
+                value=f"{t}:{v}",
+                default=(selected_group is not None and tuple(selected_group) == (t, v)),
             )
-            for a in affixes
+            for t, v, c in groups
         ]
         rows.append(
             disnake.ui.ActionRow(
                 disnake.ui.StringSelect(
                     custom_id=f"affix_slot_select:{_gt}",
-                    placeholder="選擇要清除的詞條...",
+                    placeholder=placeholder,
                     options=affix_options,
                 )
             )
@@ -826,8 +847,11 @@ def build_affix_components(
             disnake.ui.Button(
                 label="🗑️ 清除詞條",
                 style=disnake.ButtonStyle.danger,
-                custom_id=f"affix_clear:{_gt}:{selected_slot}",
-                disabled=(selected_slot is None),
+                custom_id=(
+                    f"affix_clear:{_gt}:{selected_group[0]}:{selected_group[1]}"
+                    if selected_group is not None else f"affix_clear:{_gt}:none:none"
+                ),
+                disabled=(selected_group is None),
             ),
             disnake.ui.Button(
                 label="✨ 抽取詞條",

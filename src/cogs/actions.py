@@ -231,7 +231,7 @@ class ActionsCog(commands.Cog):
         else:
             await inter.edit_original_response(embed=embed, components=components)
 
-    async def _render_affix(self, inter, gear_type: str | None, *, selected_slot: int | None = None) -> None:
+    async def _render_affix(self, inter, gear_type: str | None, *, selected_group: tuple[str, int] | None = None) -> None:
         user_id = str(inter.user.id)
         now = datetime.now(timezone.utc)
         async with get_connection() as db:
@@ -261,12 +261,12 @@ class ActionsCog(commands.Cog):
             player_gear,
             affixes,
             max_slots,
-            selected_slot=selected_slot,
+            selected_group=selected_group,
             materials=upgrade_info.get("materials", 0),
             universal_materials=upgrade_info.get("universal_materials", 0),
         )
         components = build_affix_components(
-            gear_type, player_gear, upgrade_info["gear_cap"], affixes, max_slots, selected_slot=selected_slot
+            gear_type, player_gear, upgrade_info["gear_cap"], affixes, max_slots, selected_group=selected_group
         )
         await inter.edit_original_response(embed=embed, components=components)
 
@@ -819,11 +819,10 @@ class ActionsCog(commands.Cog):
             gear_type = cid.split(":", 1)[1]
             if gear_type not in _VALID_GEAR_TYPES:
                 return
-            try:
-                slot_index = int(value)
-            except ValueError:
+            affix_type, sep, raw_value = value.partition(":")
+            if not sep or affix_type not in _VALID_AFFIX_TYPES or raw_value not in _VALID_AUTO_AFFIX_VALUES:
                 return
-            await self._render_affix(inter, gear_type, selected_slot=slot_index)
+            await self._render_affix(inter, gear_type, selected_group=(affix_type, int(raw_value)))
 
         elif cid == "auto_tool_type_select":
             if value in _VALID_GEAR_TYPES:
