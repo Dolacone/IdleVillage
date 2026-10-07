@@ -1,6 +1,6 @@
 ---
 title: "詞條分組顯示"
-status: Ready-to-review
+status: Reviewed
 created: 2026-10-07
 doc_type: change
 last_reviewed: 2026-10-07
@@ -140,3 +140,10 @@ Task 1 (ui_renderer.py + _render_affix 轉傳 + affix_slot_select) -> Task 2 (af
 - [x] Issue 11: `on_dropdown` 的 `affix_slot_select` 分支（`actions.py` 第 826 行）呼叫 `self._render_affix(inter, gear_type, selected_slot=slot_index)`。Task 1 把 `_render_affix` 參數改名為 `selected_group` 且「不改路由解析」，Task 1 commit 後玩家選下拉就 `TypeError`。Task 2 改寫這個分支卻沒有任何 AC，現有測試也沒有 `affix_slot_select` handler 測試；把數值以字串傳入（`("efficiency", "3")`）會讓下拉 default 與 `即將清除` 提示靜默失效，測試抓不到。修正：把 `affix_slot_select` 解析移到 Task 1（同為 `actions.py`，仍在 2 個 source 檔內），Task 2 只改 `affix_clear`；Task 1 加 AC「選項值 `efficiency:3` 時 `_render_affix` 以 `selected_group=("efficiency", 3)`（數值為 int）被呼叫一次；選項值 `0`、`bogus:3`、`efficiency:6`、`efficiency:x` 時 `_render_affix` 未被呼叫」。
 
 ## Review Issues
+
+- [ ] [Minor] `tests/test_discord_commands.py:573-574`: 註解仍寫 `currently fails due to bug in src/cogs/ui_renderer.py`，修正後該測試已通過，註解過時。
+- [ ] [Minor] `src/cogs/actions.py:720`: `affix_clear` 以寫死的 `("1", "2", "3", "4", "5")` 驗證數值，同檔 `affix_slot_select`（`src/cogs/actions.py:826`）用 `_VALID_AUTO_AFFIX_VALUES`；同一個 1-5 規則有兩份定義。
+- [ ] [Minor] `src/cogs/actions.py:724-729`: 分組查找與 `_execute_clear_affix` 在兩個不同 DB 連線執行，清除時不再確認該槽仍屬所選分組；查找與清除之間若該槽被清空又被自動抽取填入，會清除到另一個詞條。實務機率低。
+- [ ] [Minor] `src/cogs/ui_renderer.py:365` 與 `src/cogs/ui_renderer.py:438`: 類型順序 `type_order` 在 `_group_affixes` 與截斷邏輯各建一次，與 Architecture Decisions「分組與排序由單一 helper 產生」不完全一致。
+- [ ] [Minor] `docs/discord/ui-renderer.md:311-312`: 第 311 行寫空槽為「最後一行」，第 312 行寫選定分組時 `即將清除` 為「Embed 最後一行」；兩者同時出現時第 311 行不成立，需改為「分組清單最後一行」。
+- [ ] [Minor] `docs/changelogs/2026-10-07-affix-group-display.md:123`: 寫「選定排序第一的 `cycle_time_reduce:5`」，但依 `AFFIX_TYPE_LABELS` 順序（`src/cogs/ui_renderer.py:55-63`）`material_drop:5` 排第一，同段第 121 行的分組清單輸出也是 `素材掉落` 在前。
