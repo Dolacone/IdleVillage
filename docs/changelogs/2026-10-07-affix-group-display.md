@@ -4,7 +4,13 @@ status: Draft
 created: 2026-10-07
 doc_type: change
 last_reviewed: 2026-10-07
-source_paths: []
+source_paths:
+  - src/cogs/ui_renderer.py
+  - src/cogs/actions.py
+  - tests/test_discord_commands.py
+  - docs/discord/ui-renderer.md
+  - docs/discord/command-handler.md
+  - docs/README.md
 scope: "Tracks this change from design through review."
 ---
 
@@ -64,6 +70,42 @@ Not Doing:
 
 ## Architecture Decisions
 
+- 分組鍵為 `(affix_type, value)`，以字串 `{affix_type}:{value}` 放進下拉選項 value 與清除按鈕 custom_id。7 種類型皆不含 `:`，可安全切分。
+- 分組與排序由 `ui_renderer.py` 的單一 helper 產生，Embed 分組清單與下拉共用，避免兩處排序不一致。排序：`AFFIX_TYPE_LABELS` 順序，同類型 `value` 由高到低。
+- 下拉截斷：分組數大於 25 時，以 `(value, 類型順序)` 由小到大取前 25 組，再依分組清單順序輸出；placeholder 顯示未列出組數。
+- renderer 參數 `selected_slot: int | None` 改為 `selected_group: tuple[str, int] | None`，`build_affix_embed` 與 `build_affix_components` 一致。
+- 清除時由 handler（`actions.py`）以 `affix_manager.get_affixes` 找出符合分組、`slot_index` 最大的一條，再呼叫既有 `affix_manager.clear_affix(slot_index)`。affix-manager 介面與 `gear_affixes` 資料表不變。取最大槽號讓下一次抽取填回同一位置之前的空槽，不影響玩家可見行為。
+- 分組不存在（按鈕過期、已被清除）時 handler 不清除、不發通知，只重新渲染。
+- `affix_slot_select` 與 `affix_clear` 的 custom_id 前綴不變，`_OWN_BUTTON_PREFIXES` / `_OWN_DROPDOWN_PREFIXES` 不需調整。
+
 ## Tasks
+
+依賴關係：
+
+```
+Task 1 (ui_renderer.py) -> Task 2 (actions.py)
+```
+
+兩個 task 依序執行，不可平行：Task 2 呼叫 Task 1 改名後的 `selected_group` 參數。
+
+- [ ] Task 1: renderer 改為分組顯示（`src/cogs/ui_renderer.py`，測試 `tests/test_discord_commands.py`）
+  - 新增分組 helper；`_build_affix_section` 輸出 `詞條槽（{used}/{max_slots}）`、分組行 `{affix_label}（+{value}%） x {count}`、有空槽時最後一行 `空槽 x {empty}`；不再輸出 `槽 {n}:`。
+  - `build_affix_embed` / `build_affix_components` 的 `selected_slot` 改為 `selected_group`；即將清除提示為 `即將清除：{affix_label}（+{value}%）`。
+  - 分組下拉選項 label `{affix_label}（+{value}%） x {count}`、value `{affix_type}:{value}`、無 description；選定分組時該選項 default。超過 25 組依 Architecture Decisions 截斷並設定 placeholder。
+  - 清除按鈕 custom_id 為 `affix_clear:{gear}:{affix_type}:{value}`，未選定時 `affix_clear:{gear}:none:none` 且 disabled。
+  - AC：26 條同類型同數值詞條時，下拉只有 1 個選項 `週期縮短（+5%） x 26`（工作區既有未 commit 的測試 `test_affix_components_with_26_filled_slots_fit_discord_select_limit` 須保留並通過）。
+  - AC：範例 10/1/3 條週期縮短 +5/+4/+3、24 槽時，Embed 依序含 `週期縮短（+5%） x 10`、`週期縮短（+4%） x 1`、`週期縮短（+3%） x 3`、`空槽 x 10`，且不含 `槽 `。
+  - AC：30 組分組時下拉剛好 25 個選項，不含 5 組數值最高的分組，placeholder 為 `選擇要清除的詞條...（另有 5 組未列出）`。
+  - AC：既有斷言槽號格式的測試改為新格式。
+- [ ] Task 2: handler 改以分組清除（`src/cogs/actions.py`，測試 `tests/test_discord_commands.py`）
+  - `_render_affix` 參數改為 `selected_group`。
+  - `affix_slot_select` 解析 `{affix_type}:{value}`；類型不在 `_VALID_AFFIX_TYPES` 或數值不是 1-5 整數時忽略。
+  - `affix_clear` 解析 `affix_clear:{gear}:{affix_type}:{value}`；不合法時忽略；合法時在 `_execute_clear_affix` 找出該分組槽號最大的一條並呼叫 `affix_manager.clear_affix`。
+  - AC：同分組有槽 0、3、5 三條時，按清除後只剩槽 0、3，並發出一次 `affix_cleared` 事件，內容為該分組的類型與數值。
+  - AC：分組已不存在時不清除、不扣素材、不發事件，畫面重新渲染。
+  - AC：既有 `affix_clear:gathering:0` 格式的 handler 測試改為分組格式。
+- [ ] Task 3: 端對端驗證
+  - 以本地 bot 載入正式環境快照 `bak/village.db.26100715`，開啟 26 條詞條工具的詞條管理畫面，記錄畫面成功開啟與分組清單內容。
+  - 若無法在本地連 Discord，改用快照資料呼叫 `_render_affix` 等價流程產生的 embed/components payload，並記錄無法端對端的原因。
 
 ## Review Issues

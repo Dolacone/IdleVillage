@@ -1,7 +1,7 @@
 ---
 title: "Module: ui-renderer"
 doc_type: module
-last_reviewed: 2026-10-02
+last_reviewed: 2026-10-07
 source_paths:
   - src/cogs/ui_renderer.py
 ---
@@ -269,18 +269,20 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 
 ─────────────────────────────
 詞條槽（{used}/{max_slots}）
-槽 {n}: ✨ {affix_label} +{value}%
-槽 {n}: ─ 空槽
+{affix_label}（+{value}%） x {count}
+...
+空槽 x {empty}
 ```
 
-`詞條合計` 與逐槽清單只在 `max_slots > 0` 時顯示。合計規則見「詞條顯示」。
+`詞條合計` 與分組清單只在 `max_slots > 0` 時顯示。合計與分組規則見「詞條顯示」。畫面不顯示槽號。
 
 - **Dropdown**：工具類型（custom_id: `affix_gear_select`）
   - 選項描述沿用工具強化畫面的等級/效率預覽
-- **Dropdown**：詞條槽選擇（custom_id: `affix_slot_select:{gear_type}`；僅有現存詞條時出現）
-  - 選項格式：`槽 {n}: {詞條類型}`
-  - 選項描述：`+{value}%`
-- **Button**：`🗑️ 清除詞條`（Red，custom_id: `affix_clear:{gear_type}:{slot_index}`，禁用條件：尚未選定槽位）
+- **Dropdown**：詞條分組選擇（custom_id: `affix_slot_select:{gear_type}`；僅有現存詞條時出現）
+  - 每個詞條分組一個選項，不含空槽；選項 value 為 `{affix_type}:{value}`
+  - 選項格式：`{affix_label}（+{value}%） x {count}`，順序與分組清單相同
+  - 分組超過 25 組時，依數值由低到高取前 25 組（同數值依名稱對照表順序），再依分組清單順序排列；placeholder 為 `選擇要清除的詞條...（另有 {n} 組未列出）`
+- **Button**：`🗑️ 清除詞條`（Red，custom_id: `affix_clear:{gear_type}:{affix_type}:{value}`，未選定時為 `affix_clear:{gear_type}:none:none`，禁用條件：尚未選定分組）
 - **Button**：`✨ 抽取詞條`（Blue，custom_id: `affix_extract:{gear_type}`，禁用條件：詞條槽已滿）
 - **Button**：`✨ 自動抽取`（Green，custom_id: `open_auto_affix:{gear_type}`，禁用條件：無空槽或工具等級未解鎖詞條槽）
 - **Button**：`← 返回`（Gray，custom_id: `back_to_gear:{gear_type}`）
@@ -301,10 +303,13 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 | `upgrade_material_refund` | 素材退還 |
 | `cycle_time_reduce` | 週期縮短 |
 
-- 詞條數值一律顯示為正數，包含 `upgrade_cost_reduce`。逐槽清單、槽位下拉描述與即將清除提示使用 `+{value}%`。
+- 詞條數值一律顯示為正數，包含 `upgrade_cost_reduce`。分組清單、分組下拉與即將清除提示使用 `（+{value}%）`。
 - 合計每種類型一行，格式 `{affix_label}: {total}%`，`{total}` 為該類型所有槽位數值總和。
 - 合計只列總和大於 0 的類型，依上表順序排列。
 - 有解鎖槽位但沒有任何詞條時，合計顯示 `（尚無詞條）`。
+- 分組以「類型 + 數值」為一組，每組一行 `{affix_label}（+{value}%） x {count}`。類型依上表順序，同類型數值由高到低。
+- 有空槽時最後一行為 `空槽 x {empty}`；沒有空槽時不顯示。
+- 選定分組後，Embed 最後一行為 `即將清除：{affix_label}（+{value}%）`。
 
 ### 自動抽取設定畫面
 
@@ -354,6 +359,8 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
 `{target_user_id}` 為目標玩家的 Discord user ID（字串）。
 
 ## Changelog
+
+- 2026-10-07: 詞條管理畫面逐槽清單改為「類型 + 數值」分組清單，不顯示槽號；清除下拉改為每組一個選項，超過 25 組時取數值最低的 25 組；清除按鈕改以分組識別。
 
 - 2026-10-02: 工具強化子選單詞條槽改為顯示合計；詞條管理畫面新增詞條合計區塊；詞條名稱統一為四字並與通知共用；數值一律顯示為正數。
 
