@@ -709,17 +709,20 @@ class ActionsCog(commands.Cog):
 
         elif cid.startswith("affix_clear:"):
             parts = cid.split(":")
-            if len(parts) < 3:
+            if len(parts) != 4:
                 return
-            gear_type = parts[1]
-            if gear_type not in _VALID_GEAR_TYPES:
+            gear_type, affix_type = parts[1], parts[2]
+            if gear_type not in _VALID_GEAR_TYPES or affix_type not in _VALID_AFFIX_TYPES:
                 return
-            try:
-                slot_index = int(parts[2])
-            except ValueError:
+            if parts[3] not in ("1", "2", "3", "4", "5"):
                 return
+            value = int(parts[3])
             await inter.response.defer()
-            await self._execute_clear_affix(inter, gear_type, slot_index)
+            async with get_connection() as db:
+                affixes = await affix_manager.get_affixes(db, str(inter.user.id), gear_type)
+            slots = [a["slot_index"] for a in affixes if a["affix_type"] == affix_type and a["value"] == value]
+            if slots:
+                await self._execute_clear_affix(inter, gear_type, max(slots))
             await self._render_affix(inter, gear_type)
 
         elif cid.startswith("back_to_gear:"):

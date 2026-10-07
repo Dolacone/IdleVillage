@@ -2468,10 +2468,14 @@ class TestAffixHandlerNotification(unittest.IsolatedAsyncioTestCase):
     async def test_affix_clear_button_dispatches_affix_cleared_event(self):
         from cogs.actions import ActionsCog
 
-        inter = self._make_inter("affix_clear:gathering:0")
+        inter = self._make_inter("affix_clear:gathering:efficiency:3")
         with (
             patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
             patch("cogs.actions.player_manager.get_gear_level", new=AsyncMock(return_value=10)),
+            patch(
+                "cogs.actions.affix_manager.get_affixes",
+                new=AsyncMock(return_value=[{"slot_index": 0, "affix_type": "efficiency", "value": 3}]),
+            ),
             patch(
                 "cogs.actions.affix_manager.clear_affix",
                 new=AsyncMock(return_value={"affix_type": "efficiency", "value": 3}),
@@ -2491,10 +2495,14 @@ class TestAffixHandlerNotification(unittest.IsolatedAsyncioTestCase):
     async def test_affix_clear_button_no_dispatch_on_failure(self):
         from cogs.actions import ActionsCog
 
-        inter = self._make_inter("affix_clear:gathering:0")
+        inter = self._make_inter("affix_clear:gathering:efficiency:3")
         with (
             patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
             patch("cogs.actions.player_manager.get_gear_level", new=AsyncMock(return_value=10)),
+            patch(
+                "cogs.actions.affix_manager.get_affixes",
+                new=AsyncMock(return_value=[{"slot_index": 0, "affix_type": "efficiency", "value": 3}]),
+            ),
             patch("cogs.actions.affix_manager.clear_affix", new=AsyncMock(side_effect=ValueError("empty"))),
             patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as mock_dispatch,
             patch.object(ActionsCog, "_render_affix", new=AsyncMock()),
@@ -2503,6 +2511,92 @@ class TestAffixHandlerNotification(unittest.IsolatedAsyncioTestCase):
             await cog.on_button_click(inter)
 
         mock_dispatch.assert_not_awaited()
+
+
+class TestAffixClearByGroup(DatabaseTestCase):
+    async def _setup(self, slots, materials=10):
+        from database.schema import get_connection
+        from core.utils import dt_str
+        now = dt_str(datetime.now(timezone.utc))
+        async with get_connection() as db:
+            await db.execute(
+                "INSERT INTO players (user_id, created_at, updated_at, ap_full_time, materials_gathering, gear_gathering) VALUES (?, ?, ?, ?, ?, ?)",
+                ("12345", now, now, now, materials, 30),
+            )
+            for slot, affix_type, value in slots:
+                await db.execute(
+                    "INSERT INTO gear_affixes (user_id, gear_type, slot_index, affix_type, value) VALUES (?, ?, ?, ?, ?)",
+                    ("12345", "gathering", slot, affix_type, value),
+                )
+            await db.commit()
+
+    def _inter(self, cid):
+        inter = MagicMock()
+        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+        inter.user.id = 12345
+        inter.user.display_name = "TestUser"
+        inter.component.custom_id = cid
+        inter.response.defer = AsyncMock()
+        inter.edit_original_response = AsyncMock()
+        return inter
+
+    async def _click(self, cid):
+        from cogs.actions import ActionsCog
+        cog = ActionsCog(bot=MagicMock())
+        inter = self._inter(cid)
+        with (
+            patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as dispatch,
+            patch.object(ActionsCog, "_render_affix", new=AsyncMock()) as render,
+        ):
+            await cog.on_button_click(inter)
+        return inter, dispatch, render
+
+    async def _state(self):
+        from database.schema import get_connection
+        from managers import affix_manager
+        async with get_connection() as db:
+            affixes = await affix_manager.get_affixes(db, "12345", "gathering")
+            async with db.execute("SELECT materials_gathering FROM players WHERE user_id='12345'") as cur:
+                mats = (await cur.fetchone())[0]
+        return [a["slot_index"] for a in affixes], mats
+
+    async def test_clears_highest_slot_of_group_and_dispatches_once(self):
+        await self._setup([(0, "efficiency", 3), (1, "efficiency", 2), (3, "efficiency", 3), (5, "efficiency", 3)])
+        _, dispatch, render = await self._click("affix_clear:gathering:efficiency:3")
+        slots, mats = await self._state()
+        self.assertEqual(slots, [0, 1, 3])
+        self.assertLess(mats, 10)
+        dispatch.assert_awaited_once()
+        event = dispatch.call_args[0][1][0]
+        self.assertEqual(event["type"], "affix_cleared")
+        self.assertEqual((event["affix_type"], event["value"]), ("efficiency", 3))
+        render.assert_awaited_once()
+
+    async def test_missing_group_does_not_clear_spend_or_dispatch(self):
+        await self._setup([(0, "efficiency", 2)])
+        _, dispatch, render = await self._click("affix_clear:gathering:efficiency:3")
+        slots, mats = await self._state()
+        self.assertEqual(slots, [0])
+        self.assertEqual(mats, 10)
+        dispatch.assert_not_awaited()
+        render.assert_awaited_once()
+
+    async def test_invalid_group_is_ignored(self):
+        await self._setup([(0, "efficiency", 3)])
+        for cid in (
+            "affix_clear:gathering:none:none",
+            "affix_clear:gathering:0",
+            "affix_clear:gathering:bogus:3",
+            "affix_clear:gathering:efficiency:6",
+            "affix_clear:gathering:efficiency:x",
+            "affix_clear:bogus:efficiency:3",
+        ):
+            inter, dispatch, render = await self._click(cid)
+            inter.response.defer.assert_not_awaited()
+            dispatch.assert_not_awaited()
+            render.assert_not_awaited()
+        slots, mats = await self._state()
+        self.assertEqual((slots, mats), ([0], 10))
 
 
 class TestSacrificeModalSubmit(unittest.IsolatedAsyncioTestCase):

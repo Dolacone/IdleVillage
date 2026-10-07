@@ -104,7 +104,7 @@ Task 1 (ui_renderer.py + _render_affix 轉傳 + affix_slot_select) -> Task 2 (af
   - AC：以 mock 的 DB 與 manager 執行真實 `_render_affix(inter, "gathering", selected_group=("efficiency", 3))`，斷言輸出的清除按鈕 custom_id 為 `affix_clear:gathering:efficiency:3` 且未 disabled。
   - AC：`affix_slot_select:gathering` 選項值 `efficiency:3` 時，`_render_affix` 以 `selected_group=("efficiency", 3)`（數值為 int）被呼叫一次；選項值 `0`、`bogus:3`、`efficiency:6`、`efficiency:x` 時 `_render_affix` 未被呼叫。
   - AC：既有斷言槽號格式的測試改為新格式。
-- [ ] Task 2: `affix_clear` 改以分組清除（`src/cogs/actions.py`，測試 `tests/test_discord_commands.py`）
+- [x] Task 2: `affix_clear` 改以分組清除（`src/cogs/actions.py`，測試 `tests/test_discord_commands.py`）
   - `affix_clear` 解析 `affix_clear:{gear}:{affix_type}:{value}`；類型不合法或數值不是 1-5 整數時（含 `none:none` 與舊格式 `affix_clear:{gear}:{slot}`）忽略；合法時在 `affix_clear` 分支找出該分組槽號最大的一條，再呼叫 `_execute_clear_affix(inter, gear_type, slot_index)`。
   - AC：同分組有槽 0、3、5 三條時，按清除後只剩槽 0、3，並發出一次 `affix_cleared` 事件，內容為該分組的類型與數值。
   - AC：分組已不存在時不清除、不扣素材、不發事件，畫面重新渲染。
