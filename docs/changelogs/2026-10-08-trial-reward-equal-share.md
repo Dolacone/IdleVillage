@@ -1,6 +1,6 @@
 ---
 title: "試煉獎勵改為 25% 均分 + 75% 依貢獻分配"
-status: Ready-to-review
+status: Reviewed
 created: 2026-10-08
 doc_type: change
 last_reviewed: 2026-10-08
