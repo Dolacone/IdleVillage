@@ -1,6 +1,6 @@
 ---
 title: "試煉獎勵改為 25% 均分 + 75% 依貢獻分配"
-status: Ready-to-review
+status: Issues-confirmed
 created: 2026-10-08
 doc_type: change
 last_reviewed: 2026-10-08
@@ -105,6 +105,9 @@ Parallel groups: none. Task 2 imports the constant from Task 1. Implementation o
   - AC4: Participant lines, sort order, and 1900-character truncation are unchanged.
 
 ## Review Issues
+
+- [ ] [Major] Issue 1: `tests/test_trial_manager.py:468-472` (`test_exact_integer_rewards_do_not_over_round`, Task 1 AC5) cannot fail when the `Fraction` math is removed. Reverting `src/managers/trial_manager.py:180` to `reward_pool = info["target"] / divisor` and `:188` to `contribution / total_contribution * contribution_pool` makes A's value `5.0 + 26.0 = 31.0`, so `ceil` gives 31 and the test still passes (mutation run on a HEAD copy: `37 passed`). The comment `float math ceils to 32` and AC5's "float math gives 32" hold only for the ordering `pool*0.25/N + c/t*pool*0.75`, not for the implemented structure. Fix: use an input where the implemented structure over-rounds under float, for example `target=48000`, `add_progress(A, 23200)` then `add_progress(B, 24800)`: exact rewards A 234, B 246; float version gives B `246.00000000000003 -> 247`. Update AC5 and the test comment to match.
+- [ ] [Minor] Issue 2: `docs/README.md:36-39` links each recent change record (`2026-10-08-remove-upgrade-affixes.md` and earlier), but has no row for `changelogs/2026-10-08-trial-reward-equal-share.md`. AGENTS.md requires every doc to be reachable from `docs/README.md`. Fix: add a "Trial reward equal share change record" row and add `docs/README.md` to `source_paths`.
 
 ## Plan Review Issues
 
