@@ -1,10 +1,11 @@
 ---
 title: "試煉獎勵改為 25% 均分 + 75% 依貢獻分配"
-status: Refactored
+status: Done
 created: 2026-10-08
 doc_type: change
 last_reviewed: 2026-10-08
 source_paths:
+  - CHANGELOG.md
   - docs/README.md
   - docs/changelogs/2026-10-08-trial-reward-equal-share.md
   - docs/discord/notification.md
