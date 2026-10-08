@@ -1,6 +1,6 @@
 ---
 title: "移除 ＡＰ退還 與 素材減免 詞條"
-status: Reviewed
+status: Refactored
 created: 2026-10-08
 doc_type: change
 last_reviewed: 2026-10-08
