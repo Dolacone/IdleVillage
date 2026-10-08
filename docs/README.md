@@ -37,6 +37,7 @@ This directory is the v2 design preview. v2 is a fresh restart and replaces v1 g
 | Affix summary display change record | [changelogs/2026-10-02-affix-summary-display.md](changelogs/2026-10-02-affix-summary-display.md) |
 | Affix group display change record | [changelogs/2026-10-07-affix-group-display.md](changelogs/2026-10-07-affix-group-display.md) |
 | Remove upgrade affixes change record | [changelogs/2026-10-08-remove-upgrade-affixes.md](changelogs/2026-10-08-remove-upgrade-affixes.md) |
+| Trial reward equal share change record | [changelogs/2026-10-08-trial-reward-equal-share.md](changelogs/2026-10-08-trial-reward-equal-share.md) |
 | Village resources | `managers/resource-manager.md` |
 | SQLite schema | `db-schema.md` |
 | Slash command routing | [discord/command-handler.md](discord/command-handler.md) |
