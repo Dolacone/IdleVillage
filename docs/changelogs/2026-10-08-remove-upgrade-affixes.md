@@ -13,6 +13,9 @@ source_paths:
   - docs/managers/affix-manager.md
   - docs/managers/gear-manager.md
   - src/database/schema.py
+  - src/managers/gear_manager.py
+  - src/managers/player_manager.py
+  - tests/test_gear_manager.py
   - tests/test_v2_schema_initialization.py
 scope: "Tracks this change from design through review."
 ---
@@ -97,7 +100,7 @@ Parallel groups: Task 1 can run in parallel with the Task 2 -> 3 -> 4 chain. Tas
   - AC1: An existing DB with `upgrade_ap_refund` value 3 at slot 0 and `upgrade_cost_reduce` value 4 at slot 1 reads back as `material_drop` value 3 at slot 0 and `material_drop` value 4 at slot 1 after `init_db()`.
   - AC2: Rows of other affix types are unchanged after `init_db()`.
   - AC3: Calling `init_db()` twice does not raise and leaves the same rows.
-- [ ] Task 2: Remove upgrade effects in `src/managers/gear_manager.py` and `src/managers/player_manager.py`. Tests in `tests/test_gear_manager.py`. `refund_ap` has no tests, so no player-manager test file changes.
+- [x] Task 2: Remove upgrade effects in `src/managers/gear_manager.py` and `src/managers/player_manager.py`. Tests in `tests/test_gear_manager.py`. `refund_ap` has no tests, so no player-manager test file changes.
   - AC1: `_material_cost` has no reduction parameter; `get_upgrade_info` and `attempt_upgrade` costs equal the base mode cost.
   - AC2: `attempt_upgrade` never refunds AP and its result has no `ap_refunded` key.
   - AC3: `upgrade_material_refund` and `upgrade_success` behave as before.

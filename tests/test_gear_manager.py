@@ -808,16 +808,27 @@ class TestAffixIntegration(DatabaseTestCase):
             (USER, "gathering", slot_index, affix_type, value),
         )
 
-    async def test_upgrade_cost_reduce_lowers_material_cost(self):
-        """upgrade_cost_reduce affix reduces material cost (floor, min 1)."""
+    async def test_material_cost_ignores_other_affixes(self):
+        """Upgrade cost equals the base mode cost even when the player holds other affixes."""
         async with schema.get_connection() as db:
-            await self._insert_affix(db, "upgrade_cost_reduce", 50)
+            await self._insert_affix(db, "efficiency", 5, slot_index=0)
+            await self._insert_affix(db, "material_drop", 5, slot_index=1)
+            await self._insert_affix(db, "upgrade_success", 5, slot_index=2)
             await db.commit()
-        info = None
         async with schema.get_connection() as db:
-            info = await gear_manager.get_upgrade_info(db, USER, "gathering", NOW, "normal")
-        # target_level=6, base_cost=6, -50% = 3
-        self.assertEqual(info["material_cost"], 3)
+            normal = await gear_manager.get_upgrade_info(db, USER, "gathering", NOW, "normal")
+            buffer = await gear_manager.get_upgrade_info(db, USER, "gathering", NOW, "buffer")
+            risky = await gear_manager.get_upgrade_info(db, USER, "gathering", NOW, "risky")
+        # target_level=6
+        self.assertEqual(normal["material_cost"], 6)
+        self.assertEqual(buffer["material_cost"], 3)
+        self.assertEqual(risky["material_cost"], 1)
+        with patch("managers.gear_manager.random.random", return_value=0.0):
+            async with schema.get_connection() as db:
+                await gear_manager.attempt_upgrade(db, USER, "gathering", NOW)
+                await db.commit()
+                mats = await player_manager.get_material(db, USER, "gathering")
+        self.assertEqual(mats, 20 - 6)
 
     async def test_upgrade_success_affix_adds_to_rate(self):
         """upgrade_success affix increases the displayed and actual success rate."""
@@ -828,18 +839,6 @@ class TestAffixIntegration(DatabaseTestCase):
             info = await gear_manager.get_upgrade_info(db, USER, "gathering", NOW, "normal")
         base_rate = gear_manager._compute_rate(5, 0, 0, mode="normal")
         self.assertAlmostEqual(info["rate"], min(1.0, base_rate + 0.05))
-
-    async def test_ap_refund_triggered_on_success(self):
-        """upgrade_ap_refund affix refunds 1 AP when triggered."""
-        async with schema.get_connection() as db:
-            await self._insert_affix(db, "upgrade_ap_refund", 100)
-            await db.commit()
-        with patch("managers.gear_manager.random.random", return_value=0.0):
-            async with schema.get_connection() as db:
-                result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW)
-                await db.commit()
-        self.assertTrue(result["success"])
-        self.assertTrue(result["ap_refunded"])
 
     async def test_material_refund_triggered_on_success(self):
         """upgrade_material_refund affix refunds spent materials when triggered."""
@@ -870,9 +869,9 @@ class TestAffixIntegration(DatabaseTestCase):
         self.assertEqual(affixes, [])
 
     async def test_refund_not_triggered_on_failure(self):
-        """AP and material refund affixes do not trigger on failure."""
+        """The material refund affix does not trigger on failure."""
         async with schema.get_connection() as db:
-            await self._insert_affix(db, "upgrade_ap_refund", 100, slot_index=0)
+            await self._insert_affix(db, "efficiency", 3, slot_index=0)
             await self._insert_affix(db, "upgrade_material_refund", 100, slot_index=1)
             await db.commit()
         with patch("managers.gear_manager.random.random", return_value=1.0):
@@ -880,7 +879,6 @@ class TestAffixIntegration(DatabaseTestCase):
                 result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="normal")
                 await db.commit()
         self.assertFalse(result["success"])
-        self.assertFalse(result["ap_refunded"])
         self.assertFalse(result["material_refunded"])
 
 
