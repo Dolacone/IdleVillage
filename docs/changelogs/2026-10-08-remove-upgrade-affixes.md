@@ -1,6 +1,6 @@
 ---
 title: "移除 ＡＰ退還 與 素材減免 詞條"
-status: Ready-to-review
+status: Reviewed
 created: 2026-10-08
 doc_type: change
 last_reviewed: 2026-10-08
@@ -132,3 +132,7 @@ Parallel groups: Task 1 can run in parallel with the Task 2 -> 3 -> 4 chain. Tas
 - [x] The dependency graph lets Task 3 and Task 4 edit `tests/test_discord_commands.py` at the same time. Task 3 AC5 adds an `affix_clear` test there. Task 4 edits `:1333-1359`, `:1475-1514`, and `:1632-1640` in the same file. Task 4 sits in the parallel group with Task 2, and Task 3 starts after Task 2, so the two can overlap. Add a `Task 3 -> Task 4` edge, or move Task 4 out of the first parallel group.
 - [x] Task 2's test location is conditional ("the player-manager test file if `refund_ap` has tests"). `grep -rn refund_ap tests/` returns no hits, so no player-manager test file needs changes. State this directly. Then the worker does not search for a file or create one.
 - [x] Task 4 AC4 (`:114`) cannot be met with legal data, so the earlier truncation issue is not resolved. Groups are `(affix_type, value)` pairs (`src/cogs/ui_renderer.py:517-523`). Values are 1-5 (`src/managers/affix_manager.py:28-29`, `src/cogs/actions.py:43`). Five types give at most 25 groups, so "more than 25 groups from the 5 remaining types" needs out-of-range values like 6. The truncation in `src/cogs/ui_renderer.py:825` and `docs/discord/ui-renderer.md:284` becomes unreachable for real data. Pick one and state it in the plan: (a) keep truncation as a guard and let the test use values above 5, saying so in AC4; or (b) replace the test with 5x5=25 groups that all appear with no `另有 n 組未列出` suffix, and mark `docs/discord/ui-renderer.md:284` as unreachable or remove it. AC4 must also say how to update the placeholder assertion at `tests/test_discord_commands.py:1516` (`另有 5 組未列出`).
+
+## Review Issues
+
+- [ ] [Minor] Task 2 AC2 and AC4 have no direct assertion. `tests/test_gear_manager.py:870-880` (`test_refund_not_triggered_on_failure`) only drops `assertFalse(result["ap_refunded"])`, and no test asserts `"ap_refunded" not in result` or `not hasattr(player_manager, "refund_ap")`. The refund branch itself is covered indirectly: `bonuses["upgrade_ap_refund"]` would raise `KeyError` from the 5-key dict (`src/managers/affix_manager.py:49`). Re-adding `"ap_refunded": False` to the return dict at `src/managers/gear_manager.py:285-293` passes the suite.
