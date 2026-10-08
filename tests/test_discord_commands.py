@@ -1330,12 +1330,12 @@ class TestAffixEmbedSection(unittest.TestCase):
         self.assertNotIn("強化成功:", embed.description)
         self.assertNotIn("槽 ", embed.description)
 
-    def test_upgrade_cost_reduce_uses_positive_sign_and_new_label(self):
+    def test_cycle_time_reduce_uses_positive_sign_and_new_label(self):
         from cogs.ui_renderer import build_gear_embed
-        affixes = [{"slot_index": 0, "affix_type": "upgrade_cost_reduce", "value": 5}]
+        affixes = [{"slot_index": 0, "affix_type": "cycle_time_reduce", "value": 5}]
         embed = build_gear_embed(self._make_info(gear_level=5), "gathering", affixes=affixes, max_slots=1)
-        self.assertIn("素材減免: 5%", embed.description)
-        self.assertNotIn("素材減免: -5%", embed.description)
+        self.assertIn("週期縮短: 5%", embed.description)
+        self.assertNotIn("週期縮短: -5%", embed.description)
 
 
 class TestAffixManagementEmbed(unittest.TestCase):
@@ -1343,20 +1343,20 @@ class TestAffixManagementEmbed(unittest.TestCase):
         from cogs.ui_renderer import build_affix_embed
         player_gear = {"gathering": 5, "building": 0, "combat": 0, "research": 0}
         affixes = [
-            {"slot_index": 0, "affix_type": "upgrade_cost_reduce", "value": 5},
+            {"slot_index": 0, "affix_type": "cycle_time_reduce", "value": 5},
             {"slot_index": 2, "affix_type": "efficiency", "value": 3},
         ]
-        embed = build_affix_embed("gathering", player_gear, affixes, 3, selected_group=("upgrade_cost_reduce", 5), materials=7)
+        embed = build_affix_embed("gathering", player_gear, affixes, 3, selected_group=("cycle_time_reduce", 5), materials=7)
         summary_index = embed.description.index("詞條合計")
         divider_index = embed.description.index("─────────────────────────────")
         self.assertLess(embed.description.index("持有素材：7 個"), summary_index)
         self.assertLess(summary_index, divider_index)
         self.assertIn("個\n\n詞條合計", embed.description)
-        self.assertIn("素材減免: 5%", embed.description)
-        self.assertIn("素材減免（+5%） x 1", embed.description)
+        self.assertIn("週期縮短: 5%", embed.description)
+        self.assertIn("週期縮短（+5%） x 1", embed.description)
         self.assertIn("行動效率（+3%） x 1", embed.description)
         self.assertIn("空槽 x 1", embed.description)
-        self.assertIn("即將清除：素材減免（+5%）", embed.description)
+        self.assertIn("即將清除：週期縮短（+5%）", embed.description)
         self.assertNotIn("即將清除：槽", embed.description)
 
     def test_grouped_list_counts_orders_and_hides_slot_numbers(self):
@@ -1472,11 +1472,11 @@ class TestAffixComponents(unittest.TestCase):
 
     def test_affix_group_dropdown_option_uses_positive_value_and_new_label(self):
         from cogs.ui_renderer import build_affix_components
-        affixes = [{"slot_index": 0, "affix_type": "upgrade_cost_reduce", "value": 5}]
+        affixes = [{"slot_index": 0, "affix_type": "cycle_time_reduce", "value": 5}]
         rows = build_affix_components("gathering", self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1)
         slot_select = next(c for row in rows for c in row.children if c.custom_id == "affix_slot_select:gathering")
-        self.assertEqual(slot_select.options[0].label, "素材減免（+5%） x 1")
-        self.assertEqual(slot_select.options[0].value, "upgrade_cost_reduce:5")
+        self.assertEqual(slot_select.options[0].label, "週期縮短（+5%） x 1")
+        self.assertEqual(slot_select.options[0].value, "cycle_time_reduce:5")
         self.assertIsNone(slot_select.options[0].description)
 
     def test_affix_components_with_26_filled_slots_fit_discord_select_limit(self):
@@ -1492,28 +1492,25 @@ class TestAffixComponents(unittest.TestCase):
         self.assertEqual(slot_select.options[0].value, "efficiency:1")
 
     def test_affix_group_dropdown_truncates_to_25_lowest_value_groups_in_list_order(self):
+        """Value 6 is out of range (valid values are 1-5) and only exercises the 25-option guard."""
         from cogs.ui_renderer import AFFIX_TYPE_LABELS, build_affix_components
         affixes = [
             {"slot_index": 0, "affix_type": t, "value": v}
-            for t in AFFIX_TYPE_LABELS for v in (1, 2, 3, 4)
-        ]
-        affixes += [
-            {"slot_index": 0, "affix_type": "efficiency", "value": 5},
-            {"slot_index": 0, "affix_type": "material_drop", "value": 5},
+            for t in AFFIX_TYPE_LABELS for v in (1, 2, 3, 4, 5, 6)
         ]
         rows = build_affix_components("gathering", self._player_gear(), gear_cap=300, affixes=affixes, max_slots=30)
         slot_select = next(c for row in rows for c in row.children if c.custom_id == "affix_slot_select:gathering")
         values = [o.value for o in slot_select.options]
         self.assertEqual(len(values), 25)
-        for excluded in ("efficiency:5", "material_drop:5", "upgrade_ap_refund:4",
-                         "upgrade_material_refund:4", "cycle_time_reduce:4"):
-            self.assertNotIn(excluded, values)
-        expected = [
-            f"{t}:{v}" for t in AFFIX_TYPE_LABELS for v in (5, 4, 3, 2, 1)
-            if f"{t}:{v}" in values
-        ]
+        for t in AFFIX_TYPE_LABELS:
+            self.assertNotIn(f"{t}:6", values)
+            for v in (1, 2, 3, 4, 5):
+                self.assertIn(f"{t}:{v}", values)
+        for removed in ("upgrade_cost_reduce", "upgrade_ap_refund"):
+            self.assertFalse([v for v in values if v.startswith(removed)])
+        expected = [f"{t}:{v}" for t in AFFIX_TYPE_LABELS for v in (5, 4, 3, 2, 1)]
         self.assertEqual(values, expected)
-        self.assertEqual(slot_select.placeholder, "選擇要清除的詞條...（另有 5 組未列出）")
+        self.assertTrue(slot_select.placeholder.endswith("另有 5 組未列出）"))
 
     def test_affix_group_dropdown_marks_selected_group_default(self):
         from cogs.ui_renderer import build_affix_components
@@ -1637,7 +1634,7 @@ class TestAutoAffixComponents(unittest.TestCase):
         self.assertEqual([o.label for o in selects[1].options], list(AFFIX_TYPE_LABELS.values()))
         self.assertEqual(
             [o.label for o in selects[1].options],
-            ["行動效率", "素材掉落", "強化成功", "素材減免", "ＡＰ退還", "素材退還", "週期縮短"],
+            ["行動效率", "素材掉落", "強化成功", "素材退還", "週期縮短"],
         )
         self.assertEqual([o.label for o in selects[2].options], ["1+", "2+", "3+", "4+", "5"])
         self.assertEqual([o.label for o in selects[3].options], ["工具素材", "萬能素材"])
@@ -2579,6 +2576,16 @@ class TestAffixClearByGroup(DatabaseTestCase):
         self.assertEqual(mats, 10)
         dispatch.assert_not_awaited()
         render.assert_awaited_once()
+
+    async def test_removed_type_button_does_not_clear_or_spend(self):
+        await self._setup([(0, "efficiency", 3)])
+        for removed in ("upgrade_ap_refund", "upgrade_cost_reduce"):
+            inter, dispatch, render = await self._click(f"affix_clear:gathering:{removed}:3")
+            inter.response.defer.assert_not_awaited()
+            dispatch.assert_not_awaited()
+            render.assert_not_awaited()
+        slots, mats = await self._state()
+        self.assertEqual((slots, mats), ([0], 10))
 
     async def test_invalid_group_is_ignored(self):
         await self._setup([(0, "efficiency", 3)])

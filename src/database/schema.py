@@ -247,6 +247,14 @@ async def _migrate_v2_columns(db):
         )
 
 
+async def _migrate_removed_affix_types(db):
+    """Convert removed affix types to material_drop, keeping slot and value."""
+    await db.execute(
+        "UPDATE gear_affixes SET affix_type='material_drop' "
+        "WHERE affix_type IN ('upgrade_ap_refund','upgrade_cost_reduce')"
+    )
+
+
 async def init_db():
     path = _resolve_db_path()
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
@@ -254,6 +262,7 @@ async def init_db():
     async with aiosqlite.connect(path) as db:
         await _create_v2_tables(db)
         await _migrate_v2_columns(db)
+        await _migrate_removed_affix_types(db)
         await _seed_initial_rows(db)
         await db.commit()
 

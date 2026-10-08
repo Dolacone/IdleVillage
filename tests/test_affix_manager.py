@@ -4,6 +4,7 @@ Mechanics reference: docs/managers/affix-manager.md
 """
 
 import os
+import random
 import unittest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
@@ -63,6 +64,21 @@ class TestSlotCount(unittest.TestCase):
         self.assertEqual(affix_manager.slot_count(9), 1)
 
 
+REMAINING_AFFIX_TYPES = (
+    "efficiency",
+    "material_drop",
+    "upgrade_success",
+    "upgrade_material_refund",
+    "cycle_time_reduce",
+)
+REMOVED_AFFIX_TYPES = ("upgrade_ap_refund", "upgrade_cost_reduce")
+
+
+class TestAffixPool(unittest.TestCase):
+    def test_pool_is_exactly_the_five_remaining_types(self):
+        self.assertEqual(affix_manager.AFFIX_TYPES, REMAINING_AFFIX_TYPES)
+
+
 class TestExtractAffix(DatabaseTestCase):
     async def asyncSetUp(self):
         await super().asyncSetUp()
@@ -78,6 +94,12 @@ class TestExtractAffix(DatabaseTestCase):
         self.assertEqual(result["slot_index"], 0)
         self.assertEqual(result["affix_type"], "efficiency")
         self.assertEqual(result["value"], 3)
+
+    async def test_extract_draws_only_from_remaining_types(self):
+        async with schema.get_connection() as db:
+            with patch("random.choice", wraps=random.choice) as choice:
+                await affix_manager.extract_affix(db, USER, GEAR, 10, NOW)
+        self.assertEqual(tuple(choice.call_args.args[0]), REMAINING_AFFIX_TYPES)
 
     async def test_extract_consumes_material(self):
         async with schema.get_connection() as db:
@@ -230,7 +252,7 @@ class TestAutoExtractAffix(DatabaseTestCase):
             await db.commit()
             with patch.object(player_manager, "spend_material", new=AsyncMock(wraps=real_spend_tool)) as spend_tool, \
                  patch.object(player_manager, "spend_universal_material", new=AsyncMock(wraps=real_spend_universal)) as spend_universal, \
-                 patch("random.choice", side_effect=["material_drop", "upgrade_cost_reduce", "efficiency"]), \
+                 patch("random.choice", side_effect=["material_drop", "cycle_time_reduce", "efficiency"]), \
                  patch("random.randint", side_effect=[5, 4, 3]):
                 result = await affix_manager.auto_extract_affix(
                     db, USER, GEAR, 10, NOW, target_affix_type="efficiency", min_value=3
@@ -264,6 +286,24 @@ class TestAutoExtractAffix(DatabaseTestCase):
         self.assertEqual(result["material_spent"], 15)
         self.assertIsNone(result["affix"])
         self.assertEqual(await self._balances(), (20, 2))
+
+    async def test_auto_extract_draws_only_from_remaining_types(self):
+        async with schema.get_connection() as db:
+            with patch("random.choice", wraps=random.choice) as choice:
+                await affix_manager.auto_extract_affix(db, USER, GEAR, 10, NOW)
+        self.assertEqual(tuple(choice.call_args.args[0]), REMAINING_AFFIX_TYPES)
+
+    async def test_removed_target_type_rejects_without_sampling_or_spending(self):
+        for removed in REMOVED_AFFIX_TYPES:
+            async with schema.get_connection() as db:
+                with self.subTest(target=removed), \
+                     patch("random.choice") as choice, self.assertRaises(ValueError):
+                    await affix_manager.auto_extract_affix(
+                        db, USER, GEAR, 10, NOW, target_affix_type=removed
+                    )
+                choice.assert_not_called()
+                await db.rollback()
+        self.assertEqual(await self._balances(), (10_000, 0))
 
     async def test_any_type_still_requires_threshold(self):
         async with schema.get_connection() as db:
@@ -661,6 +701,12 @@ class TestGetAffixBonuses(DatabaseTestCase):
             bonuses = await affix_manager.get_affix_bonuses(db, USER, GEAR)
         for t in affix_manager.AFFIX_TYPES:
             self.assertEqual(bonuses[t], 0)
+
+    async def test_bonuses_have_exactly_the_remaining_keys(self):
+        async with schema.get_connection() as db:
+            await _insert_player(db, USER, gear_level=10, materials=0)
+            bonuses = await affix_manager.get_affix_bonuses(db, USER, GEAR)
+        self.assertEqual(set(bonuses), set(REMAINING_AFFIX_TYPES))
 
     async def test_bonuses_accumulate_same_type(self):
         async with schema.get_connection() as db:

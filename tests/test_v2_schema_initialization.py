@@ -176,6 +176,56 @@ class MigratesLegacyPlayersMissingUniversalMaterial(DatabaseTestCase):
         self.assertEqual(row[1], 0)
 
 
+class MigratesRemovedAffixTypes(DatabaseTestCase):
+    """Removed affix types must become material_drop so get_affix_bonuses never meets an unknown type."""
+
+    ROWS = [
+        ("fff", "gathering", 0, "upgrade_ap_refund", 3),
+        ("fff", "combat", 1, "upgrade_cost_reduce", 4),
+        ("bilio", "combat", 0, "upgrade_ap_refund", 5),
+        ("fff", "combat", 0, "efficiency", 2),
+        ("fff", "gathering", 1, "upgrade_material_refund", 1),
+    ]
+
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        from database.schema import get_connection
+
+        async with get_connection() as db:
+            await db.executemany(
+                "INSERT INTO gear_affixes (user_id, gear_type, slot_index, affix_type, value) "
+                "VALUES (?, ?, ?, ?, ?)",
+                self.ROWS,
+            )
+            await db.commit()
+
+    async def _rows(self):
+        return await self.fetchall(
+            "SELECT user_id, gear_type, slot_index, affix_type, value FROM gear_affixes "
+            "ORDER BY user_id, gear_type, slot_index"
+        )
+
+    async def test_removed_types_become_material_drop_keeping_slot_and_value(self):
+        await schema.init_db()
+        rows = {tuple(r[:3]): tuple(r[3:]) for r in await self._rows()}
+        self.assertEqual(rows[("fff", "gathering", 0)], ("material_drop", 3))
+        self.assertEqual(rows[("fff", "combat", 1)], ("material_drop", 4))
+        self.assertEqual(rows[("bilio", "combat", 0)], ("material_drop", 5))
+
+    async def test_other_affix_types_are_unchanged(self):
+        await schema.init_db()
+        rows = {tuple(r[:3]): tuple(r[3:]) for r in await self._rows()}
+        self.assertEqual(rows[("fff", "combat", 0)], ("efficiency", 2))
+        self.assertEqual(rows[("fff", "gathering", 1)], ("upgrade_material_refund", 1))
+        self.assertEqual(len(rows), len(self.ROWS))
+
+    async def test_repeated_init_db_leaves_same_rows(self):
+        await schema.init_db()
+        first = await self._rows()
+        await schema.init_db()
+        self.assertEqual(await self._rows(), first)
+
+
 class PlayerIndexesExist(DatabaseTestCase):
     async def test_completion_time_index_exists(self):
         row = await self.fetchone(

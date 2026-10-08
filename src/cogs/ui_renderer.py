@@ -56,8 +56,6 @@ AFFIX_TYPE_LABELS = {
     "efficiency": "行動效率",
     "material_drop": "素材掉落",
     "upgrade_success": "強化成功",
-    "upgrade_cost_reduce": "素材減免",
-    "upgrade_ap_refund": "ＡＰ退還",
     "upgrade_material_refund": "素材退還",
     "cycle_time_reduce": "週期縮短",
 }

@@ -20,8 +20,6 @@ AFFIX_TYPES = (
     "efficiency",
     "material_drop",
     "upgrade_success",
-    "upgrade_cost_reduce",
-    "upgrade_ap_refund",
     "upgrade_material_refund",
     "cycle_time_reduce",
 )
