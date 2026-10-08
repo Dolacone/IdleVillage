@@ -1,14 +1,14 @@
 ---
 title: "Module: trial-manager"
 doc_type: module
-last_reviewed: 2026-08-15
+last_reviewed: 2026-10-08
 source_paths:
   - src/managers/trial_manager.py
 ---
 
 # Module: trial-manager
 
-管理全服單一的「村莊試煉」：玩家從合法級距選擇目標，系統從可支付且能保留最低存量的村莊資源中隨機扣款。所有玩家的行動產出計入同一進度。達標後依貢獻度分配萬能素材。此系統與 `stage-manager` 的五關循環互相獨立。
+管理全服單一的「村莊試煉」：玩家從合法級距選擇目標，系統從可支付且能保留最低存量的村莊資源中隨機扣款。所有玩家的行動產出計入同一進度。達標後將萬能素材的 25% 均分給參與者，75% 依貢獻度分配。此系統與 `stage-manager` 的五關循環互相獨立。
 
 ## 全域單例狀態
 
@@ -82,15 +82,22 @@ target 通過最新 `max_target` 驗證後，eligible 必不為空。manager 不
 
 ## 達成與獎勵分配
 
-達標時，讀取 `trial_contributions` 全部列（`total_contribution` = 所有貢獻總和 = 觸發當下的 `progress`），對每位參與者：
+達標時，讀取 `trial_contributions` 中 `contribution > 0` 的列作為參與者（`N` 位）。`total_contribution` 為參與者貢獻總和，等於觸發當下的 `progress`。獎勵池拆成兩部分：
 
 ```
-reward_i = ceil(contribution_i / total_contribution × (target / TRIAL_REWARD_DIVISOR))
+reward_pool = target / TRIAL_REWARD_DIVISOR
+equal_part_i = reward_pool × TRIAL_REWARD_EQUAL_SHARE_PERCENT% / N
+contribution_part_i = contribution_i / total_contribution × reward_pool × (100 - TRIAL_REWARD_EQUAL_SHARE_PERCENT)%
+reward_i = ceil(equal_part_i + contribution_part_i)
 ```
 
-呼叫 `player-manager.addUniversalMaterial(user_id, reward_i)` 逐一發放。採**無條件進位**：每位參與者各自對自己的分配額 ceil，因此總發放量可能略高於 `target / TRIAL_REWARD_DIVISOR`（多人各自進位所致），此為預期行為，非 bug。
+`TRIAL_REWARD_EQUAL_SHARE_PERCENT` 是 `trial_manager` 的程式常數，值為 `25`。計算使用有理數，避免浮點誤差讓整數結果多進位。
 
-發放完成後：`is_active=0, ended_at=now`，清空 `trial_contributions`。回傳的 `trial_success` 事件包含 `target`、`resource_type`、`total_awarded`（實際發放總量）與 `participants`（`[{user_id, contribution, reward}, ...]`，依 contribution 降冪排序）。
+呼叫 `player-manager.addUniversalMaterial(user_id, reward_i)` 逐一發放。每位參與者只對兩部分的總和進位一次，因此總發放量可能比 `reward_pool` 多最多 `N - 1` 個。此為預期行為，非 bug。
+
+範例：`target = 10000`、`reward_pool = 100`。A 貢獻 9000，B 貢獻 1000。A 得 `ceil(12.5 + 67.5) = 80`，B 得 `ceil(12.5 + 7.5) = 20`。
+
+發放完成後：`is_active=0, ended_at=now`，清空 `trial_contributions`。回傳的 `trial_success` 事件包含 `target`、`resource_type`、`total_awarded`（實際發放總量）與 `participants`（`[{user_id, contribution, reward}, ...]`，只含 `contribution > 0` 的玩家，依 contribution 降冪排序）。
 
 ## 失敗（逾時）
 
@@ -135,6 +142,7 @@ reward_i = ceil(contribution_i / total_contribution × (target / TRIAL_REWARD_DI
 
 ## Changelog
 
+- 2026-10-08: 試煉獎勵改為 25% 均分給 `contribution > 0` 的參與者，75% 依貢獻度分配，每人總和進位一次。
 - 2026-08-15: 試煉目標改為玩家選擇的 `25000` 級距。新增 `10000` 資源保留量、分頁目標契約及原子提交驗證。
 - 2026-07-17: `add_progress` 新增「自動工具完整週期」為呼叫來源，貢獻歸於自動工具擁有者（見 `managers/auto-tool-manager.md`）。
 - 2026-07-14: Historical trial automation and resource-selection update; current target validation and resource eligibility are defined above.

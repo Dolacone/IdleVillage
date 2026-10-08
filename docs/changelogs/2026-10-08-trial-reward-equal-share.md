@@ -6,6 +6,12 @@ doc_type: change
 last_reviewed: 2026-10-08
 source_paths:
   - docs/changelogs/2026-10-08-trial-reward-equal-share.md
+  - docs/discord/notification.md
+  - docs/managers/trial-manager.md
+  - src/core/notification.py
+  - src/managers/trial_manager.py
+  - tests/test_discord_notifications.py
+  - tests/test_trial_manager.py
 scope: "Tracks this change from design through review."
 ---
 
@@ -67,6 +73,34 @@ Not Doing:
 
 ## Architecture Decisions
 
+- 比例常數 `TRIAL_REWARD_EQUAL_SHARE_PERCENT = 25` 定義在 `src/managers/trial_manager.py` 模組層級。貢獻部分比例由 `100 - TRIAL_REWARD_EQUAL_SHARE_PERCENT` 推得，不另設常數。
+- `_succeed_trial` 用 `fractions.Fraction` 計算每人獎勵，最後 `math.ceil` 一次。現行 `contribution / total × pool` 用浮點數，整數結果可能被算成 `x.0000001` 而多進位一，改用有理數消除此風險。
+- 參與者篩選放在 SQL：`SELECT user_id, contribution FROM trial_contributions WHERE contribution > 0 ORDER BY contribution DESC`。`N` 與 `total_contribution` 都從篩選後的列計算。`contribution = 0` 的列不發獎勵，也不列入 `participants`。
+- 試煉達成時 `progress >= target > 0`，因此 `N >= 1`，不需處理除以零。
+- `src/core/notification.py` 從 `managers.trial_manager` 匯入 `TRIAL_REWARD_EQUAL_SHARE_PERCENT` 組通知文字，避免比例在兩處寫死後不一致。`src/core/settlement.py` 已匯入 `managers.trial_manager`，`managers` 不匯入 `core.notification`，不會循環匯入。
+- `trial_start` 事件的 `reward_pool`（`src/cogs/actions.py`）與事件結構不變。
+
 ## Tasks
+
+Dependency graph:
+
+```
+Task 1 (trial_manager reward formula + constant) -> Task 2 (notification wording)
+```
+
+Parallel groups: none. Task 2 imports the constant from Task 1. Implementation order: 1, 2.
+
+- [ ] Task 1: Split the reward pool in `src/managers/trial_manager.py`. Tests in `tests/test_trial_manager.py`.
+  - AC1: Module constant `TRIAL_REWARD_EQUAL_SHARE_PERCENT == 25`.
+  - AC2: With `target=10000`, `TRIAL_REWARD_DIVISOR=100`, A contributes 9000 and B contributes 1000: A gets 80, B gets 20, `total_awarded == 100`. Under the old formula A would get 90 and B 10, so this test fails if the equal share is removed.
+  - AC3: Rounding happens once per participant on the sum: with `target=1000`, contributions 334/333/333, each participant gets 4 and `total_awarded == 12`.
+  - AC4: A `trial_contributions` row with `contribution = 0` receives no universal material, is not in `participants`, and does not count toward `N`. With target 10000, A=9000, B=1000, plus C=0: A gets 80, B gets 20.
+  - AC5: The integer case does not over-round from float error: pick a case whose exact reward is an integer (for example target 10000, A=9000, B=1000 -> exactly 80 and 20) and assert the exact value.
+  - AC6: Existing reward tests (`test_reaching_target_triggers_success_and_awards_universal_material`, `test_dynamic_target_drives_reward_pool_and_deadline`) still pass; update comments to describe the new formula.
+- [ ] Task 2: Update trial notification text in `src/core/notification.py`. Tests in `tests/test_discord_notifications.py`.
+  - AC1: `trial_start` last line equals `達成後共 {reward_pool} 個 🌟萬能素材：25% 由參與者平均分配，75% 依貢獻度分配`.
+  - AC2: `trial_success` second line equals `共 {participant_count} 位玩家瓜分了 {total_awarded} 個 🌟萬能素材（25% 平均分配、75% 依貢獻度）：`.
+  - AC3: Percentages come from `trial_manager.TRIAL_REWARD_EQUAL_SHARE_PERCENT`; a test that patches the constant to 30 sees `30%` and `70%` in both messages.
+  - AC4: Participant lines, sort order, and 1900-character truncation are unchanged.
 
 ## Review Issues
