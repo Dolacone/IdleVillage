@@ -104,3 +104,11 @@ Parallel groups: none. Task 2 imports the constant from Task 1. Implementation o
   - AC4: Participant lines, sort order, and 1900-character truncation are unchanged.
 
 ## Review Issues
+
+## Plan Review Issues
+
+- [ ] Issue 1: Task 1 AC3 cannot fail when the rounding rule changes. Contributions 334/333/333 with `target=1000` give 4/4/4 (total 12) under sum-then-ceil, under per-part ceil, and under the old formula; it also duplicates the existing `test_ceil_rounding_can_exceed_reward_pool`. Fix: replace AC3 with `target=1000`, A=700, B=300: A gets 7, B gets 4, `total_awarded == 11` (per-part ceil gives 8/5 = 13, old formula gives 7/3 = 10).
+- [ ] Issue 2: Task 1 AC6 omits `test_ceil_rounding_can_exceed_reward_pool`, whose comment `each share is ~3.33` describes the old formula. Fix: add it to AC6. Its assertions (4/4/4, total 12) still hold under the new formula (`ceil(0.833 + 2.505)`, `ceil(0.833 + 2.4975)`); update only the comment.
+- [ ] Issue 3: Task 2 AC3 does not fix the import form. `from managers.trial_manager import TRIAL_REWARD_EQUAL_SHARE_PERCENT` binds the value at import, so a test patching `managers.trial_manager.TRIAL_REWARD_EQUAL_SHARE_PERCENT` sees no change. Fix: state in Architecture Decisions and Task 2 AC3 that `notification.py` uses `from managers import trial_manager` and reads `trial_manager.TRIAL_REWARD_EQUAL_SHARE_PERCENT` inside `_format_event`; the test patches `managers.trial_manager.TRIAL_REWARD_EQUAL_SHARE_PERCENT`. The circular-import rationale also cites the wrong evidence: `core/notification.py` already imports `cogs.ui_renderer`, which imports `managers.trial_manager`; cite that chain.
+- [ ] Issue 4: `docs/managers/player-manager.md:78` still says trial universal material is distributed 「依貢獻度發放」. Fix: reword it to "依 `trial-manager` 的分配規則發放（25% 均分、75% 依貢獻度）" and add `docs/managers/player-manager.md` to `source_paths`.
+- [ ] Issue 5: The overage bound 「多最多 `N - 1` 個」 in `docs/managers/trial-manager.md` and Recommended Direction holds only when `reward_pool = target / TRIAL_REWARD_DIVISOR` is an integer; both values come from env config. The exact bound is `total_awarded <= ceil(reward_pool) + N - 1`. Fix: state that bound in both places.
