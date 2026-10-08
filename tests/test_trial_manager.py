@@ -365,10 +365,11 @@ class TestAddProgress(DatabaseTestCase):
             self.assertEqual(await player_manager.get_universal_material(db, user_c), 0)
 
     async def test_exact_integer_rewards_do_not_over_round(self):
-        result = await self._run_trial(4000, [(USER_A, 3900), (USER_B, 600)])
+        result = await self._run_trial(48000, [(USER_A, 23200), (USER_B, 24800)])
         rewards = {p["user_id"]: p["reward"] for p in result["participants"]}
-        # pool 40: A 5 + 26 = 31 exactly (float math ceils to 32); B 5 + 4 = 9
-        self.assertEqual(rewards, {USER_A: 31, USER_B: 9})
+        # pool 480: A 60 + 174 = 234; B 60 + 186 = 246 exactly (float math gives 246.00000000000003, ceils to 247)
+        self.assertEqual(rewards, {USER_A: 234, USER_B: 246})
+        self.assertEqual(result["total_awarded"], 480)
 
     async def test_add_progress_fails_trial_when_effective_time_past_deadline(self):
         late = NOW + timedelta(seconds=43201)
