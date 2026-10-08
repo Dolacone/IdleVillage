@@ -91,7 +91,7 @@ Task 1 (trial_manager reward formula + constant) -> Task 2 (notification wording
 
 Parallel groups: none. Task 2 imports the constant from Task 1. Implementation order: 1, 2.
 
-- [ ] Task 1: Split the reward pool in `src/managers/trial_manager.py`. Tests in `tests/test_trial_manager.py`.
+- [x] Task 1: Split the reward pool in `src/managers/trial_manager.py`. Tests in `tests/test_trial_manager.py`.
   - AC1: Module constant `TRIAL_REWARD_EQUAL_SHARE_PERCENT == 25`.
   - AC2: With `target=10000`, `TRIAL_REWARD_DIVISOR=100`, A contributes 9000 and B contributes 1000: A gets 80, B gets 20, `total_awarded == 100`. Under the old formula A would get 90 and B 10, so this test fails if the equal share is removed.
   - AC3: Rounding happens once per participant on the sum: with `target=1000`, A contributes 700 and B contributes 300: A gets 7, B gets 4, `total_awarded == 11`. Per-part ceil would give 8/5 (13); the old formula gives 7/3 (10).
