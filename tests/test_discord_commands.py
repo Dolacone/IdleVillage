@@ -2580,6 +2580,16 @@ class TestAffixClearByGroup(DatabaseTestCase):
         dispatch.assert_not_awaited()
         render.assert_awaited_once()
 
+    async def test_removed_type_button_does_not_clear_or_spend(self):
+        await self._setup([(0, "efficiency", 3)])
+        for removed in ("upgrade_ap_refund", "upgrade_cost_reduce"):
+            inter, dispatch, render = await self._click(f"affix_clear:gathering:{removed}:3")
+            inter.response.defer.assert_not_awaited()
+            dispatch.assert_not_awaited()
+            render.assert_not_awaited()
+        slots, mats = await self._state()
+        self.assertEqual((slots, mats), ([0], 10))
+
     async def test_invalid_group_is_ignored(self):
         await self._setup([(0, "efficiency", 3)])
         for cid in (

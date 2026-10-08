@@ -13,8 +13,11 @@ source_paths:
   - docs/managers/affix-manager.md
   - docs/managers/gear-manager.md
   - src/database/schema.py
+  - src/managers/affix_manager.py
   - src/managers/gear_manager.py
   - src/managers/player_manager.py
+  - tests/test_affix_manager.py
+  - tests/test_discord_commands.py
   - tests/test_gear_manager.py
   - tests/test_v2_schema_initialization.py
 scope: "Tracks this change from design through review."
@@ -106,7 +109,7 @@ Parallel groups: Task 1 can run in parallel with the Task 2 -> 3 -> 4 chain. Tas
   - AC3: `upgrade_material_refund` and `upgrade_success` behave as before.
   - AC4: `player_manager.refund_ap` no longer exists.
   - AC5: No test in `tests/test_gear_manager.py` inserts `upgrade_cost_reduce` or `upgrade_ap_refund`. The slot-0 fixture in `test_refund_not_triggered_on_failure` uses a remaining type.
-- [ ] Task 3: Shrink the draw pool in `src/managers/affix_manager.py`. Tests in `tests/test_affix_manager.py` and `tests/test_discord_commands.py`.
+- [x] Task 3: Shrink the draw pool in `src/managers/affix_manager.py`. Tests in `tests/test_affix_manager.py` and `tests/test_discord_commands.py`.
   - AC1: `AFFIX_TYPES` equals `("efficiency", "material_drop", "upgrade_success", "upgrade_material_refund", "cycle_time_reduce")`.
   - AC2: `extract_affix` and `auto_extract_affix` draw only from these 5 types.
   - AC3: `auto_extract_affix` with `target_affix_type="upgrade_ap_refund"` or `"upgrade_cost_reduce"` raises `ValueError`.
