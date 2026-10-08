@@ -95,7 +95,7 @@ Parallel groups: none. Task 2 imports the constant from Task 1. Implementation o
   - AC2: With `target=10000`, `TRIAL_REWARD_DIVISOR=100`, A contributes 9000 and B contributes 1000: A gets 80, B gets 20, `total_awarded == 100`. Under the old formula A would get 90 and B 10, so this test fails if the equal share is removed.
   - AC3: Rounding happens once per participant on the sum: with `target=1000`, contributions 334/333/333, each participant gets 4 and `total_awarded == 12`.
   - AC4: A `trial_contributions` row with `contribution = 0` receives no universal material, is not in `participants`, and does not count toward `N`. With target 10000, A=9000, B=1000, plus C=0: A gets 80, B gets 20.
-  - AC5: The integer case does not over-round from float error: pick a case whose exact reward is an integer (for example target 10000, A=9000, B=1000 -> exactly 80 and 20) and assert the exact value.
+  - AC5: Exact integer rewards do not over-round from float error: with `target=4000`, A contributes 3900 and B contributes 600, A gets exactly 31 (float math gives 32) and B gets 9.
   - AC6: Existing reward tests (`test_reaching_target_triggers_success_and_awards_universal_material`, `test_dynamic_target_drives_reward_pool_and_deadline`) still pass; update comments to describe the new formula.
 - [ ] Task 2: Update trial notification text in `src/core/notification.py`. Tests in `tests/test_discord_notifications.py`.
   - AC1: `trial_start` last line equals `達成後共 {reward_pool} 個 🌟萬能素材：25% 由參與者平均分配，75% 依貢獻度分配`.
