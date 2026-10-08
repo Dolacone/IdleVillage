@@ -1,10 +1,11 @@
 ---
 title: "移除 ＡＰ退還 與 素材減免 詞條"
-status: Refactored
+status: Done
 created: 2026-10-08
 doc_type: change
 last_reviewed: 2026-10-08
 source_paths:
+  - CHANGELOG.md
   - docs/README.md
   - docs/changelogs/2026-10-08-remove-upgrade-affixes.md
   - docs/db-schema.md
