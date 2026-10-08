@@ -12,6 +12,8 @@ source_paths:
   - docs/discord/ui-renderer.md
   - docs/managers/affix-manager.md
   - docs/managers/gear-manager.md
+  - src/database/schema.py
+  - tests/test_v2_schema_initialization.py
 scope: "Tracks this change from design through review."
 ---
 
@@ -91,7 +93,7 @@ Task 2 (gear/player effects)  -> Task 3 (AFFIX_TYPES) -> Task 4 (labels)
 
 Parallel groups: Task 1 can run in parallel with the Task 2 -> 3 -> 4 chain. Task 3 and Task 4 both edit `tests/test_discord_commands.py`, so Task 4 runs after Task 3. Implementation order: 1, 2, 3, 4.
 
-- [ ] Task 1: Startup migration in `src/database/schema.py`. Add `_migrate_removed_affix_types(db)` and call it from `init_db()`. Tests in `tests/test_v2_schema_initialization.py`.
+- [x] Task 1: Startup migration in `src/database/schema.py`. Add `_migrate_removed_affix_types(db)` and call it from `init_db()`. Tests in `tests/test_v2_schema_initialization.py`.
   - AC1: An existing DB with `upgrade_ap_refund` value 3 at slot 0 and `upgrade_cost_reduce` value 4 at slot 1 reads back as `material_drop` value 3 at slot 0 and `material_drop` value 4 at slot 1 after `init_db()`.
   - AC2: Rows of other affix types are unchanged after `init_db()`.
   - AC3: Calling `init_db()` twice does not raise and leaves the same rows.
