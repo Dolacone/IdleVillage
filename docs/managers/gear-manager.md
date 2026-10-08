@@ -1,7 +1,7 @@
 ---
 title: "Module: gear-manager"
 doc_type: module
-last_reviewed: 2026-07-14
+last_reviewed: 2026-10-08
 source_paths:
   - src/managers/gear_manager.py
 ---
@@ -111,8 +111,6 @@ final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS)
 | 詞條 | 效果 |
 | :--- | :--- |
 | `upgrade_success` | 成功率 +X%（加在 `_compute_rate` 結果上，min 1.0） |
-| `upgrade_cost_reduce` | 素材消耗 -X%（floor，最低 1） |
-| `upgrade_ap_refund` | 成功時 X% 機率退還 1 AP |
 | `upgrade_material_refund` | 成功時 X% 機率退還素材，僅退還本次「該類型本身」實際扣除的部分（`min(material_cost, 扣除前該類型持有量)`），不退還由萬能素材補足的部分 |
 
 鐵齒失敗時，呼叫 `affix_manager.clear_all_affixes(db, user_id, gear_type, now)` 清除所有詞條。
@@ -121,6 +119,7 @@ final_rate = min(100%, base_rate + pity_count × GEAR_PITY_BONUS)
 
 ## Changelog
 
+- 2026-10-08: 移除 `upgrade_cost_reduce` 與 `upgrade_ap_refund` 詞條效果；`attempt_upgrade` 回傳不再含 `ap_refunded`。
 - 2026-07-14: Added universal material (`materials_universal`) fallback for upgrade material shortfall. Precondition changed from `materials[type] >= material_cost` to `materials[type] + materials_universal >= material_cost`; own-type material is spent first (up to material_cost), remaining shortfall drawn from universal material. Only applies to `attempt_upgrade`/`get_upgrade_info`; `sacrifice_material` and affix extract/clear are unaffected. `upgrade_material_refund` now refunds only the own-type-sourced portion actually spent (not the full `material_cost`), so it cannot convert consumed universal material into renewable type-specific material.
 - 2026-05-31: Risky mode success now rolls +1/+2/+3 at 50/35/15% (unconditional, regardless of pity state), replacing the fixed +1 from the 2026-05-15 simplification.
 - 2026-05-31: Added `sacrifice_material(db, user_id, gear_type, amount, now)` — consume N materials of a chosen type to gain `risky_failed_levels += N` without spending AP or triggering notifications. Returns `{type: "sacrifice", sacrificed, gear_type, risky_failed_levels_after}`.

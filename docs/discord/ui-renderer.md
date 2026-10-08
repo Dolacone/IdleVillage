@@ -1,7 +1,7 @@
 ---
 title: "Module: ui-renderer"
 doc_type: module
-last_reviewed: 2026-10-07
+last_reviewed: 2026-10-08
 source_paths:
   - src/cogs/ui_renderer.py
 ---
@@ -298,12 +298,10 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 | `efficiency` | 行動效率 |
 | `material_drop` | 素材掉落 |
 | `upgrade_success` | 強化成功 |
-| `upgrade_cost_reduce` | 素材減免 |
-| `upgrade_ap_refund` | ＡＰ退還 |
 | `upgrade_material_refund` | 素材退還 |
 | `cycle_time_reduce` | 週期縮短 |
 
-- 詞條數值一律顯示為正數，包含 `upgrade_cost_reduce`。分組清單、分組下拉與即將清除提示使用 `（+{value}%）`。
+- 詞條數值一律顯示為正數。分組清單、分組下拉與即將清除提示使用 `（+{value}%）`。
 - 合計每種類型一行，格式 `{affix_label}: {total}%`，`{total}` 為該類型所有槽位數值總和。
 - 合計只列總和大於 0 的類型，依上表順序排列。
 - 有解鎖槽位但沒有任何詞條時，合計顯示 `（尚無詞條）`。
@@ -313,7 +311,7 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 
 ### 自動抽取設定畫面
 
-- 目標種類選任意或特定效果；特定效果時顯示七種效果選單。另選最低數值（1+ 至 5）與花費來源（工具素材或萬能素材）。
+- 目標種類選任意或特定效果；特定效果時顯示五種效果選單。另選最低數值（1+ 至 5）與花費來源（工具素材或萬能素材）。
 - 下拉選單與確認按鈕在 custom_id 中攜帶完整狀態。確認按鈕在設定不完整、沒有空槽或所選素材不足時停用。
 - `auto_affix_run:{gear}:{mode}:{effect}:{value}:{source}:{expected_slot}:{token}` 會執行一次批次。renderer 接收 8 字元 URL-safe token，並將確認 ID 綁定設定頁顯示的第一個空槽；沒有空槽時使用 `none` 並停用按鈕。沒有有效 token 時確認也停用。成功只保存第一條符合條件的詞條；耗盡時保持空槽。兩種結果都由 notification 模組發布一則摘要。
 
@@ -360,6 +358,7 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
 
 ## Changelog
 
+- 2026-10-08: 詞條名稱對照表移除 素材減免 與 ＡＰ退還；自動抽取特定效果選單改為五種。
 - 2026-10-07: 詞條管理畫面逐槽清單改為「類型 + 數值」分組清單，不顯示槽號；清除下拉改為每組一個選項，超過 25 組時取數值最低的 25 組；清除按鈕改以分組識別。
 
 - 2026-10-02: 工具強化子選單詞條槽改為顯示合計；詞條管理畫面新增詞條合計區塊；詞條名稱統一為四字並與通知共用；數值一律顯示為正數。

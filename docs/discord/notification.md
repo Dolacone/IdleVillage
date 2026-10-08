@@ -1,7 +1,7 @@
 ---
 title: "Module: notification"
 doc_type: module
-last_reviewed: 2026-10-02
+last_reviewed: 2026-10-08
 source_paths:
   - src/core/notification.py
   - src/cogs/actions.py
@@ -106,13 +106,13 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 ```
 {user_display_name} 的 {gear_name} 抽到詞條：{affix_label}（+{value}%）
 ```
-數值一律顯示為正數，包含 `upgrade_cost_reduce`。`{affix_label}` 使用 `discord/ui-renderer.md` 的詞條名稱對照表。
+數值一律顯示為正數。`{affix_label}` 使用 `discord/ui-renderer.md` 的詞條名稱對照表。
 
 ### 詞條清除
 ```
 {user_display_name} 的 {gear_name} 清除詞條：{affix_label}（+{value}%）
 ```
-數值一律顯示為正數，包含 `upgrade_cost_reduce`。`{affix_label}` 使用 `discord/ui-renderer.md` 的詞條名稱對照表。
+數值一律顯示為正數。`{affix_label}` 使用 `discord/ui-renderer.md` 的詞條名稱對照表。
 
 ### 詞條自動抽取
 ```
@@ -156,6 +156,8 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 - `failure_count`: 總失敗次數。成功時顯示成功前累積失敗次數；失敗時顯示含本次失敗後的累積失敗次數。
 
 ## Changelog
+
+- 2026-10-08: 詞條通知說明移除 `upgrade_cost_reduce` 特例。
 
 - 2026-10-02: 詞條通知改用四字名稱，數值一律顯示為正數。
 

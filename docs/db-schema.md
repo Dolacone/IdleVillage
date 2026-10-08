@@ -1,7 +1,7 @@
 ---
 title: "Module: db-schema"
 doc_type: reference
-last_reviewed: 2026-07-20
+last_reviewed: 2026-10-08
 source_paths:
   - src/database/schema.py
 ---
@@ -245,6 +245,23 @@ No initial rows. The table is created via `CREATE TABLE IF NOT EXISTS`; the addi
 `next_material_time` column is applied to an existing table by an idempotent
 `ALTER TABLE ... ADD COLUMN` in `_migrate_v2_columns` (guarded by a `PRAGMA table_info`
 check). A NULL `next_material_time` on an existing row marks a legacy prepaid row.
+
+### gear_affixes
+
+Tool affix slots, one row per filled slot. See `managers/affix-manager.md`.
+
+```sql
+CREATE TABLE gear_affixes (
+  user_id TEXT NOT NULL,
+  gear_type TEXT NOT NULL,
+  slot_index INTEGER NOT NULL,
+  affix_type TEXT NOT NULL,
+  value INTEGER NOT NULL,
+  PRIMARY KEY (user_id, gear_type, slot_index)
+);
+```
+
+No initial rows. `init_db()` rewrites removed `affix_type` values to `material_drop` on every startup; the value mapping is owned by `managers/affix-manager.md`.
 
 ### guild_installations
 

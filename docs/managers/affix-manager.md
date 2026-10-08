@@ -1,7 +1,7 @@
 ---
 title: "Module: affix-manager"
 doc_type: module
-last_reviewed: 2026-09-30
+last_reviewed: 2026-10-08
 source_paths:
   - src/managers/affix_manager.py
 ---
@@ -17,10 +17,14 @@ source_paths:
 | `efficiency` | 對應行動 output +X% |
 | `material_drop` | 對應素材掉落率 +X% |
 | `upgrade_success` | 該工具強化成功率 +X% |
-| `upgrade_cost_reduce` | 該工具強化素材消耗 -X%（floor，最低 1） |
-| `upgrade_ap_refund` | 強化成功時 X% 機率退還 1 AP |
 | `upgrade_material_refund` | 強化成功時 X% 機率退還消耗素材 |
 | `cycle_time_reduce` | 行動週期縮短 X% |
+
+單次抽取與自動抽取都從上表 5 種類型等機率抽出。
+
+## 已移除類型遷移
+
+`init_db()` 每次啟動以一次 UPDATE 把 `gear_affixes` 中 `upgrade_ap_refund` 與 `upgrade_cost_reduce` 的列改為 `material_drop`，`slot_index` 與 `value` 不變。沒有符合的列時不改變任何資料，可重複執行。
 
 ## 槽位系統
 
@@ -50,6 +54,7 @@ source_paths:
 
 ## Changelog
 
+- 2026-10-08: 移除 `upgrade_ap_refund` 與 `upgrade_cost_reduce`，抽選池剩 5 種；啟動遷移把現存的兩種詞條改為 `material_drop`。
 - 2026-09-30: 新增指定素材來源的自動抽取。抽中時只填第一空槽，否則保留空槽；成本與抽選規則由 affix-manager 擁有。
 
 - 2026-07-17: `extract_affix`/`clear_affix` 素材消耗改為「自身素材優先、差額由萬能素材補足」；前置檢查由 `mats >= cost` 改為 `mats + universal >= cost`，不足時 raise ValueError 且不扣除任何資源。
