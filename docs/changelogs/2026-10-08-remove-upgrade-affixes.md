@@ -12,12 +12,14 @@ source_paths:
   - docs/discord/ui-renderer.md
   - docs/managers/affix-manager.md
   - docs/managers/gear-manager.md
+  - src/cogs/ui_renderer.py
   - src/database/schema.py
   - src/managers/affix_manager.py
   - src/managers/gear_manager.py
   - src/managers/player_manager.py
   - tests/test_affix_manager.py
   - tests/test_discord_commands.py
+  - tests/test_discord_notifications.py
   - tests/test_gear_manager.py
   - tests/test_v2_schema_initialization.py
 scope: "Tracks this change from design through review."
@@ -116,7 +118,7 @@ Parallel groups: Task 1 can run in parallel with the Task 2 -> 3 -> 4 chain. Tas
   - AC4: `get_affix_bonuses` returns exactly the 5 keys.
   - AC5: An `affix_clear` custom_id carrying a removed type clears nothing.
   - AC6: The `random.choice` mock in `tests/test_affix_manager.py` returns only remaining types (for example `cycle_time_reduce` in place of `upgrade_cost_reduce`).
-- [ ] Task 4: Remove labels in `src/cogs/ui_renderer.py`. Tests in `tests/test_discord_commands.py` and `tests/test_discord_notifications.py`.
+- [x] Task 4: Remove labels in `src/cogs/ui_renderer.py`. Tests in `tests/test_discord_commands.py` and `tests/test_discord_notifications.py`.
   - AC1: `AFFIX_TYPE_LABELS` has exactly the 5 remaining types in the order 行動效率, 素材掉落, 強化成功, 素材退還, 週期縮短.
   - AC2: The auto-extract specific-effect dropdown lists exactly those 5 options.
   - AC3: Tests that used `upgrade_cost_reduce` or `upgrade_ap_refund` as sample data use a remaining type and still check the positive-sign rule.

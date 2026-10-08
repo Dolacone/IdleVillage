@@ -982,32 +982,32 @@ class TestGearUpgradeEventDispatch(unittest.TestCase):
 
 
 class TestAffixNotificationSign(unittest.TestCase):
-    """Affix notifications use the shared four-character labels and always show a + sign, including upgrade_cost_reduce."""
+    """Affix notifications use the shared four-character labels and always show a + sign, including cycle_time_reduce."""
 
-    def test_upgrade_cost_reduce_affix_extracted_uses_plus_sign(self):
+    def test_cycle_time_reduce_affix_extracted_uses_plus_sign(self):
         from core.notification import _format_event
         ev = {
             "type": "affix_extracted",
             "user_display_name": "Alice",
             "gear_type": "gathering",
-            "affix_type": "upgrade_cost_reduce",
+            "affix_type": "cycle_time_reduce",
             "value": 5,
         }
         text = _format_event(ev)
-        self.assertIn("抽到詞條：素材減免（+5%）", text)
+        self.assertIn("抽到詞條：週期縮短（+5%）", text)
         self.assertNotIn("-5%", text)
 
-    def test_upgrade_cost_reduce_affix_cleared_uses_plus_sign(self):
+    def test_cycle_time_reduce_affix_cleared_uses_plus_sign(self):
         from core.notification import _format_event
         ev = {
             "type": "affix_cleared",
             "user_display_name": "Bob",
             "gear_type": "gathering",
-            "affix_type": "upgrade_cost_reduce",
+            "affix_type": "cycle_time_reduce",
             "value": 3,
         }
         text = _format_event(ev)
-        self.assertIn("清除詞條：素材減免（+3%）", text)
+        self.assertIn("清除詞條：週期縮短（+3%）", text)
         self.assertNotIn("-3%", text)
 
     def test_positive_affix_still_uses_plus_sign(self):
@@ -1055,10 +1055,10 @@ class TestAffixNotificationSign(unittest.TestCase):
         from core.notification import _format_event
         text = _format_event({
             "type": "affix_auto_extracted", "user_display_name": "Player", "gear_type": "research",
-            "affix": {"affix_type": "upgrade_cost_reduce", "value": 3}, "attempts": 2,
+            "affix": {"affix_type": "cycle_time_reduce", "value": 3}, "attempts": 2,
             "material_spent": 2, "material_source": "tool",
         })
-        self.assertIn("抽到詞條：素材減免（+3%）", text)
+        self.assertIn("抽到詞條：週期縮短（+3%）", text)
         self.assertNotIn("-3%", text)
 
 
