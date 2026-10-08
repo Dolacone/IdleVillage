@@ -7,6 +7,7 @@ last_reviewed: 2026-10-08
 source_paths:
   - docs/changelogs/2026-10-08-trial-reward-equal-share.md
   - docs/discord/notification.md
+  - docs/managers/player-manager.md
   - docs/managers/trial-manager.md
   - src/core/notification.py
   - src/managers/trial_manager.py
@@ -40,7 +41,7 @@ reward_i = ceil(pool × 25% / N + contribution_i / total_contribution × pool ×
 - 兩部分各自 ceil 再相加：每人最多多發 2 個，超發量比現制高。不採用，原因是使用者選擇相加後 ceil。
 - 均分部分 floor、貢獻部分 ceil：均分部分會因 floor 損失，`N` 大時低貢獻玩家幾乎拿不到保底。不採用，原因同上。
 
-選擇相加後 ceil 的原因：每人只進位一次，總超發量上限維持在 `N - 1` 個，與現制同等級。
+選擇相加後 ceil 的原因：每人只進位一次，總發放量上限為 `ceil(reward_pool) + N - 1`，與現制同等級。
 
 ## Clarifications
 
@@ -77,7 +78,7 @@ Not Doing:
 - `_succeed_trial` 用 `fractions.Fraction` 計算每人獎勵，最後 `math.ceil` 一次。現行 `contribution / total × pool` 用浮點數，整數結果可能被算成 `x.0000001` 而多進位一，改用有理數消除此風險。
 - 參與者篩選放在 SQL：`SELECT user_id, contribution FROM trial_contributions WHERE contribution > 0 ORDER BY contribution DESC`。`N` 與 `total_contribution` 都從篩選後的列計算。`contribution = 0` 的列不發獎勵，也不列入 `participants`。
 - 試煉達成時 `progress >= target > 0`，因此 `N >= 1`，不需處理除以零。
-- `src/core/notification.py` 從 `managers.trial_manager` 匯入 `TRIAL_REWARD_EQUAL_SHARE_PERCENT` 組通知文字，避免比例在兩處寫死後不一致。`src/core/settlement.py` 已匯入 `managers.trial_manager`，`managers` 不匯入 `core.notification`，不會循環匯入。
+- `src/core/notification.py` 以 `from managers import trial_manager` 匯入模組，在 `_format_event` 內讀取 `trial_manager.TRIAL_REWARD_EQUAL_SHARE_PERCENT` 組通知文字，避免比例在兩處寫死後不一致，測試也能 patch 模組屬性。`core/notification.py` 已匯入 `cogs.ui_renderer`，後者已匯入 `managers.trial_manager`，不會產生新的循環匯入。
 - `trial_start` 事件的 `reward_pool`（`src/cogs/actions.py`）與事件結構不變。
 
 ## Tasks
@@ -93,22 +94,22 @@ Parallel groups: none. Task 2 imports the constant from Task 1. Implementation o
 - [ ] Task 1: Split the reward pool in `src/managers/trial_manager.py`. Tests in `tests/test_trial_manager.py`.
   - AC1: Module constant `TRIAL_REWARD_EQUAL_SHARE_PERCENT == 25`.
   - AC2: With `target=10000`, `TRIAL_REWARD_DIVISOR=100`, A contributes 9000 and B contributes 1000: A gets 80, B gets 20, `total_awarded == 100`. Under the old formula A would get 90 and B 10, so this test fails if the equal share is removed.
-  - AC3: Rounding happens once per participant on the sum: with `target=1000`, contributions 334/333/333, each participant gets 4 and `total_awarded == 12`.
+  - AC3: Rounding happens once per participant on the sum: with `target=1000`, A contributes 700 and B contributes 300: A gets 7, B gets 4, `total_awarded == 11`. Per-part ceil would give 8/5 (13); the old formula gives 7/3 (10).
   - AC4: A `trial_contributions` row with `contribution = 0` receives no universal material, is not in `participants`, and does not count toward `N`. With target 10000, A=9000, B=1000, plus C=0: A gets 80, B gets 20.
   - AC5: Exact integer rewards do not over-round from float error: with `target=4000`, A contributes 3900 and B contributes 600, A gets exactly 31 (float math gives 32) and B gets 9.
-  - AC6: Existing reward tests (`test_reaching_target_triggers_success_and_awards_universal_material`, `test_dynamic_target_drives_reward_pool_and_deadline`) still pass; update comments to describe the new formula.
+  - AC6: Existing reward tests (`test_reaching_target_triggers_success_and_awards_universal_material`, `test_ceil_rounding_can_exceed_reward_pool`, `test_dynamic_target_drives_reward_pool_and_deadline`) still pass with unchanged assertions; update their comments to describe the new formula.
 - [ ] Task 2: Update trial notification text in `src/core/notification.py`. Tests in `tests/test_discord_notifications.py`.
   - AC1: `trial_start` last line equals `達成後共 {reward_pool} 個 🌟萬能素材：25% 由參與者平均分配，75% 依貢獻度分配`.
   - AC2: `trial_success` second line equals `共 {participant_count} 位玩家瓜分了 {total_awarded} 個 🌟萬能素材（25% 平均分配、75% 依貢獻度）：`.
-  - AC3: Percentages come from `trial_manager.TRIAL_REWARD_EQUAL_SHARE_PERCENT`; a test that patches the constant to 30 sees `30%` and `70%` in both messages.
+  - AC3: `notification.py` uses `from managers import trial_manager` and reads `trial_manager.TRIAL_REWARD_EQUAL_SHARE_PERCENT` inside `_format_event` at call time. A test that patches `managers.trial_manager.TRIAL_REWARD_EQUAL_SHARE_PERCENT` to 30 sees `30%` and `70%` in both messages.
   - AC4: Participant lines, sort order, and 1900-character truncation are unchanged.
 
 ## Review Issues
 
 ## Plan Review Issues
 
-- [ ] Issue 1: Task 1 AC3 cannot fail when the rounding rule changes. Contributions 334/333/333 with `target=1000` give 4/4/4 (total 12) under sum-then-ceil, under per-part ceil, and under the old formula; it also duplicates the existing `test_ceil_rounding_can_exceed_reward_pool`. Fix: replace AC3 with `target=1000`, A=700, B=300: A gets 7, B gets 4, `total_awarded == 11` (per-part ceil gives 8/5 = 13, old formula gives 7/3 = 10).
-- [ ] Issue 2: Task 1 AC6 omits `test_ceil_rounding_can_exceed_reward_pool`, whose comment `each share is ~3.33` describes the old formula. Fix: add it to AC6. Its assertions (4/4/4, total 12) still hold under the new formula (`ceil(0.833 + 2.505)`, `ceil(0.833 + 2.4975)`); update only the comment.
-- [ ] Issue 3: Task 2 AC3 does not fix the import form. `from managers.trial_manager import TRIAL_REWARD_EQUAL_SHARE_PERCENT` binds the value at import, so a test patching `managers.trial_manager.TRIAL_REWARD_EQUAL_SHARE_PERCENT` sees no change. Fix: state in Architecture Decisions and Task 2 AC3 that `notification.py` uses `from managers import trial_manager` and reads `trial_manager.TRIAL_REWARD_EQUAL_SHARE_PERCENT` inside `_format_event`; the test patches `managers.trial_manager.TRIAL_REWARD_EQUAL_SHARE_PERCENT`. The circular-import rationale also cites the wrong evidence: `core/notification.py` already imports `cogs.ui_renderer`, which imports `managers.trial_manager`; cite that chain.
-- [ ] Issue 4: `docs/managers/player-manager.md:78` still says trial universal material is distributed 「依貢獻度發放」. Fix: reword it to "依 `trial-manager` 的分配規則發放（25% 均分、75% 依貢獻度）" and add `docs/managers/player-manager.md` to `source_paths`.
-- [ ] Issue 5: The overage bound 「多最多 `N - 1` 個」 in `docs/managers/trial-manager.md` and Recommended Direction holds only when `reward_pool = target / TRIAL_REWARD_DIVISOR` is an integer; both values come from env config. The exact bound is `total_awarded <= ceil(reward_pool) + N - 1`. Fix: state that bound in both places.
+- [x] Issue 1: Task 1 AC3 cannot fail when the rounding rule changes. Contributions 334/333/333 with `target=1000` give 4/4/4 (total 12) under sum-then-ceil, under per-part ceil, and under the old formula; it also duplicates the existing `test_ceil_rounding_can_exceed_reward_pool`. Fix: replace AC3 with `target=1000`, A=700, B=300: A gets 7, B gets 4, `total_awarded == 11` (per-part ceil gives 8/5 = 13, old formula gives 7/3 = 10).
+- [x] Issue 2: Task 1 AC6 omits `test_ceil_rounding_can_exceed_reward_pool`, whose comment `each share is ~3.33` describes the old formula. Fix: add it to AC6. Its assertions (4/4/4, total 12) still hold under the new formula (`ceil(0.833 + 2.505)`, `ceil(0.833 + 2.4975)`); update only the comment.
+- [x] Issue 3: Task 2 AC3 does not fix the import form. `from managers.trial_manager import TRIAL_REWARD_EQUAL_SHARE_PERCENT` binds the value at import, so a test patching `managers.trial_manager.TRIAL_REWARD_EQUAL_SHARE_PERCENT` sees no change. Fix: state in Architecture Decisions and Task 2 AC3 that `notification.py` uses `from managers import trial_manager` and reads `trial_manager.TRIAL_REWARD_EQUAL_SHARE_PERCENT` inside `_format_event`; the test patches `managers.trial_manager.TRIAL_REWARD_EQUAL_SHARE_PERCENT`. The circular-import rationale also cites the wrong evidence: `core/notification.py` already imports `cogs.ui_renderer`, which imports `managers.trial_manager`; cite that chain.
+- [x] Issue 4: `docs/managers/player-manager.md:78` still says trial universal material is distributed 「依貢獻度發放」. Fix: reword it to "依 `trial-manager` 的分配規則發放（25% 均分、75% 依貢獻度）" and add `docs/managers/player-manager.md` to `source_paths`.
+- [x] Issue 5: The overage bound 「多最多 `N - 1` 個」 in `docs/managers/trial-manager.md` and Recommended Direction holds only when `reward_pool = target / TRIAL_REWARD_DIVISOR` is an integer; both values come from env config. The exact bound is `total_awarded <= ceil(reward_pool) + N - 1`. Fix: state that bound in both places.

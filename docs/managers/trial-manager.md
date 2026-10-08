@@ -93,7 +93,7 @@ reward_i = ceil(equal_part_i + contribution_part_i)
 
 `TRIAL_REWARD_EQUAL_SHARE_PERCENT` 是 `trial_manager` 的程式常數，值為 `25`。計算使用有理數，避免浮點誤差讓整數結果多進位。
 
-呼叫 `player-manager.addUniversalMaterial(user_id, reward_i)` 逐一發放。每位參與者只對兩部分的總和進位一次，因此總發放量可能比 `reward_pool` 多最多 `N - 1` 個。此為預期行為，非 bug。
+呼叫 `player-manager.addUniversalMaterial(user_id, reward_i)` 逐一發放。每位參與者只對兩部分的總和進位一次，因此總發放量可能超過 `reward_pool`，上限為 `total_awarded <= ceil(reward_pool) + N - 1`。此為預期行為，非 bug。
 
 範例：`target = 10000`、`reward_pool = 100`。A 貢獻 9000，B 貢獻 1000。A 得 `ceil(12.5 + 67.5) = 80`，B 得 `ceil(12.5 + 7.5) = 20`。
 
