@@ -48,12 +48,10 @@ def _compute_rate(gear_level: int, pity_count: int, risky_failed_levels: int = 0
 def _material_cost(target_level: int, mode: str) -> int:
     """Return material cost for the given upgrade mode and target level."""
     if mode == "buffer":
-        base = max(1, math.ceil(target_level / 2))
-    elif mode == "risky":
-        base = 1
-    else:
-        base = target_level
-    return base
+        return max(1, math.ceil(target_level / 2))
+    if mode == "risky":
+        return 1
+    return target_level
 
 
 async def _get_materials(db, user_id: str, gear_type: str) -> int:

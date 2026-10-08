@@ -881,6 +881,16 @@ class TestAffixIntegration(DatabaseTestCase):
         self.assertFalse(result["success"])
         self.assertFalse(result["material_refunded"])
 
+    async def test_result_has_no_ap_refund_key_and_manager_has_no_refund_ap(self):
+        """The AP refund effect is removed from the result dict and from player_manager."""
+        with patch("managers.gear_manager.random.random", return_value=0.0):
+            async with schema.get_connection() as db:
+                result = await gear_manager.attempt_upgrade(db, USER, "gathering", NOW, mode="normal")
+                await db.commit()
+        self.assertTrue(result["success"])
+        self.assertNotIn("ap_refunded", result)
+        self.assertFalse(hasattr(player_manager, "refund_ap"))
+
 
 class TestUniversalMaterialShortfall(DatabaseTestCase):
     """gear_manager falls back to universal material for upgrade shortfalls."""
