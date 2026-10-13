@@ -8,12 +8,14 @@ The caller is responsible for committing the transaction.
 import math
 import random
 from datetime import datetime
+from fractions import Fraction
 
 from core.config import get_env_int
 from core.utils import dt_str, parse_dt
 from managers import player_manager, resource_manager
 
 TRIAL_RESOURCE_TYPES = ("food", "wood", "knowledge")
+TRIAL_REWARD_EQUAL_SHARE_PERCENT = 25
 
 
 class TrialStartError(ValueError):
@@ -161,20 +163,29 @@ async def _fail_trial(db, info: dict, ended_at: datetime) -> dict:
 
 
 async def _succeed_trial(db, info: dict, ended_at: datetime) -> dict:
-    """Distribute rewards by contribution ratio (ceil per participant) and close the trial."""
+    """
+    Distribute rewards and close the trial.
+
+    Participants are players with contribution > 0. The reward pool splits into
+    TRIAL_REWARD_EQUAL_SHARE_PERCENT% shared equally and the rest shared by contribution ratio.
+    Each participant's two shares are summed exactly (Fraction), then rounded up once.
+    """
     async with db.execute(
-        "SELECT user_id, contribution FROM trial_contributions ORDER BY contribution DESC"
+        "SELECT user_id, contribution FROM trial_contributions WHERE contribution > 0 ORDER BY contribution DESC"
     ) as cur:
         rows = await cur.fetchall()
 
     total_contribution = sum(contribution for _, contribution in rows)
     divisor = get_env_int("TRIAL_REWARD_DIVISOR")
-    reward_pool = info["target"] / divisor
+    reward_pool = Fraction(info["target"], divisor)
+    equal_pool = reward_pool * TRIAL_REWARD_EQUAL_SHARE_PERCENT / 100
+    contribution_pool = reward_pool - equal_pool
+    equal_share = equal_pool / len(rows) if rows else Fraction(0)
 
     participants = []
     total_awarded = 0
     for participant_id, contribution in rows:
-        reward = math.ceil(contribution / total_contribution * reward_pool)
+        reward = math.ceil(equal_share + Fraction(contribution, total_contribution) * contribution_pool)
         if reward > 0:
             await player_manager.add_universal_material(db, participant_id, reward, ended_at)
         total_awarded += reward

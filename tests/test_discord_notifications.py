@@ -393,8 +393,38 @@ class TestNotificationFormatting(unittest.TestCase):
         self.assertNotIn("<@", text)
         self.assertIn("花費 150000 個 🪵木頭", text)
         self.assertIn("目標：全服玩家共同累積 150000 點行動產出", text)
-        self.assertIn("1500 個 🌟萬能素材", text)
         self.assertIn("<t:1234567890:R>", text)
+        self.assertEqual(
+            text.split("\n")[-1],
+            "達成後共 1500 個 🌟萬能素材：25% 由參與者平均分配，75% 依貢獻度分配",
+        )
+
+    def test_format_trial_messages_read_equal_share_percent_at_call_time(self):
+        from core.notification import _format_event
+        start = {
+            "type": "trial_start",
+            "resource_type": "wood",
+            "target": 150000,
+            "reward_pool": 1500,
+            "deadline_unix": 1234567890,
+        }
+        success = {
+            "type": "trial_success",
+            "target": 5000,
+            "total_awarded": 50,
+            "participants": [{"user_id": "111", "contribution": 3000, "reward": 25}],
+        }
+        with patch("managers.trial_manager.TRIAL_REWARD_EQUAL_SHARE_PERCENT", 30):
+            start_text = _format_event(start)
+            success_text = _format_event(success)
+        self.assertEqual(
+            start_text.split("\n")[-1],
+            "達成後共 1500 個 🌟萬能素材：30% 由參與者平均分配，70% 依貢獻度分配",
+        )
+        self.assertEqual(
+            success_text.split("\n")[1],
+            "共 1 位玩家瓜分了 50 個 🌟萬能素材（30% 平均分配、70% 依貢獻度）：",
+        )
 
     def test_format_trial_success(self):
         from core.notification import _format_event
@@ -412,7 +442,10 @@ class TestNotificationFormatting(unittest.TestCase):
         self.assertIn("🎉 村莊試煉達成", text)
         self.assertIn("5000", text)
         self.assertNotIn("食物", text)
-        self.assertIn("50 個 🌟萬能素材", text)
+        self.assertEqual(
+            text.split("\n")[1],
+            "共 2 位玩家瓜分了 50 個 🌟萬能素材（25% 平均分配、75% 依貢獻度）：",
+        )
         self.assertNotIn("<@", text)
         self.assertIn("貢獻 3000 (25 素材)：Alice", text)
         self.assertIn("貢獻 2000 (25 素材)：Bob", text)

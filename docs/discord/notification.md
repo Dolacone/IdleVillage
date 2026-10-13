@@ -126,19 +126,20 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 🏆 村莊試煉開始！花費 {target} 個 {resource_emoji}{resource_label}
 目標：全服玩家共同累積 {target} 點行動產出
 期限：<t:{deadline_unix}:R> 前
-達成後將依貢獻度瓜分共 {reward_pool} 個 🌟萬能素材
+達成後共 {reward_pool} 個 🌟萬能素材：{equal_pct}% 由參與者平均分配，{contribution_pct}% 依貢獻度分配
 ```
 不顯示發起者。玩家只選擇 target，不選擇扣款資源。花費的資源類型只出現在第一行「花費」措辭中，避免讓人誤以為試煉目標是收集單一資源。
 `{reward_pool}` = `floor(target / TRIAL_REWARD_DIVISOR)`，僅供公告顯示的預覽值；實際發放總量以達成當下逐人無條件進位後加總為準（見達成訊息）。當 `target` 不能被 `TRIAL_REWARD_DIVISOR` 整除時，此預覽值與實際發放總量可能有些微差異，此為預期行為（預覽值刻意採 floor，不影響實際分配結果）。
+`{equal_pct}` = `trial_manager.TRIAL_REWARD_EQUAL_SHARE_PERCENT`（`25`），`{contribution_pct}` = `100 - {equal_pct}`。分配公式由 `managers/trial-manager.md` 擁有。
 
 ### 試煉達成
 ```
 🎉 村莊試煉達成！目標 {target} 點行動產出已完成
-共 {participant_count} 位玩家依貢獻度瓜分了 {total_awarded} 個 🌟萬能素材：
+共 {participant_count} 位玩家瓜分了 {total_awarded} 個 🌟萬能素材（{equal_pct}% 平均分配、{contribution_pct}% 依貢獻度）：
 貢獻 {contribution} ({reward} 素材)：{display_name}
 ...（依貢獻降冪排序）
 ```
-不顯示資源類型（同「試煉開始」的理由）。參與者列表超過 1900 字元時截斷，並附上「（清單過長，部分內容已省略）」提示，比照 `/idlevillage-ranking` 的截斷規則。
+不顯示資源類型（同「試煉開始」的理由）。`{equal_pct}` 與 `{contribution_pct}` 同「試煉開始」。每行只顯示總獲得數，不拆分均分與貢獻部分。參與者列表超過 1900 字元時截斷，並附上「（清單過長，部分內容已省略）」提示，比照 `/idlevillage-ranking` 的截斷規則。
 
 `{display_name}` 由 `notification.dispatch_events` 在發送前即時解析：對每位 participant 先查 `channel.guild.get_member(int(user_id))`（同步、走 gateway member cache，零網路成本），命中則直接取 `display_name`；未命中才 fallback 呼叫 `await channel.guild.fetch_member(int(user_id))`（比照 `/idlevillage-ranking` 既有的 `src/cogs/actions.py` 解析手法）。多位 participant 的解析協程以 `asyncio.gather` 併發啟動，但 disnake 對同一 guild 的 member REST 請求共用同一個 rate-limit bucket 鎖，實際 HTTP round-trip 仍會被序列化；`get_member` 快取命中的路徑完全不受此限制，是實際降低延遲與 API 呼叫次數的手段，而非 `asyncio.gather` 本身。`fetch_member` 拋出 `disnake.NotFound`/`disnake.HTTPException`（例如玩家已離開 guild）時 fallback 顯示 `user_id`；其他非預期例外（例如底層連線錯誤）同樣 fallback 顯示 `user_id`，但會記錄 log，避免單一參與者解析失敗導致整批 `dispatch_events` 呼叫中斷、拖累同批次的其他通知。此解析與貢獻來源（玩家手動行動或自動工具背景結算）無關，`trial_manager.py`/`settlement.py` 組裝的 `participants` 資料本身不含名稱欄位。發送訊息時一律帶 `allowed_mentions=disnake.AllowedMentions.none()`，即使玩家暱稱本身包含 `@everyone`/mention 語法也不會觸發實際 ping。
 
@@ -157,6 +158,7 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 
 ## Changelog
 
+- 2026-10-08: 試煉開始與達成通知改為說明 25% 平均分配、75% 依貢獻度分配。
 - 2026-10-08: 詞條通知說明移除 `upgrade_cost_reduce` 特例。
 
 - 2026-10-02: 詞條通知改用四字名稱，數值一律顯示為正數。

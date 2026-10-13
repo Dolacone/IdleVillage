@@ -1,7 +1,7 @@
 ---
 title: "Module: player-manager"
 doc_type: module
-last_reviewed: 2026-09-30
+last_reviewed: 2026-10-08
 source_paths:
   - src/managers/player_manager.py
 ---
@@ -75,7 +75,7 @@ source_paths:
 - `materials_universal` 可作為任意類型素材使用，適用於工具強化（gear-manager `attempt_upgrade`，標準/墊檔/鐵齒三種模式）與詞條抽取/清除（affix-manager `extract_affix`/`clear_affix`）的素材消耗補足差額，也可作為自動抽取的唯一來源，詳見 `managers/gear-manager.md`、`managers/affix-manager.md`。
 - 工具強化與單次詞條抽取/清除先扣該類型自身素材，再由萬能素材補足差額；自動抽取只扣玩家選定的一種素材。素材不足時不執行動作、不扣除資源。
 - 獻祭素材（`sacrifice_material`）不吃萬能素材，僅使用該類型自身素材。
-- 取得管道：村莊試煉達標依貢獻度發放萬能素材（`trial-manager` 呼叫 `addUniversalMaterial`，見 `managers/trial-manager.md`）；不進入一般素材掉落表。管理員亦可透過 `/idlevillage-manager` 呼叫 `setUniversalMaterial` 直接設定。
+- 取得管道：村莊試煉達標依 `trial-manager` 的分配規則發放萬能素材（25% 均分、75% 依貢獻度）（`trial-manager` 呼叫 `addUniversalMaterial`，見 `managers/trial-manager.md`）；不進入一般素材掉落表。管理員亦可透過 `/idlevillage-manager` 呼叫 `setUniversalMaterial` 直接設定。
 
 ## 操作介面（供其他模組呼叫）
 
@@ -100,6 +100,7 @@ source_paths:
 
 ## Changelog
 
+- 2026-10-08: Trial universal material distribution now follows the trial-manager rule (25% equal share, 75% by contribution).
 - 2026-07-17: Universal material now also covers affix extract/clear (`affix-manager` `extract_affix`/`clear_affix`) as an own-type-first shortfall fallback, in addition to gear upgrade. `sacrifice_material` still does not use it.
 - 2026-07-14: Added `materials_universal` field and `getUniversalMaterial()`/`addUniversalMaterial()`/`spendUniversalMaterial()`/`setUniversalMaterial()`. Universal material substitutes for any gear-type material, but only as a gear-upgrade shortfall fallback (see gear-manager.md); currently has no acquisition path other than admin `setUniversalMaterial`.
 - 2026.05.15: Added `risky_failed_levels` field, `setMaterial()`, and `setRiskyFailedLevels()` for admin management support.

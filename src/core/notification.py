@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 
 import disnake
 from core.config import get_env_float, get_env_int
+from managers import trial_manager
 from cogs.ui_renderer import (
     AFFIX_TYPE_LABELS,
     BUILDING_LABELS,
@@ -208,20 +209,27 @@ def _format_event(event: dict, name_map: dict[str, str] | None = None) -> str | 
         deadline_unix = event.get("deadline_unix", 0)
         r_emoji = RESOURCE_EMOJIS.get(resource_type, "")
         r_label = RESOURCE_LABELS.get(resource_type, resource_type)
+        equal_pct = trial_manager.TRIAL_REWARD_EQUAL_SHARE_PERCENT
+        contribution_pct = 100 - equal_pct
         return (
             f"🏆 村莊試煉開始！花費 {target} 個 {r_emoji}{r_label}\n"
             f"目標：全服玩家共同累積 {target} 點行動產出\n"
             f"期限：<t:{deadline_unix}:R> 前\n"
-            f"達成後將依貢獻度瓜分共 {reward_pool} 個 🌟萬能素材"
+            f"達成後共 {reward_pool} 個 🌟萬能素材：{equal_pct}% 由參與者平均分配，{contribution_pct}% 依貢獻度分配"
         )
 
     if kind == "trial_success":
         target = event.get("target", 0)
         total_awarded = event.get("total_awarded", 0)
         participants = event.get("participants", [])
+        equal_pct = trial_manager.TRIAL_REWARD_EQUAL_SHARE_PERCENT
+        contribution_pct = 100 - equal_pct
         lines = [
             f"🎉 村莊試煉達成！目標 {target} 點行動產出已完成",
-            f"共 {len(participants)} 位玩家依貢獻度瓜分了 {total_awarded} 個 🌟萬能素材：",
+            (
+                f"共 {len(participants)} 位玩家瓜分了 {total_awarded} 個 🌟萬能素材"
+                f"（{equal_pct}% 平均分配、{contribution_pct}% 依貢獻度）："
+            ),
         ]
         for p in participants:
             display_name = name_map.get(p["user_id"], p["user_id"])

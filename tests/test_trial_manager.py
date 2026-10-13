@@ -290,7 +290,7 @@ class TestAddProgress(DatabaseTestCase):
         self.assertEqual(result["type"], "trial_success")
         self.assertEqual(result["target"], TRIAL_AMOUNT)
         rewards = {p["user_id"]: p["reward"] for p in result["participants"]}
-        # target/divisor = 50000/100 = 500; each contributed 30000/60000 = 0.5 -> ceil(250) = 250
+        # pool = 50000/100 = 500; equal 125/2 = 62.5 + contribution 375 * 0.5 = 187.5 -> ceil(250) = 250
         self.assertEqual(rewards[USER_A], 250)
         self.assertEqual(rewards[USER_B], 250)
         self.assertEqual(result["total_awarded"], 500)
@@ -319,12 +319,57 @@ class TestAddProgress(DatabaseTestCase):
             await db.commit()
         self.assertEqual(result["type"], "trial_success")
         rewards = {p["user_id"]: p["reward"] for p in result["participants"]}
-        # pool = 1000/100 = 10; each share is ~3.33 -> ceil(4) per participant
+        # pool = 1000/100 = 10; equal 2.5/3 = 0.833 + contribution 7.5 * ~0.333 = ~2.5 -> ceil(4) per participant
         self.assertEqual(rewards[USER_A], 4)
         self.assertEqual(rewards[USER_B], 4)
         self.assertEqual(rewards[user_c], 4)
         self.assertEqual(result["total_awarded"], 12)
         self.assertGreater(result["total_awarded"], 1000 / 100)
+
+    async def _run_trial(self, target, steps):
+        """Set target, apply (user_id, output) steps in order, return the last result."""
+        async with schema.get_connection() as db:
+            await _insert_player(db, "trial_user_c")
+            await db.execute("UPDATE trial_state SET target=? WHERE id=1", (target,))
+            await db.commit()
+        result = None
+        async with schema.get_connection() as db:
+            for user_id, output in steps:
+                result = await trial_manager.add_progress(db, output, user_id, NOW)
+            await db.commit()
+        return result
+
+    def test_equal_share_percent_constant(self):
+        self.assertEqual(trial_manager.TRIAL_REWARD_EQUAL_SHARE_PERCENT, 25)
+
+    async def test_equal_share_lifts_low_contributor_reward(self):
+        result = await self._run_trial(10000, [(USER_A, 9000), (USER_B, 1000)])
+        rewards = {p["user_id"]: p["reward"] for p in result["participants"]}
+        # pool 100: equal 12.5 each; A 12.5 + 67.5 = 80, B 12.5 + 7.5 = 20
+        self.assertEqual(rewards, {USER_A: 80, USER_B: 20})
+        self.assertEqual(result["total_awarded"], 100)
+
+    async def test_rounding_happens_once_on_the_sum(self):
+        result = await self._run_trial(1000, [(USER_A, 700), (USER_B, 300)])
+        rewards = {p["user_id"]: p["reward"] for p in result["participants"]}
+        # pool 10: A 1.25 + 5.25 = 6.5 -> 7; B 1.25 + 2.25 = 3.5 -> 4
+        self.assertEqual(rewards, {USER_A: 7, USER_B: 4})
+        self.assertEqual(result["total_awarded"], 11)
+
+    async def test_zero_contribution_row_is_not_a_participant(self):
+        user_c = "trial_user_c"
+        result = await self._run_trial(10000, [(USER_A, 9000), (user_c, 0), (USER_B, 1000)])
+        rewards = {p["user_id"]: p["reward"] for p in result["participants"]}
+        self.assertEqual(rewards, {USER_A: 80, USER_B: 20})
+        async with schema.get_connection() as db:
+            self.assertEqual(await player_manager.get_universal_material(db, user_c), 0)
+
+    async def test_exact_integer_rewards_do_not_over_round(self):
+        result = await self._run_trial(48000, [(USER_A, 23200), (USER_B, 24800)])
+        rewards = {p["user_id"]: p["reward"] for p in result["participants"]}
+        # pool 480: A 60 + 174 = 234; B 60 + 186 = 246 exactly (float math gives 246.00000000000003, ceils to 247)
+        self.assertEqual(rewards, {USER_A: 234, USER_B: 246})
+        self.assertEqual(result["total_awarded"], 480)
 
     async def test_add_progress_fails_trial_when_effective_time_past_deadline(self):
         late = NOW + timedelta(seconds=43201)
@@ -396,6 +441,7 @@ class TestDynamicTrialReward(DatabaseTestCase):
         self.assertEqual(info["target"], 150000)
         self.assertEqual(result["target"], 150000)
         rewards = {p["user_id"]: p["reward"] for p in result["participants"]}
+        # pool 1500: equal 375/2 = 187.5 + contribution 1125 * 0.5 = 562.5 -> 750 each
         self.assertEqual(rewards, {USER_A: 750, USER_B: 750})
         self.assertEqual(result["total_awarded"], 1500)
 
