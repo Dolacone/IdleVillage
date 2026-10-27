@@ -136,4 +136,22 @@ Task 1 (notification) -> Task 2 (gear count) -> Task 3 (auto affix scope)
   - AC: 僅一格行為與現有自動抽取相同，發送既有 `affix_auto_extracted`。
   - AC: 所有空格依 Architecture Decisions 的迴圈逐格抽取，已完成的格子保留；發送一個 `affix_auto_batch` 事件，包含每格結果（含最後未抽中的那格）。
 
+## Plan Review Issues
+
+- [ ] [Major] Task 2 的測試範圍漏了 `tests/test_discord_notifications.py`。
+  - 該檔 582、614 行用舊的 `attempt_upgrade:gathering` 觸發 handler，並斷言 `dispatch.assert_called_once()`。
+  - `tests/test_discord_commands.py:2734` 也用同一個舊 ID。
+  - 新 handler 要求 `{mode}:{count}` 時，這些測試會提早 return 而失敗。
+  - 修正：Task 2 的 tests 加入 `tests/test_discord_notifications.py`，三處改成 `attempt_upgrade:{gear}:{mode}:1`。
+- [ ] [Minor] 強化迴圈只處理 `ValueError`，其他例外會丟掉已提交的結果。
+  - `src/cogs/actions.py:526-531` 只 catch `ValueError`；`attempt_upgrade` 遇到 DB 錯誤（例如 database is locked）會 raise 其他例外。
+  - 情境：次數 20，第 7 次 raise `OperationalError`。前 6 次已 commit，但不發 `gear_batch`，也不重繪子選單。
+  - 修正：至少一次已 commit 後，任何例外都停止迴圈並照常發送 `gear_batch`。這與自動抽取「manager raise 時停止」一致。
+- [ ] [Minor] Task 2 AC「結果區顯示最後一次結果」沒定義停止時的 `ValueError` 算不算結果。
+  - `inf` 一定以 `ValueError` 結束。若顯示它，`build_gear_embed` 會在連續成功後顯示 `⚠️ 操作失敗：Insufficient AP`（`src/cogs/ui_renderer.py:629`）。
+  - 修正：AC 改為「顯示最後一次成功執行的結果；第一次就 raise 時顯示錯誤」，並同步 `docs/discord/command-handler.md` 的 `attempt_upgrade` 列。
+- [ ] [Minor] `docs/discord/command-handler.md`「自動抽取確認」段落結尾仍寫「handler 提交成功後才 dispatch `affix_auto_extracted`」。
+  - 所有空格發送的是 `affix_auto_batch`，同檔 `auto_affix_run` 列已這樣寫。
+  - 修正：該句改為「handler 提交成功後才 dispatch 通知事件」，事件類型由路由表那一列說明。
+
 ## Review Issues
