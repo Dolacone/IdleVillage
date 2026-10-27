@@ -10,9 +10,12 @@ source_paths:
   - docs/discord/command-handler.md
   - docs/discord/notification.md
   - docs/discord/ui-renderer.md
+  - docs/managers/affix-manager.md
   - src/cogs/actions.py
   - src/cogs/ui_renderer.py
   - src/core/notification.py
+  - tests/test_discord_commands.py
+  - tests/test_discord_notifications.py
 scope: "Tracks this change from design through review."
 ---
 
