@@ -58,7 +58,7 @@ source_paths:
 | `gear_type_select` | 選擇工具類型 | 更新強化預覽資訊（保留當前模式） |
 | `upgrade_mode_select:{gear_type}:{count}` | 選擇強化模式（標準 / 墊檔 / 鐵齒） | 更新成本預覽與成功率顯示，保留執行次數 |
 | `upgrade_count_select:{gear_type}:{mode}` | 選擇執行次數（1 / 5 / 10 / 20 / 無限） | 重繪子選單，保留強化模式 |
-| `attempt_upgrade:{gear_type}:{mode}:{count}` | 點擊強化 | 重複呼叫 `gear-manager.attempt_upgrade(db, user_id, gear_type, now, mode)`，每次獨立 commit；達到次數或 raise `ValueError` 時停止，失敗不中斷，`inf` 只在 `ValueError` 時停止。次數 1 發送 `gear_success`/`gear_fail`，其他次數發送一則 `gear_batch`。顯示最後一次結果 |
+| `attempt_upgrade:{gear_type}:{mode}:{count}` | 點擊強化 | 重複呼叫 `gear-manager.attempt_upgrade(db, user_id, gear_type, now, mode)`，每次獨立 commit；達到次數或 raise 任何例外時停止，強化失敗不中斷，`inf` 只在 raise 時停止。次數 1 發送 `gear_success`/`gear_fail`，其他次數在至少一次 commit 後發送一則 `gear_batch`。顯示最後一次成功執行的結果；第一次就 raise 時顯示錯誤 |
 | `open_affix_mgmt:{gear_type}` | 點擊詞條管理 | 切到獨立詞條管理畫面；實際開啟時不預設選中工具類型 |
 | `back_to_main` | 點擊返回 | 重新渲染主介面 |
 
@@ -77,7 +77,7 @@ source_paths:
 
 ### 自動抽取確認
 
-每次設定畫面渲染都產生 8 字元 URL-safe token，並將 renderer 輸出的完整確認 ID 存入該玩家目前確認表。確認 ID 必須符合 `auto_affix_run:{gear}:{target}:{value}:{source}:{scope}:{expected_slot}:{token}` 且與玩家目前 ID 完全相同。handler 在第一次 await 前消耗 ID。重複、過期、跨玩家或欄位被改寫的 ID 只 defer 並返回。返回詞條管理、主介面、其他識別介面、送出設定選單、modal 或重新呼叫 `/idlevillage` 時，handler 在第一次 await 前撤銷該玩家尚未使用的確認。有效 ID 還須包含非負整數 `expected_slot`。目標槽過期與素材不足時回滾並重新渲染新 ID。Manager 在抽選完成後才開啟寫入交易；handler 提交成功後才 dispatch `affix_auto_extracted`。
+每次設定畫面渲染都產生 8 字元 URL-safe token，並將 renderer 輸出的完整確認 ID 存入該玩家目前確認表。確認 ID 必須符合 `auto_affix_run:{gear}:{target}:{value}:{source}:{scope}:{expected_slot}:{token}` 且與玩家目前 ID 完全相同。handler 在第一次 await 前消耗 ID。重複、過期、跨玩家或欄位被改寫的 ID 只 defer 並返回。返回詞條管理、主介面、其他識別介面、送出設定選單、modal 或重新呼叫 `/idlevillage` 時，handler 在第一次 await 前撤銷該玩家尚未使用的確認。有效 ID 還須包含非負整數 `expected_slot`。目標槽過期與素材不足時回滾並重新渲染新 ID。Manager 在抽選完成後才開啟寫入交易；handler 提交成功後才 dispatch 通知事件，事件類型見路由表 `auto_affix_run` 列。
 
 ### 管理員介面（資源管理）
 | 元件 ID | 觸發條件 | 處理邏輯 |

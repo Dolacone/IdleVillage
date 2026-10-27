@@ -94,7 +94,7 @@ Not Doing:
 ## Architecture Decisions
 
 - 批次在 handler 迴圈內執行。每次迭代開一個連線、呼叫既有單次 manager 函式並 commit。`gear_manager` 與 `affix_manager` 介面不變。
-- 工具強化停止條件：`attempt_upgrade` raise `ValueError`（前置條件不滿足）或達到次數。第一次就 raise 時沿用現有錯誤顯示，不發通知。
+- 工具強化停止條件：達到次數，或 `attempt_upgrade` raise 任何例外（`ValueError` 為前置條件不滿足）。第一次就 raise 時沿用現有錯誤顯示，不發通知。至少一次已 commit 後 raise 時，保留已完成的結果並照常通知。
 - 執行次數選單沿用強化模式選單的無預設選中慣例。模式或次數未選定時 `🎲 強化工具` 停用。
 - 工具強化 custom_id：
   - `upgrade_mode_select:{gear_type}:{count}`
@@ -123,12 +123,13 @@ Task 1 (notification) -> Task 2 (gear count) -> Task 3 (auto affix scope)
   - AC: `gear_batch` 輸出標題 `{user} 的 {gear_name} {標準|墊檔|鐵齒}連續升級`，之後每次結果一行，格式見 `docs/discord/notification.md`「工具連續強化」。
   - AC: `affix_auto_batch` 輸出標題 `{user} 的 {gear_name} 自動抽取所有空格`，之後每格一行，格式見「詞條自動抽取所有空格」。
   - AC: `dispatch_events` 遇到超過 2000 字元的文字時依行切成多則送出，每則不超過 2000 字元，行內容與順序不變；不超過時只送一則。
-- [ ] Task 2: 工具強化執行次數（`src/cogs/ui_renderer.py`、`src/cogs/actions.py`；tests: `tests/test_discord_commands.py`）
+- [ ] Task 2: 工具強化執行次數（`src/cogs/ui_renderer.py`、`src/cogs/actions.py`；tests: `tests/test_discord_commands.py`、`tests/test_discord_notifications.py`）
   - AC: 工具強化子選單有 4 列：工具類型、強化模式、執行次數（1 / 5 / 10 / 20 / 無限，無預設選中）、按鈕列。custom_id 依 Architecture Decisions。
   - AC: 選模式保留次數、選次數保留模式。
-  - AC: 次數 N 時最多呼叫 `attempt_upgrade` N 次；失敗不中斷；`ValueError` 時停止；`inf` 只在 `ValueError` 時停止。
+  - AC: 次數 N 時最多呼叫 `attempt_upgrade` N 次；強化失敗不中斷；raise 任何例外時停止；`inf` 只在 raise 時停止。
   - AC: 次數 1 發送一個既有 `gear_success`/`gear_fail` 事件；其他次數且至少一次成功執行時發送一個 `gear_batch` 事件，包含每次結果。
-  - AC: 子選單重繪時保留模式與次數，結果區顯示最後一次結果。
+  - AC: 子選單重繪時保留模式與次數。結果區顯示最後一次成功執行的結果；第一次就 raise 時顯示錯誤。
+  - AC: 既有測試中舊格式 `attempt_upgrade:{gear}` 的 ID（`tests/test_discord_notifications.py` 582、614 行，`tests/test_discord_commands.py` 2734 行）改為 `attempt_upgrade:{gear}:{mode}:1`。
 - [ ] Task 3: 自動抽取目標效果合併與所有空格（`src/cogs/ui_renderer.py`、`src/cogs/actions.py`；tests: `tests/test_discord_commands.py`）
   - AC: 自動抽取設定畫面固定 5 列：目標效果（任意 + 5 種效果）、目標數值、花費素材、抽取數量（僅一格 / 所有空格）、按鈕列。
   - AC: Embed 顯示目標效果與抽取數量，不再顯示目標種類。
@@ -138,19 +139,19 @@ Task 1 (notification) -> Task 2 (gear count) -> Task 3 (auto affix scope)
 
 ## Plan Review Issues
 
-- [ ] [Major] Task 2 的測試範圍漏了 `tests/test_discord_notifications.py`。
+- [x] [Major] Task 2 的測試範圍漏了 `tests/test_discord_notifications.py`。
   - 該檔 582、614 行用舊的 `attempt_upgrade:gathering` 觸發 handler，並斷言 `dispatch.assert_called_once()`。
   - `tests/test_discord_commands.py:2734` 也用同一個舊 ID。
   - 新 handler 要求 `{mode}:{count}` 時，這些測試會提早 return 而失敗。
   - 修正：Task 2 的 tests 加入 `tests/test_discord_notifications.py`，三處改成 `attempt_upgrade:{gear}:{mode}:1`。
-- [ ] [Minor] 強化迴圈只處理 `ValueError`，其他例外會丟掉已提交的結果。
+- [x] [Minor] 強化迴圈只處理 `ValueError`，其他例外會丟掉已提交的結果。
   - `src/cogs/actions.py:526-531` 只 catch `ValueError`；`attempt_upgrade` 遇到 DB 錯誤（例如 database is locked）會 raise 其他例外。
   - 情境：次數 20，第 7 次 raise `OperationalError`。前 6 次已 commit，但不發 `gear_batch`，也不重繪子選單。
   - 修正：至少一次已 commit 後，任何例外都停止迴圈並照常發送 `gear_batch`。這與自動抽取「manager raise 時停止」一致。
-- [ ] [Minor] Task 2 AC「結果區顯示最後一次結果」沒定義停止時的 `ValueError` 算不算結果。
+- [x] [Minor] Task 2 AC「結果區顯示最後一次結果」沒定義停止時的 `ValueError` 算不算結果。
   - `inf` 一定以 `ValueError` 結束。若顯示它，`build_gear_embed` 會在連續成功後顯示 `⚠️ 操作失敗：Insufficient AP`（`src/cogs/ui_renderer.py:629`）。
   - 修正：AC 改為「顯示最後一次成功執行的結果；第一次就 raise 時顯示錯誤」，並同步 `docs/discord/command-handler.md` 的 `attempt_upgrade` 列。
-- [ ] [Minor] `docs/discord/command-handler.md`「自動抽取確認」段落結尾仍寫「handler 提交成功後才 dispatch `affix_auto_extracted`」。
+- [x] [Minor] `docs/discord/command-handler.md`「自動抽取確認」段落結尾仍寫「handler 提交成功後才 dispatch `affix_auto_extracted`」。
   - 所有空格發送的是 `affix_auto_batch`，同檔 `auto_affix_run` 列已這樣寫。
   - 修正：該句改為「handler 提交成功後才 dispatch 通知事件」，事件類型由路由表那一列說明。
 
