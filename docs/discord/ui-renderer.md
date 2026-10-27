@@ -1,7 +1,7 @@
 ---
 title: "Module: ui-renderer"
 doc_type: module
-last_reviewed: 2026-10-08
+last_reviewed: 2026-10-27
 source_paths:
   - src/cogs/ui_renderer.py
 ---
@@ -205,6 +205,7 @@ Embed 顯示標題、運行中自動工具清單（`{工具}：到期 <t:{unix}:
 ─────────────────────────────
 選擇工具：[Dropdown]
 選擇強化模式：[Dropdown: 標準 / 墊檔 / 鐵齒]
+選擇執行次數：[Dropdown: 1 / 5 / 10 / 20 / 無限]
 
 {gear_name}：Lv{current} → Lv{target}
 模式：標準
@@ -238,15 +239,17 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 - 未達上限：`Lv{n} → Lv{n+1}: {action_label}產出 +{n×pct}% → +{(n+1)×pct}%`（pct = floor(GEAR_BONUS_PER_LEVEL × 100)）
 - 已達上限：`已達等級上限 Lv{cap}`
 
-強化模式 Dropdown（custom_id: `upgrade_mode_select:{gear_type}`）每個選項附帶描述：
+強化模式 Dropdown（custom_id: `upgrade_mode_select:{gear_type}:{count}`）每個選項附帶描述：
 - 標準：`正常強化：消耗全額素材，成功升級，失敗保底+1`
 - 墊檔：`消耗一半素材，直接獲得一個保底計數，不進行強化`
 - 鐵齒：`僅消耗 1 個素材，成功 +1~+3（50/35/15%），失敗則工具等級與 pity 均歸零`
 
-初始狀態：介面開啟時，工具類型 Dropdown 與強化模式 Dropdown 均不預設選中任何選項；
+執行次數 Dropdown（custom_id: `upgrade_count_select:{gear_type}:{mode}`）選項為 1 / 5 / 10 / 20 / 無限，value 為 `1`、`5`、`10`、`20`、`inf`。`{mode}` 與 `{count}` 未選定時為 `none`。選模式保留次數，選次數保留模式。
+
+初始狀態：介面開啟時，工具類型、強化模式與執行次數 Dropdown 均不預設選中任何選項；
 三個按鈕（🎲 強化工具、🩸 獻祭素材、🔮 詞條管理）在工具類型未選定前均 disabled。
 
-- **Button**：`🎲 強化工具`（Green，禁用條件：素材不足 / AP 不足 / 已達上限）
+- **Button**：`🎲 強化工具`（Green，custom_id: `attempt_upgrade:{gear_type}:{mode}:{count}`，禁用條件：素材不足 / AP 不足 / 已達上限 / 強化模式或執行次數未選定）
 - **Button**：`🩸 獻祭素材`（Red，禁用條件：所選工具類型素材 == 0）；custom_id: `sacrifice_material:{gear_type}`；與 🎲 強化工具、← 返回 **同一 ActionRow**，不佔新列
 - **Button**：`← 返回`（Gray）
 
@@ -311,9 +314,23 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 
 ### 自動抽取設定畫面
 
-- 目標種類選任意或特定效果；特定效果時顯示五種效果選單。另選最低數值（1+ 至 5）與花費來源（工具素材或萬能素材）。
-- 下拉選單與確認按鈕在 custom_id 中攜帶完整狀態。確認按鈕在設定不完整、沒有空槽或所選素材不足時停用。
-- `auto_affix_run:{gear}:{mode}:{effect}:{value}:{source}:{expected_slot}:{token}` 會執行一次批次。renderer 接收 8 字元 URL-safe token，並將確認 ID 綁定設定頁顯示的第一個空槽；沒有空槽時使用 `none` 並停用按鈕。沒有有效 token 時確認也停用。成功只保存第一條符合條件的詞條；耗盡時保持空槽。兩種結果都由 notification 模組發布一則摘要。
+固定 5 列：
+
+```
+row0 選擇目標效果...  (任意 / 行動效率 / 素材掉落 / 強化成功 / 素材退還 / 週期縮短)
+row1 選擇目標數值...  (1+ ~ 5)
+row2 選擇花費素材...  (工具素材 / 萬能素材)
+row3 選擇抽取數量...  (僅一格 / 所有空格)
+row4 [✅ 開始自動抽取] [← 返回詞條管理]
+```
+
+- 四個選單都不預設選中。Embed 依序顯示目標效果、目標數值、花費素材、抽取數量，未選定顯示 `未選擇`。
+- 下拉選單與確認按鈕在 custom_id 中攜帶完整狀態 `{gear}:{target}:{value}:{source}:{scope}`。`{target}` 為 `any` 或詞條代碼，`{scope}` 為 `one` 或 `all`，未選定為 `none`。
+- 確認按鈕在設定不完整、沒有空槽或所選素材不足時停用。
+- `auto_affix_run:{gear}:{target}:{value}:{source}:{scope}:{expected_slot}:{token}` 會執行一次批次。renderer 接收 8 字元 URL-safe token，並將確認 ID 綁定設定頁顯示的第一個空槽；沒有空槽時使用 `none` 並停用按鈕。沒有有效 token 時確認也停用。
+- 僅一格：只保存第一條符合條件的詞條；耗盡時保持空槽。
+- 所有空格：從第一個空槽開始逐格以相同條件抽取。某格耗盡仍未抽中時停止，該格與之後的空槽保持空的。
+- 結果由 notification 模組發布一則摘要。
 
 ## 管理員介面 Embed（/idlevillage-manage）
 
@@ -358,6 +375,7 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
 
 ## Changelog
 
+- 2026-10-27: 工具強化新增執行次數選單；自動抽取設定畫面合併目標種類與目標效果，新增抽取數量選單。
 - 2026-10-08: 詞條名稱對照表移除 素材減免 與 ＡＰ退還；自動抽取特定效果選單改為五種。
 - 2026-10-07: 詞條管理畫面逐槽清單改為「類型 + 數值」分組清單，不顯示槽號；清除下拉改為每組一個選項，超過 25 組時取數值最低的 25 組；清除按鈕改以分組識別。
 

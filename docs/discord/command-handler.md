@@ -1,7 +1,7 @@
 ---
 title: "Module: command-handler"
 doc_type: module
-last_reviewed: 2026-10-07
+last_reviewed: 2026-10-27
 source_paths:
   - src/cogs/actions.py
   - src/cogs/general.py
@@ -56,8 +56,9 @@ source_paths:
 | 元件 ID | 觸發條件 | 處理邏輯 |
 | :--- | :--- | :--- |
 | `gear_type_select` | 選擇工具類型 | 更新強化預覽資訊（保留當前模式） |
-| `upgrade_mode_select:{gear_type}` | 選擇強化模式（標準 / 墊檔 / 鐵齒） | 更新成本預覽與成功率顯示 |
-| `attempt_upgrade:{gear_type}:{mode}` | 點擊強化 | 呼叫 `gear-manager.attempt_upgrade(db, user_id, gear_type, now, mode)`，顯示結果 |
+| `upgrade_mode_select:{gear_type}:{count}` | 選擇強化模式（標準 / 墊檔 / 鐵齒） | 更新成本預覽與成功率顯示，保留執行次數 |
+| `upgrade_count_select:{gear_type}:{mode}` | 選擇執行次數（1 / 5 / 10 / 20 / 無限） | 重繪子選單，保留強化模式 |
+| `attempt_upgrade:{gear_type}:{mode}:{count}` | 點擊強化 | 重複呼叫 `gear-manager.attempt_upgrade(db, user_id, gear_type, now, mode)`，每次獨立 commit；達到次數或 raise `ValueError` 時停止，失敗不中斷，`inf` 只在 `ValueError` 時停止。次數 1 發送 `gear_success`/`gear_fail`，其他次數發送一則 `gear_batch`。顯示最後一次結果 |
 | `open_affix_mgmt:{gear_type}` | 點擊詞條管理 | 切到獨立詞條管理畫面；實際開啟時不預設選中工具類型 |
 | `back_to_main` | 點擊返回 | 重新渲染主介面 |
 
@@ -70,13 +71,13 @@ source_paths:
 | `affix_clear:{gear_type}:{affix_type}:{value}` | 點擊清除詞條 | 類型不在合法類型或數值不是 1-5 整數時（含 `none:none` 與舊格式）忽略；否則在該工具現存詞條中找出符合分組、槽號最大的一條，消耗 `AFFIX_CLEAR_COST` 個素材（先扣對應素材，不足由萬能素材補足）並清除；分組已不存在時不清除、只重新渲染 |
 | `back_to_gear:{gear_type}` | 點擊返回 | 回到工具強化子選單 |
 | `open_auto_affix:{gear_type}` | 開啟自動抽取 | 載入等級、槽位與兩類素材持有量 |
-| `auto_affix_kind/effect/value/material:{gear}:{mode}:{effect}:{value}:{source}` | 選擇設定 | 替換所選欄位並保留其他設定 |
-| `auto_affix_run:{gear}:{mode}:{effect}:{value}:{source}:{expected_slot}:{token}` | 確認批次 | 比對玩家目前完整確認 ID 並先消耗，再驗證目標槽與呼叫 affix-manager；交易提交後發送一則摘要 |
+| `auto_affix_target/value/material/scope:{gear}:{target}:{value}:{source}:{scope}` | 選擇設定 | 替換所選欄位並保留其他設定 |
+| `auto_affix_run:{gear}:{target}:{value}:{source}:{scope}:{expected_slot}:{token}` | 確認批次 | 比對玩家目前完整確認 ID 並先消耗，再驗證目標槽與呼叫 affix-manager。`one` 抽一格，提交後發送 `affix_auto_extracted`。`all` 逐格呼叫，每格獨立 commit，下一格重讀第一個空槽；沒有空槽、該格未抽中或 manager raise 時停止，已完成的格子保留，發送一則 `affix_auto_batch` |
 | `back_to_affix:{gear_type}` | 返回詞條管理 | 返回詞條管理畫面 |
 
 ### 自動抽取確認
 
-每次設定畫面渲染都產生 8 字元 URL-safe token，並將 renderer 輸出的完整確認 ID 存入該玩家目前確認表。確認 ID 必須符合 `auto_affix_run:{gear}:{mode}:{effect}:{value}:{source}:{expected_slot}:{token}` 且與玩家目前 ID 完全相同。handler 在第一次 await 前消耗 ID。重複、過期、跨玩家或欄位被改寫的 ID 只 defer 並返回。返回詞條管理、主介面、其他識別介面、送出設定選單、modal 或重新呼叫 `/idlevillage` 時，handler 在第一次 await 前撤銷該玩家尚未使用的確認。有效 ID 還須包含非負整數 `expected_slot`。目標槽過期與素材不足時回滾並重新渲染新 ID。Manager 在抽選完成後才開啟寫入交易；handler 提交成功後才 dispatch `affix_auto_extracted`。
+每次設定畫面渲染都產生 8 字元 URL-safe token，並將 renderer 輸出的完整確認 ID 存入該玩家目前確認表。確認 ID 必須符合 `auto_affix_run:{gear}:{target}:{value}:{source}:{scope}:{expected_slot}:{token}` 且與玩家目前 ID 完全相同。handler 在第一次 await 前消耗 ID。重複、過期、跨玩家或欄位被改寫的 ID 只 defer 並返回。返回詞條管理、主介面、其他識別介面、送出設定選單、modal 或重新呼叫 `/idlevillage` 時，handler 在第一次 await 前撤銷該玩家尚未使用的確認。有效 ID 還須包含非負整數 `expected_slot`。目標槽過期與素材不足時回滾並重新渲染新 ID。Manager 在抽選完成後才開啟寫入交易；handler 提交成功後才 dispatch `affix_auto_extracted`。
 
 ### 管理員介面（資源管理）
 | 元件 ID | 觸發條件 | 處理邏輯 |
@@ -109,6 +110,8 @@ source_paths:
 - 公告指令回應為 Public。
 
 ## Changelog
+
+- 2026-10-27: 新增 `upgrade_count_select` 與批次強化；自動抽取選單改為 target/value/material/scope，新增所有空格批次。
 
 - 2026-10-07: `affix_slot_select` 與 `affix_clear` 改以 `{affix_type}:{value}` 分組識別詞條，handler 清除該分組槽號最大的一條。
 

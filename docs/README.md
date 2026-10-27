@@ -1,7 +1,7 @@
 ---
 title: IdleVillage v2 Preview SSOT Map
 doc_type: index
-last_reviewed: 2026-10-08
+last_reviewed: 2026-10-27
 source_paths: []
 scope: "Documentation entry point. All repository docs are reachable from this index."
 ---
@@ -38,6 +38,7 @@ This directory is the v2 design preview. v2 is a fresh restart and replaces v1 g
 | Affix group display change record | [changelogs/2026-10-07-affix-group-display.md](changelogs/2026-10-07-affix-group-display.md) |
 | Remove upgrade affixes change record | [changelogs/2026-10-08-remove-upgrade-affixes.md](changelogs/2026-10-08-remove-upgrade-affixes.md) |
 | Trial reward equal share change record | [changelogs/2026-10-08-trial-reward-equal-share.md](changelogs/2026-10-08-trial-reward-equal-share.md) |
+| Batch upgrade and auto affix change record | [changelogs/2026-10-27-batch-upgrade-and-auto-affix.md](changelogs/2026-10-27-batch-upgrade-and-auto-affix.md) |
 | Village resources | `managers/resource-manager.md` |
 | SQLite schema | `db-schema.md` |
 | Slash command routing | [discord/command-handler.md](discord/command-handler.md) |

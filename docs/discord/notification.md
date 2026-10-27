@@ -1,7 +1,7 @@
 ---
 title: "Module: notification"
 doc_type: module
-last_reviewed: 2026-10-08
+last_reviewed: 2026-10-27
 source_paths:
   - src/core/notification.py
   - src/cogs/actions.py
@@ -36,7 +36,9 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 | 工具強化失敗 | gear-manager 回傳失敗 | `{user_display_name} 的 {gear_name} 升級失敗 :boom: Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）` | Public |
 | 詞條抽取 | `extract_affix` handler 成功後 | `{user_display_name} 的 {gear_name} 抽到詞條：{affix_label}（+{value}%）` | Public |
 | 詞條清除 | `clear_affix` handler 成功後 | `{user_display_name} 的 {gear_name} 清除詞條：{affix_label}（+{value}%）` | Public |
-| 詞條自動抽取 | `auto_affix_run` 提交成功後 | 成功或未達標摘要，列出總次數與所選素材實際花費；格式見下方範本 | Public |
+| 工具連續強化 | 執行次數非 1 的 `attempt_upgrade` 至少執行一次後 | 標題一行，之後每次結果一行；格式見下方範本 | Public |
+| 詞條自動抽取 | `auto_affix_run` 僅一格提交成功後 | 成功或未達標摘要，列出總次數與所選素材實際花費；格式見下方範本 | Public |
+| 詞條自動抽取所有空格 | `auto_affix_run` 所有空格至少完成一格後 | 標題一行，之後每格結果一行；格式見下方範本 | Public |
 | 試煉開始 | `trial_target_select` 成功開啟試煉 | 玩家選定的目標值 + 系統隨機選定的扣款資源 + 期限 + 獎勵池大小；不顯示發起者 | Public |
 | 試煉達成 | trial-manager 判定進度達標 | 目標值（行動產出總計）+ 各參與者貢獻與獲得數量列表（依貢獻降冪） | Public |
 | 試煉失敗（逾時） | trial-manager 判定 12 小時內未達標 | 目標值（行動產出總計）+ 逾時當下進度，說明資源不退還 | Public |
@@ -121,6 +123,25 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 ```
 `cost_label` 為「工具素材」或「萬能素材」。成功與耗盡均 dispatch 一個 `affix_auto_extracted` 事件。
 
+### 工具連續強化
+```
+{user_display_name} 的 {gear_name} {mode_label}連續升級
+成功 :tada: Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）
+失敗 :boom: Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）
+```
+`{mode_label}` 為標準、墊檔或鐵齒。事件 `gear_batch` 帶 `mode` 與 `results`，每次結果一行，欄位定義同「工具強化通知欄位」。失敗行依模式：標準 `失敗 :boom:`、鐵齒 `失敗（等級歸零） :skull:`、墊檔 `改造加固 :shield:`。
+
+### 詞條自動抽取所有空格
+```
+{user_display_name} 的 {gear_name} 自動抽取所有空格
+抽到詞條：{affix_label}（+{value}%），抽選次數{attempts} ({material_spent}{cost_label})
+未抽到目標詞條，抽選次數{attempts} ({material_spent}{cost_label})
+```
+事件 `affix_auto_batch` 帶 `material_source` 與 `results`，每格一行。只有最後一格可能是未抽到。
+
+### 長訊息拆分
+`dispatch_events` 對超過 2000 字元的文字依行切成多則依序送出，每則不超過 2000 字元。不超過時只送一則。
+
 ### 試煉開始
 ```
 🏆 村莊試煉開始！花費 {target} 個 {resource_emoji}{resource_label}
@@ -158,6 +179,7 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 
 ## Changelog
 
+- 2026-10-27: 新增工具連續強化與詞條自動抽取所有空格通知；超過 2000 字元的訊息依行拆分。
 - 2026-10-08: 試煉開始與達成通知改為說明 25% 平均分配、75% 依貢獻度分配。
 - 2026-10-08: 詞條通知說明移除 `upgrade_cost_reduce` 特例。
 
