@@ -1,6 +1,6 @@
 ---
 title: "工具強化執行次數與自動抽取所有空格"
-status: Refactored
+status: Done
 created: 2026-10-27
 doc_type: change
 last_reviewed: 2026-10-27
