@@ -1095,5 +1095,111 @@ class TestAffixNotificationSign(unittest.TestCase):
         self.assertNotIn("-3%", text)
 
 
+class TestBatchNotifications(DatabaseTestCase):
+    def _results(self, n, success=False):
+        return [
+            {"success": success, "current_level": i, "target_level": i + 1, "failure_count": i}
+            for i in range(n)
+        ]
+
+    def test_gear_batch_is_one_message_with_header_and_line_per_result(self):
+        from core.notification import _format_event
+        text = _format_event({
+            "type": "gear_batch", "user_display_name": "Player", "gear_type": "research",
+            "mode": "normal",
+            "results": [
+                {"success": True, "current_level": 3, "target_level": 4, "failure_count": 0},
+                {"success": False, "current_level": 4, "target_level": 5, "failure_count": 1},
+            ],
+        })
+        self.assertEqual(text.split("\n"), [
+            "Player 的 研究工具 標準連續升級",
+            "成功 :tada: Lv3 -> Lv4（總失敗次數：0）",
+            "失敗 :boom: Lv4 -> Lv5（總失敗次數：1）",
+        ])
+
+    def test_gear_batch_failure_line_and_header_differ_per_mode(self):
+        from core.notification import _format_event
+        expected = {
+            "normal": ("標準", "失敗 :boom: Lv1 -> Lv2"),
+            "risky": ("鐵齒", "失敗（等級歸零） :skull: Lv1 -> Lv2"),
+            "buffer": ("墊檔", "改造加固 :shield: Lv1 -> Lv2"),
+        }
+        for mode, (label, line) in expected.items():
+            text = _format_event({
+                "type": "gear_batch", "user_display_name": "P", "gear_type": "combat",
+                "mode": mode,
+                "results": [{"success": False, "current_level": 1, "target_level": 2, "failure_count": 1}],
+            })
+            lines = text.split("\n")
+            self.assertEqual(lines[0], f"P 的 狩獵工具 {label}連續升級")
+            self.assertEqual(lines[1], f"{line}（總失敗次數：1）")
+
+    def test_affix_auto_batch_lines_match_single_event_wording(self):
+        from core.notification import _format_event
+        text = _format_event({
+            "type": "affix_auto_batch", "user_display_name": "Player", "gear_type": "research",
+            "material_source": "universal",
+            "results": [
+                {"affix": {"affix_type": "cycle_time_reduce", "value": 4}, "attempts": 50, "material_spent": 250},
+                {"affix": None, "attempts": 50, "material_spent": 250},
+            ],
+        })
+        self.assertEqual(text.split("\n"), [
+            "Player 的 研究工具 自動抽取所有空格",
+            "抽到詞條：週期縮短（+4%），抽選次數50 (250萬能素材)",
+            "未抽到目標詞條，抽選次數50 (250萬能素材)",
+        ])
+
+    def test_affix_auto_batch_tool_source_uses_tool_material_label(self):
+        from core.notification import _format_event
+        text = _format_event({
+            "type": "affix_auto_batch", "user_display_name": "P", "gear_type": "research",
+            "material_source": "tool",
+            "results": [{"affix": None, "attempts": 2, "material_spent": 2}],
+        })
+        self.assertTrue(text.endswith("未抽到目標詞條，抽選次數2 (2工具素材)"))
+
+    def test_split_message_short_text_is_single_chunk(self):
+        from core.notification import _split_message
+        text = "a" * 2000
+        self.assertEqual(_split_message(text), [text])
+
+    def test_split_message_breaks_at_lines_without_losing_or_reordering(self):
+        from core.notification import _split_message
+        lines = [f"line {i:04d} " + "x" * 40 for i in range(200)]
+        text = "\n".join(lines)
+        self.assertGreater(len(text), 2000)
+        chunks = _split_message(text)
+        self.assertGreater(len(chunks), 1)
+        self.assertTrue(all(len(c) <= 2000 for c in chunks))
+        self.assertEqual([ln for c in chunks for ln in c.split("\n")], lines)
+
+    async def test_dispatch_sends_long_batch_as_multiple_messages_and_short_as_one(self):
+        from core import notification
+        async with get_connection() as db:
+            await db.execute("UPDATE village_state SET announcement_channel_id='123' WHERE id=1")
+            await db.commit()
+        channel = SimpleNamespace(send=AsyncMock(), guild=SimpleNamespace())
+        bot = SimpleNamespace(get_channel=lambda cid: channel if cid == 123 else None)
+
+        def event(n):
+            return {
+                "type": "gear_batch", "user_display_name": "P", "gear_type": "research",
+                "mode": "normal", "results": self._results(n),
+            }
+
+        await notification.dispatch_events(bot, [event(5)])
+        self.assertEqual(channel.send.await_count, 1)
+
+        channel.send.reset_mock()
+        await notification.dispatch_events(bot, [event(120)])
+        sent = [c.args[0] for c in channel.send.await_args_list]
+        self.assertGreater(len(sent), 1)
+        self.assertTrue(all(len(m) <= 2000 for m in sent))
+        full = notification._format_event(event(120))
+        self.assertEqual("\n".join(sent), full)
+
+
 if __name__ == "__main__":
     unittest.main()

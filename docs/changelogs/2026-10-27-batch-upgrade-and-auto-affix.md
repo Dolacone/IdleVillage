@@ -119,7 +119,7 @@ Not Doing:
 Task 1 (notification) -> Task 2 (gear count) -> Task 3 (auto affix scope)
 ```
 
-- [ ] Task 1: 批次通知格式與長訊息拆分（`src/core/notification.py`；tests: `tests/test_discord_notifications.py`）
+- [x] Task 1: 批次通知格式與長訊息拆分（`src/core/notification.py`；tests: `tests/test_discord_notifications.py`）
   - AC: `gear_batch` 輸出標題 `{user} 的 {gear_name} {標準|墊檔|鐵齒}連續升級`，之後每次結果一行，格式見 `docs/discord/notification.md`「工具連續強化」。
   - AC: `affix_auto_batch` 輸出標題 `{user} 的 {gear_name} 自動抽取所有空格`，之後每格一行，格式見「詞條自動抽取所有空格」。
   - AC: `dispatch_events` 遇到超過 2000 字元的文字時依行切成多則送出，每則不超過 2000 字元，行內容與順序不變；不超過時只送一則。

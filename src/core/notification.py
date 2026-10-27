@@ -176,6 +176,44 @@ def _format_event(event: dict, name_map: dict[str, str] | None = None) -> str | 
             f"Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）"
         )
 
+    if kind == "gear_batch":
+        user_name = event.get("user_display_name", "")
+        gear_name = GEAR_LABELS.get(event.get("gear_type", ""), event.get("gear_type", ""))
+        mode = event.get("mode", "normal")
+        mode_label = {"risky": "鐵齒", "buffer": "墊檔"}.get(mode, "標準")
+        fail_label = {
+            "risky": "失敗（等級歸零） :skull:",
+            "buffer": "改造加固 :shield:",
+        }.get(mode, "失敗 :boom:")
+        lines = [f"{user_name} 的 {gear_name} {mode_label}連續升級"]
+        for r in event.get("results", []):
+            current_level = r.get("current_level", 0)
+            target_level = r.get("target_level", current_level + 1)
+            head = "成功 :tada:" if r.get("success") else fail_label
+            lines.append(
+                f"{head} Lv{current_level} -> Lv{target_level}"
+                f"（總失敗次數：{r.get('failure_count', 0)}）"
+            )
+        return "\n".join(lines)
+
+    if kind == "affix_auto_batch":
+        user_name = event.get("user_display_name", "")
+        gear_name = GEAR_LABELS.get(event.get("gear_type", ""), event.get("gear_type", ""))
+        cost_label = "工具素材" if event.get("material_source", "tool") == "tool" else "萬能素材"
+        lines = [f"{user_name} 的 {gear_name} 自動抽取所有空格"]
+        for r in event.get("results", []):
+            affix = r.get("affix")
+            if affix:
+                affix_type = affix.get("affix_type", "")
+                affix_label = AFFIX_TYPE_LABELS.get(affix_type, affix_type)
+                result = f"抽到詞條：{affix_label}（+{affix.get('value', 0)}%）"
+            else:
+                result = "未抽到目標詞條"
+            lines.append(
+                f"{result}，抽選次數{r.get('attempts', 0)} ({r.get('material_spent', 0)}{cost_label})"
+            )
+        return "\n".join(lines)
+
     if kind in ("affix_extracted", "affix_cleared"):
         user_name = event.get("user_display_name", "")
         gear_type = event.get("gear_type", "")
@@ -275,6 +313,27 @@ async def _resolve_display_name(guild, uid: str) -> str:
         return uid
 
 
+DISCORD_MESSAGE_LIMIT = 2000
+
+
+def _split_message(text: str, limit: int = DISCORD_MESSAGE_LIMIT) -> list[str]:
+    """Split text into chunks of at most `limit` characters at line boundaries."""
+    if len(text) <= limit:
+        return [text]
+    chunks: list[str] = []
+    current: list[str] = []
+    size = 0
+    for line in text.split("\n"):
+        added = len(line) + (1 if current else 0)
+        if current and size + added > limit:
+            chunks.append("\n".join(current))
+            current, size, added = [], 0, len(line)
+        current.append(line)
+        size += added
+    chunks.append("\n".join(current))
+    return chunks
+
+
 async def dispatch_events(bot, events: list[dict]) -> None:
     """
     Send formatted notification messages to the announcement channel.
@@ -310,7 +369,8 @@ async def dispatch_events(bot, events: list[dict]) -> None:
         text = _format_event(event, name_map)
         if text:
             try:
-                await channel.send(text, allowed_mentions=disnake.AllowedMentions.none())
+                for chunk in _split_message(text):
+                    await channel.send(chunk, allowed_mentions=disnake.AllowedMentions.none())
             except Exception as exc:
                 logger.error("Failed to send notification for event %s: %s", event.get("type"), exc)
 
