@@ -649,6 +649,8 @@ _UPGRADE_MODE_DEFS = (
     ("鐵齒", "risky", "僅消耗 1 個素材，成功 +1~+3（50/35/15%），失敗則工具等級與 pity 均歸零"),
 )
 
+_UPGRADE_COUNT_DEFS = (("1 次", "1"), ("5 次", "5"), ("10 次", "10"), ("20 次", "20"), ("無限", "inf"))
+
 
 def build_gear_components(
     gear_type: str | None,
@@ -660,6 +662,7 @@ def build_gear_components(
     affixes: list | None = None,
     max_slots: int = 0,
     materials: int = 0,
+    count: str | None = None,
 ) -> list:
     bonus_pct = math.floor(get_env_float("GEAR_BONUS_PER_LEVEL") * 100)
 
@@ -689,8 +692,14 @@ def build_gear_components(
         for label, value, desc in _UPGRADE_MODE_DEFS
     ]
 
+    count_options = [
+        disnake.SelectOption(label=label, value=value, default=(value == count))
+        for label, value in _UPGRADE_COUNT_DEFS
+    ]
+
     _gt = gear_type or "none"
-    _m = mode or "normal"
+    _m = mode or "none"
+    _c = count or "none"
 
     rows = [
         disnake.ui.ActionRow(
@@ -702,17 +711,24 @@ def build_gear_components(
         ),
         disnake.ui.ActionRow(
             disnake.ui.StringSelect(
-                custom_id=f"upgrade_mode_select:{_gt}",
+                custom_id=f"upgrade_mode_select:{_gt}:{_c}",
                 placeholder="選擇強化模式...",
                 options=mode_options,
+            )
+        ),
+        disnake.ui.ActionRow(
+            disnake.ui.StringSelect(
+                custom_id=f"upgrade_count_select:{_gt}:{_m}",
+                placeholder="選擇執行次數...",
+                options=count_options,
             )
         ),
         disnake.ui.ActionRow(
             disnake.ui.Button(
                 label="🎲 強化工具",
                 style=disnake.ButtonStyle.success,
-                custom_id=f"attempt_upgrade:{_gt}:{_m}",
-                disabled=not can_attempt or mode is None,
+                custom_id=f"attempt_upgrade:{_gt}:{_m}:{_c}",
+                disabled=not can_attempt or mode is None or count is None,
             ),
             disnake.ui.Button(
                 label="🩸 獻祭素材",

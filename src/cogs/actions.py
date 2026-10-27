@@ -33,11 +33,12 @@ from managers import affix_manager, auto_tool_manager, building_manager, gear_ma
 _OWN_BUTTONS = frozenset({"burst_execute", "open_gear_upgrade", "open_trial_start", "open_auto_tool", "back_to_main"})
 _OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:", "clear_affix:", "sacrifice_material:", "open_affix_mgmt:", "affix_extract:", "affix_clear:", "back_to_gear:", "auto_tool_confirm:", "trial_target_page:", "open_auto_affix:", "back_to_affix:", "auto_affix_run:")
 _OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "gear_type_select", "affix_gear_select", "auto_tool_type_select", "trial_target_select"})
-_OWN_DROPDOWN_PREFIXES = ("upgrade_mode_select:", "affix_slot_select:", "auto_tool_target_select:", "auto_tool_add_select:", "auto_tool_sub_select:", "auto_affix_kind:", "auto_affix_effect:", "auto_affix_value:", "auto_affix_material:")
+_OWN_DROPDOWN_PREFIXES = ("upgrade_mode_select:", "upgrade_count_select:", "affix_slot_select:", "auto_tool_target_select:", "auto_tool_add_select:", "auto_tool_sub_select:", "auto_affix_kind:", "auto_affix_effect:", "auto_affix_value:", "auto_affix_material:")
 _OWN_MODAL_PREFIXES = ("modal_sacrifice:",)
 _VALID_GEAR_TYPES = frozenset({"gathering", "building", "combat", "research"})
 _VALID_ACTIONS = frozenset({"gathering", "building", "combat", "research"})
 _VALID_UPGRADE_MODES = frozenset(gear_manager.UPGRADE_MODES)
+_VALID_UPGRADE_COUNTS = frozenset({"1", "5", "10", "20", "inf"})
 _VALID_AUTO_AFFIX_MODES = frozenset({"none", "any", "specific"})
 _VALID_AFFIX_TYPES = frozenset(affix_manager.AFFIX_TYPES)
 _VALID_AUTO_AFFIX_VALUES = frozenset({"1", "2", "3", "4", "5"})
@@ -190,7 +191,8 @@ class ActionsCog(commands.Cog):
             await inter.edit_original_response(embed=embed, components=components)
 
     async def _render_gear(
-        self, inter, gear_type: str | None, *, mode: str | None = None, result: dict | None = None, respond=None
+        self, inter, gear_type: str | None, *, mode: str | None = None, count: str | None = None,
+        result: dict | None = None, respond=None
     ) -> None:
         user_id = str(inter.user.id)
         now = datetime.now(timezone.utc)
@@ -224,7 +226,7 @@ class ActionsCog(commands.Cog):
         embed = build_gear_embed(upgrade_info, gear_type, result, affixes=affixes, max_slots=max_slots)
         components = build_gear_components(
             gear_type, mode, upgrade_info["can_attempt"], player_gear, upgrade_info["gear_cap"],
-            affixes=affixes, max_slots=max_slots, materials=upgrade_info["materials"],
+            affixes=affixes, max_slots=max_slots, materials=upgrade_info["materials"], count=count,
         )
         if respond is not None:
             await respond(embed=embed, components=components)
@@ -516,42 +518,83 @@ class ActionsCog(commands.Cog):
 
         elif cid.startswith("attempt_upgrade:"):
             parts = cid.split(":")
-            gear_type = parts[1] if len(parts) > 1 else ""
-            mode = parts[2] if len(parts) > 2 else "normal"
-            if gear_type not in _VALID_GEAR_TYPES or mode not in _VALID_UPGRADE_MODES:
+            if len(parts) != 4:
+                return
+            gear_type, mode, count = parts[1], parts[2], parts[3]
+            if (
+                gear_type not in _VALID_GEAR_TYPES
+                or mode not in _VALID_UPGRADE_MODES
+                or count not in _VALID_UPGRADE_COUNTS
+            ):
                 return
             await inter.response.defer()
-            now = datetime.now(timezone.utc)
-            result: dict | None = None
-            try:
-                async with get_connection() as db:
-                    result = await gear_manager.attempt_upgrade(db, user_id, gear_type, now, mode=mode)
-                    await db.commit()
-            except ValueError as exc:
-                result = {"success": False, "new_level": 0, "rate": 0.0, "error": str(exc)}
-            if result and "error" not in result:
-                if result.get("success"):
-                    gear_event = {
-                        "type": "gear_success",
-                        "user_display_name": inter.user.display_name,
-                        "gear_type": gear_type,
-                        "current_level": result.get("current_level", 0),
-                        "target_level": result.get("new_level", result.get("current_level", 0) + 1),
-                        "failure_count": result.get("pity_before", 0),
-                        "mode": result.get("mode", "normal"),
-                    }
+            max_attempts = None if count == "inf" else int(count)
+            committed: list[dict] = []
+            first_error: dict | None = None
+            while max_attempts is None or len(committed) < max_attempts:
+                try:
+                    async with get_connection() as db:
+                        attempt = await gear_manager.attempt_upgrade(
+                            db, user_id, gear_type, datetime.now(timezone.utc), mode=mode
+                        )
+                        await db.commit()
+                except Exception as exc:
+                    if not committed:
+                        first_error = {"success": False, "new_level": 0, "rate": 0.0, "error": str(exc)}
+                    break
+                committed.append(attempt)
+
+            if first_error is not None:
+                result = first_error
+            else:
+                result = committed[-1] if committed else None
+            if committed:
+                if count == "1":
+                    last = committed[0]
+                    if last.get("success"):
+                        gear_event = {
+                            "type": "gear_success",
+                            "user_display_name": inter.user.display_name,
+                            "gear_type": gear_type,
+                            "current_level": last.get("current_level", 0),
+                            "target_level": last.get("new_level", last.get("current_level", 0) + 1),
+                            "failure_count": last.get("pity_before", 0),
+                            "mode": last.get("mode", "normal"),
+                        }
+                    else:
+                        gear_event = {
+                            "type": "gear_fail",
+                            "user_display_name": inter.user.display_name,
+                            "gear_type": gear_type,
+                            "current_level": last.get("current_level", 0),
+                            "target_level": last.get("target_level", last.get("current_level", 0) + 1),
+                            "failure_count": last.get("pity_after", 0),
+                            "mode": last.get("mode", "normal"),
+                        }
                 else:
                     gear_event = {
-                        "type": "gear_fail",
+                        "type": "gear_batch",
                         "user_display_name": inter.user.display_name,
                         "gear_type": gear_type,
-                        "current_level": result.get("current_level", 0),
-                        "target_level": result.get("target_level", result.get("current_level", 0) + 1),
-                        "failure_count": result.get("pity_after", 0),
-                        "mode": result.get("mode", "normal"),
+                        "mode": mode,
+                        "results": [
+                            {
+                                "success": bool(r.get("success")),
+                                "current_level": r.get("current_level", 0),
+                                "target_level": (
+                                    r.get("new_level", r.get("current_level", 0) + 1)
+                                    if r.get("success")
+                                    else r.get("target_level", r.get("current_level", 0) + 1)
+                                ),
+                                "failure_count": (
+                                    r.get("pity_before", 0) if r.get("success") else r.get("pity_after", 0)
+                                ),
+                            }
+                            for r in committed
+                        ],
                     }
                 await notification.dispatch_events(self.bot, [gear_event])
-            await self._render_gear(inter, gear_type, mode=mode, result=result)
+            await self._render_gear(inter, gear_type, mode=mode, count=count, result=result)
 
         elif cid.startswith("extract_affix:"):
             parts = cid.split(":")
@@ -812,9 +855,27 @@ class ActionsCog(commands.Cog):
             if value in _VALID_GEAR_TYPES:
                 await self._render_gear(inter, value)
         elif cid.startswith("upgrade_mode_select:"):
-            gear_type = cid.split(":", 1)[1]
-            if value in _VALID_UPGRADE_MODES and gear_type in _VALID_GEAR_TYPES:
-                await self._render_gear(inter, gear_type, mode=value)
+            parts = cid.split(":")
+            if len(parts) != 3:
+                return
+            gear_type, count = parts[1], parts[2]
+            if (
+                value in _VALID_UPGRADE_MODES
+                and gear_type in _VALID_GEAR_TYPES
+                and count in _VALID_UPGRADE_COUNTS | {"none"}
+            ):
+                await self._render_gear(inter, gear_type, mode=value, count=None if count == "none" else count)
+        elif cid.startswith("upgrade_count_select:"):
+            parts = cid.split(":")
+            if len(parts) != 3:
+                return
+            gear_type, mode = parts[1], parts[2]
+            if (
+                value in _VALID_UPGRADE_COUNTS
+                and gear_type in _VALID_GEAR_TYPES
+                and mode in _VALID_UPGRADE_MODES | {"none"}
+            ):
+                await self._render_gear(inter, gear_type, mode=None if mode == "none" else mode, count=value)
         elif cid == "affix_gear_select":
             if value in _VALID_GEAR_TYPES:
                 await self._render_affix(inter, value)

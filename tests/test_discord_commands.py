@@ -1111,7 +1111,7 @@ class TestRendererGearComponents(unittest.TestCase):
 
         player_gear = {"gathering": 5, "building": 5, "combat": 5, "research": 5}
         rows = build_gear_components(
-            "gathering", "normal", False, player_gear, gear_cap=5, max_slots=1, materials=3
+            "gathering", "normal", False, player_gear, gear_cap=5, max_slots=1, materials=3, count="1"
         )
         buttons = {
             component.custom_id: component
@@ -1119,13 +1119,13 @@ class TestRendererGearComponents(unittest.TestCase):
             for component in row.children
             if getattr(component, "custom_id", None)
             in {
-                "attempt_upgrade:gathering:normal",
+                "attempt_upgrade:gathering:normal:1",
                 "sacrifice_material:gathering",
                 "open_affix_mgmt:gathering",
             }
         }
 
-        self.assertTrue(buttons["attempt_upgrade:gathering:normal"].disabled)
+        self.assertTrue(buttons["attempt_upgrade:gathering:normal:1"].disabled)
         self.assertFalse(
             buttons["sacrifice_material:gathering"].disabled,
             "Max-level players must still reach affix management and material sacrifice",
@@ -1240,7 +1240,37 @@ class TestGearComponentsBlankState(unittest.TestCase):
         from cogs.ui_renderer import build_gear_components
         rows = build_gear_components(None, None, False, self._player_gear(), gear_cap=5)
         mode_select = rows[1].children[0]
-        self.assertEqual(mode_select.custom_id, "upgrade_mode_select:none")
+        self.assertEqual(mode_select.custom_id, "upgrade_mode_select:none:none")
+
+    def test_count_select_is_third_row_with_documented_options_and_no_default(self):
+        from cogs.ui_renderer import build_gear_components
+        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=5)
+        self.assertEqual(len(rows), 4)
+        count_select = rows[2].children[0]
+        self.assertEqual(count_select.custom_id, "upgrade_count_select:gathering:normal")
+        self.assertEqual([o.value for o in count_select.options], ["1", "5", "10", "20", "inf"])
+        self.assertFalse(any(o.default for o in count_select.options))
+
+    def test_attempt_button_disabled_when_count_is_none(self):
+        from cogs.ui_renderer import build_gear_components
+        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=5)
+        attempt = rows[3].children[0]
+        self.assertEqual(attempt.custom_id, "attempt_upgrade:gathering:normal:none")
+        self.assertTrue(attempt.disabled)
+
+    def test_attempt_button_enabled_when_mode_and_count_selected(self):
+        from cogs.ui_renderer import build_gear_components
+        rows = build_gear_components("gathering", "risky", True, self._player_gear(), gear_cap=5, count="inf")
+        attempt = rows[3].children[0]
+        self.assertEqual(attempt.custom_id, "attempt_upgrade:gathering:risky:inf")
+        self.assertFalse(attempt.disabled)
+
+    def test_selects_encode_each_others_state_in_custom_id(self):
+        from cogs.ui_renderer import build_gear_components
+        rows = build_gear_components("gathering", "buffer", True, self._player_gear(), gear_cap=5, count="10")
+        self.assertEqual(rows[1].children[0].custom_id, "upgrade_mode_select:gathering:10")
+        self.assertEqual(rows[2].children[0].custom_id, "upgrade_count_select:gathering:buffer")
+        self.assertEqual([o.value for o in rows[2].children[0].options if o.default], ["10"])
 
 
 class TestRiskyDropdownDescription(unittest.TestCase):
@@ -1441,13 +1471,13 @@ class TestAffixComponents(unittest.TestCase):
 
     def test_gear_action_button_labels(self):
         from cogs.ui_renderer import build_gear_components
-        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10)
+        rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, count="1")
         labels = {
             c.custom_id: c.label
             for row in rows for c in row.children
             if hasattr(c, "custom_id") and hasattr(c, "label") and c.label
         }
-        self.assertEqual(labels.get("attempt_upgrade:gathering:normal"), "🎲 強化工具")
+        self.assertEqual(labels.get("attempt_upgrade:gathering:normal:1"), "🎲 強化工具")
         self.assertEqual(labels.get("sacrifice_material:gathering"), "🩸 獻祭素材")
         self.assertEqual(labels.get("open_affix_mgmt:gathering"), "🔮 詞條管理")
 
@@ -2731,7 +2761,7 @@ class TestGearUpgradeNotificationTargetLevel(unittest.IsolatedAsyncioTestCase):
         inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
         inter.user.id = 12345
         inter.user.display_name = "TestUser"
-        inter.component.custom_id = "attempt_upgrade:gathering"
+        inter.component.custom_id = "attempt_upgrade:gathering:risky:1"
         inter.response.defer = AsyncMock()
         inter.edit_original_response = AsyncMock()
         return inter

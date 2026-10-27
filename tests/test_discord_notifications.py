@@ -579,7 +579,7 @@ class TestGearUpgradeActionDispatch(DatabaseTestCase):
         inter = SimpleNamespace(
             guild_id=int(ALL_TEST_ENV["DISCORD_GUILD_ID"]),
             user=SimpleNamespace(id=123, display_name="Alice"),
-            component=SimpleNamespace(custom_id="attempt_upgrade:gathering"),
+            component=SimpleNamespace(custom_id="attempt_upgrade:gathering:normal:1"),
             response=SimpleNamespace(defer=AsyncMock()),
         )
         result = {
@@ -611,7 +611,7 @@ class TestGearUpgradeActionDispatch(DatabaseTestCase):
         inter = SimpleNamespace(
             guild_id=int(ALL_TEST_ENV["DISCORD_GUILD_ID"]),
             user=SimpleNamespace(id=123, display_name="Bob"),
-            component=SimpleNamespace(custom_id="attempt_upgrade:combat"),
+            component=SimpleNamespace(custom_id="attempt_upgrade:combat:normal:1"),
             response=SimpleNamespace(defer=AsyncMock()),
         )
         result = {
@@ -636,6 +636,130 @@ class TestGearUpgradeActionDispatch(DatabaseTestCase):
         self.assertEqual(event["current_level"], 1)
         self.assertEqual(event["target_level"], 2)
         self.assertEqual(event["failure_count"], 3)
+
+
+class TestGearUpgradeBatchExecution(DatabaseTestCase):
+    def _inter(self, custom_id):
+        return SimpleNamespace(
+            guild_id=int(ALL_TEST_ENV["DISCORD_GUILD_ID"]),
+            user=SimpleNamespace(id=123, display_name="Alice"),
+            component=SimpleNamespace(custom_id=custom_id),
+            response=SimpleNamespace(defer=AsyncMock()),
+        )
+
+    @staticmethod
+    def _res(success, level=1):
+        return {
+            "success": success, "new_level": level + 1 if success else level, "current_level": level,
+            "target_level": level + 1, "rate": 0.5, "pity_before": 2, "pity_after": 0 if success else 3,
+            "mode": "normal",
+        }
+
+    async def _run(self, custom_id, side_effect):
+        from cogs.actions import ActionsCog
+
+        cog = ActionsCog(bot=object())
+        manager = AsyncMock(side_effect=side_effect)
+        with patch("cogs.actions.gear_manager.attempt_upgrade", new=manager), \
+             patch.object(cog, "_render_gear", new=AsyncMock()) as render, \
+             patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as dispatch:
+            await cog.on_button_click(self._inter(custom_id))
+        return manager, render, dispatch
+
+    async def test_count_n_stops_after_n_attempts(self):
+        manager, _, dispatch = await self._run(
+            "attempt_upgrade:gathering:normal:5", [self._res(True)] * 10
+        )
+        self.assertEqual(manager.await_count, 5)
+        dispatch.assert_called_once()
+        event = dispatch.call_args.args[1][0]
+        self.assertEqual(event["type"], "gear_batch")
+        self.assertEqual(len(event["results"]), 5)
+
+    async def test_failed_upgrade_does_not_stop_loop(self):
+        manager, _, dispatch = await self._run(
+            "attempt_upgrade:gathering:normal:5", [self._res(False)] * 5
+        )
+        self.assertEqual(manager.await_count, 5)
+        results = dispatch.call_args.args[1][0]["results"]
+        self.assertEqual([r["success"] for r in results], [False] * 5)
+        self.assertEqual(results[0]["failure_count"], 3)
+
+    async def test_inf_stops_when_precondition_fails(self):
+        manager, render, dispatch = await self._run(
+            "attempt_upgrade:gathering:normal:inf",
+            [self._res(True), self._res(False), ValueError("Insufficient AP")],
+        )
+        self.assertEqual(manager.await_count, 3)
+        event = dispatch.call_args.args[1][0]
+        self.assertEqual(event["type"], "gear_batch")
+        self.assertEqual(len(event["results"]), 2)
+        shown = render.call_args.kwargs["result"]
+        self.assertNotIn("error", shown)
+        self.assertFalse(shown["success"])
+        self.assertEqual(render.call_args.kwargs["count"], "inf")
+        self.assertEqual(render.call_args.kwargs["mode"], "normal")
+
+    async def test_mid_loop_non_value_error_keeps_prior_results(self):
+        manager, render, dispatch = await self._run(
+            "attempt_upgrade:gathering:risky:20",
+            [self._res(True), self._res(True, 2), RuntimeError("database is locked")],
+        )
+        self.assertEqual(manager.await_count, 3)
+        dispatch.assert_called_once()
+        event = dispatch.call_args.args[1][0]
+        self.assertEqual(event["type"], "gear_batch")
+        self.assertEqual(event["mode"], "risky")
+        self.assertEqual(len(event["results"]), 2)
+        self.assertNotIn("error", render.call_args.kwargs["result"])
+
+    async def test_first_attempt_raising_shows_error_and_sends_no_notification(self):
+        manager, render, dispatch = await self._run(
+            "attempt_upgrade:gathering:normal:10", [ValueError("Insufficient AP")]
+        )
+        self.assertEqual(manager.await_count, 1)
+        dispatch.assert_not_called()
+        self.assertEqual(render.call_args.kwargs["result"]["error"], "Insufficient AP")
+
+    async def test_count_one_sends_single_line_event(self):
+        _, _, dispatch = await self._run("attempt_upgrade:gathering:normal:1", [self._res(False)])
+        dispatch.assert_called_once()
+        self.assertEqual(dispatch.call_args.args[1][0]["type"], "gear_fail")
+
+    async def test_old_and_malformed_ids_are_ignored(self):
+        for cid in (
+            "attempt_upgrade:gathering:normal",
+            "attempt_upgrade:gathering",
+            "attempt_upgrade:gathering:normal:none",
+            "attempt_upgrade:gathering:none:5",
+            "attempt_upgrade:gathering:normal:7",
+        ):
+            manager, render, dispatch = await self._run(cid, [self._res(True)])
+            manager.assert_not_awaited()
+            render.assert_not_awaited()
+            dispatch.assert_not_called()
+
+    async def test_selects_preserve_the_other_selection(self):
+        from cogs.actions import ActionsCog
+
+        cog = ActionsCog(bot=object())
+        cases = (
+            ("upgrade_mode_select:gathering:10", "risky", {"mode": "risky", "count": "10"}),
+            ("upgrade_mode_select:gathering:none", "risky", {"mode": "risky", "count": None}),
+            ("upgrade_count_select:gathering:buffer", "20", {"mode": "buffer", "count": "20"}),
+            ("upgrade_count_select:gathering:none", "inf", {"mode": None, "count": "inf"}),
+        )
+        for cid, value, expected in cases:
+            inter = SimpleNamespace(
+                guild_id=int(ALL_TEST_ENV["DISCORD_GUILD_ID"]),
+                user=SimpleNamespace(id=123),
+                component=SimpleNamespace(custom_id=cid),
+                values=[value],
+                response=SimpleNamespace(defer=AsyncMock()),
+            )
+            with patch.object(cog, "_render_gear", new=AsyncMock()) as render:
+                await cog.on_dropdown(inter)
+            render.assert_awaited_once_with(inter, "gathering", **expected)
 
 
 class TestDashboardUpdate(DatabaseTestCase):

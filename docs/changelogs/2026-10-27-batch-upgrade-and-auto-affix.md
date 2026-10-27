@@ -123,7 +123,7 @@ Task 1 (notification) -> Task 2 (gear count) -> Task 3 (auto affix scope)
   - AC: `gear_batch` 輸出標題 `{user} 的 {gear_name} {標準|墊檔|鐵齒}連續升級`，之後每次結果一行，格式見 `docs/discord/notification.md`「工具連續強化」。
   - AC: `affix_auto_batch` 輸出標題 `{user} 的 {gear_name} 自動抽取所有空格`，之後每格一行，格式見「詞條自動抽取所有空格」。
   - AC: `dispatch_events` 遇到超過 2000 字元的文字時依行切成多則送出，每則不超過 2000 字元，行內容與順序不變；不超過時只送一則。
-- [ ] Task 2: 工具強化執行次數（`src/cogs/ui_renderer.py`、`src/cogs/actions.py`；tests: `tests/test_discord_commands.py`、`tests/test_discord_notifications.py`）
+- [x] Task 2: 工具強化執行次數（`src/cogs/ui_renderer.py`、`src/cogs/actions.py`；tests: `tests/test_discord_commands.py`、`tests/test_discord_notifications.py`）
   - AC: 工具強化子選單有 4 列：工具類型、強化模式、執行次數（1 / 5 / 10 / 20 / 無限，無預設選中）、按鈕列。custom_id 依 Architecture Decisions。
   - AC: 選模式保留次數、選次數保留模式。
   - AC: 次數 N 時最多呼叫 `attempt_upgrade` N 次；強化失敗不中斷；raise 任何例外時停止；`inf` 只在 raise 時停止。
