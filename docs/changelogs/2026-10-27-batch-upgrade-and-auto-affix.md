@@ -130,7 +130,7 @@ Task 1 (notification) -> Task 2 (gear count) -> Task 3 (auto affix scope)
   - AC: 次數 1 發送一個既有 `gear_success`/`gear_fail` 事件；其他次數且至少一次成功執行時發送一個 `gear_batch` 事件，包含每次結果。
   - AC: 子選單重繪時保留模式與次數。結果區顯示最後一次成功執行的結果；第一次就 raise 時顯示錯誤。
   - AC: `tests/` 內所有使用 `attempt_upgrade:`、`upgrade_mode_select:` 舊格式的測試改用新格式；舊格式只出現在驗證「舊 ID 被忽略」的測試中。檢查：`grep -rn "attempt_upgrade:\|upgrade_mode_select:" tests/` 的每個命中都符合新格式或屬於上述測試。
-- [ ] Task 3: 自動抽取目標效果合併與所有空格（`src/cogs/ui_renderer.py`、`src/cogs/actions.py`；tests: `tests/test_discord_commands.py`）
+- [x] Task 3: 自動抽取目標效果合併與所有空格（`src/cogs/ui_renderer.py`、`src/cogs/actions.py`；tests: `tests/test_discord_commands.py`）
   - AC: 自動抽取設定畫面固定 5 列：目標效果（任意 + 5 種效果）、目標數值、花費素材、抽取數量（僅一格 / 所有空格）、按鈕列。
   - AC: Embed 顯示目標效果與抽取數量，不再顯示目標種類。
   - AC: 確認 ID 為 8 段新格式，長度不超過 100；設定未完成（含抽取數量）時停用。

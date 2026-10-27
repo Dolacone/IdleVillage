@@ -33,31 +33,31 @@ from managers import affix_manager, auto_tool_manager, building_manager, gear_ma
 _OWN_BUTTONS = frozenset({"burst_execute", "open_gear_upgrade", "open_trial_start", "open_auto_tool", "back_to_main"})
 _OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:", "clear_affix:", "sacrifice_material:", "open_affix_mgmt:", "affix_extract:", "affix_clear:", "back_to_gear:", "auto_tool_confirm:", "trial_target_page:", "open_auto_affix:", "back_to_affix:", "auto_affix_run:")
 _OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "gear_type_select", "affix_gear_select", "auto_tool_type_select", "trial_target_select"})
-_OWN_DROPDOWN_PREFIXES = ("upgrade_mode_select:", "upgrade_count_select:", "affix_slot_select:", "auto_tool_target_select:", "auto_tool_add_select:", "auto_tool_sub_select:", "auto_affix_kind:", "auto_affix_effect:", "auto_affix_value:", "auto_affix_material:")
+_OWN_DROPDOWN_PREFIXES = ("upgrade_mode_select:", "upgrade_count_select:", "affix_slot_select:", "auto_tool_target_select:", "auto_tool_add_select:", "auto_tool_sub_select:", "auto_affix_target:", "auto_affix_value:", "auto_affix_material:", "auto_affix_scope:")
 _OWN_MODAL_PREFIXES = ("modal_sacrifice:",)
 _VALID_GEAR_TYPES = frozenset({"gathering", "building", "combat", "research"})
 _VALID_ACTIONS = frozenset({"gathering", "building", "combat", "research"})
 _VALID_UPGRADE_MODES = frozenset(gear_manager.UPGRADE_MODES)
 _VALID_UPGRADE_COUNTS = frozenset({"1", "5", "10", "20", "inf"})
-_VALID_AUTO_AFFIX_MODES = frozenset({"none", "any", "specific"})
 _VALID_AFFIX_TYPES = frozenset(affix_manager.AFFIX_TYPES)
 _VALID_AUTO_AFFIX_VALUES = frozenset({"1", "2", "3", "4", "5"})
 _VALID_AUTO_AFFIX_SOURCES = frozenset({"none", "tool", "universal"})
+_VALID_AUTO_AFFIX_SCOPES = frozenset({"none", "one", "all"})
 
 
 def _parse_auto_affix_state(parts: list[str]) -> tuple[str, str, str, str, str] | None:
     if len(parts) != 6:
         return None
-    gear, mode, effect, value, source = parts[1:]
-    if gear not in (*_VALID_GEAR_TYPES, "none") or mode not in _VALID_AUTO_AFFIX_MODES:
+    gear, target, value, source, scope = parts[1:]
+    if gear not in (*_VALID_GEAR_TYPES, "none") or scope not in _VALID_AUTO_AFFIX_SCOPES:
         return None
-    if effect != "none" and effect not in _VALID_AFFIX_TYPES:
+    if target not in ("none", "any") and target not in _VALID_AFFIX_TYPES:
         return None
     if value != "none" and value not in _VALID_AUTO_AFFIX_VALUES:
         return None
     if source not in _VALID_AUTO_AFFIX_SOURCES:
         return None
-    return gear, mode, effect, value, source
+    return gear, target, value, source, scope
 
 
 def _is_own_button(cid: str) -> bool:
@@ -273,9 +273,9 @@ class ActionsCog(commands.Cog):
         await inter.edit_original_response(embed=embed, components=components)
 
     async def _render_auto_affix(
-        self, inter, gear_type: str | None, *, target_mode: str | None = None,
-        target_affix_type: str | None = None, min_value: int | None = None,
-        material_source: str | None = None, error: str | None = None,
+        self, inter, gear_type: str | None, *, target_affix_type: str | None = None,
+        min_value: int | None = None, material_source: str | None = None,
+        scope: str | None = None, error: str | None = None,
     ) -> None:
         user_id = str(inter.user.id)
         materials = universal_materials = max_slots = 0
@@ -289,13 +289,13 @@ class ActionsCog(commands.Cog):
                 universal_materials = await player_manager.get_universal_material(db, user_id)
         embed = build_auto_affix_embed(
             gear_type, materials, universal_materials, max_slots, affixes,
-            target_mode, target_affix_type, min_value, material_source, error,
+            target_affix_type, min_value, material_source, error, scope,
         )
         confirmation_token = secrets.token_urlsafe(6)
         components = build_auto_affix_components(
             gear_type, materials, universal_materials, max_slots, affixes,
-            target_mode, target_affix_type, min_value, material_source, error,
-            confirmation_token=confirmation_token,
+            target_affix_type, min_value, material_source, error,
+            confirmation_token=confirmation_token, scope=scope,
         )
         user_id = str(inter.user.id)
         self._auto_affix_confirmations[user_id] = next(
@@ -678,51 +678,82 @@ class ActionsCog(commands.Cog):
                 await self._render_auto_affix(inter, gear, error="⚠️ 設定無效，請重新選擇。")
                 return
             expected_slot = int(expected_slot_text)
-            gear, mode, effect, value, source = state
+            gear, target, value, source, scope = state
             complete = (
-                gear in _VALID_GEAR_TYPES and mode in {"any", "specific"}
+                gear in _VALID_GEAR_TYPES and (target == "any" or target in _VALID_AFFIX_TYPES)
                 and value in _VALID_AUTO_AFFIX_VALUES and source in {"tool", "universal"}
-                and (mode == "any" or effect in _VALID_AFFIX_TYPES)
+                and scope in {"one", "all"}
             )
             if not complete:
                 await inter.response.defer()
                 await self._render_auto_affix(
                     inter, gear if gear in _VALID_GEAR_TYPES else None,
-                    target_mode=mode if mode != "none" else None,
-                    target_affix_type=effect if effect != "none" else None,
+                    target_affix_type=target if target != "none" else None,
                     min_value=int(value) if value != "none" else None,
                     material_source=source if source != "none" else None,
+                    scope=scope if scope != "none" else None,
                     error="⚠️ 設定未完成，請重新選擇。",
                 )
                 return
             await inter.response.defer()
-            now = datetime.now(timezone.utc)
-            result = None
+            committed: list[dict] = []
             error = None
-            async with get_connection() as db:
+            next_slot: int | None = expected_slot
+            while True:
                 try:
-                    gear_level = await player_manager.get_gear_level(db, user_id, gear)
-                    result = await affix_manager.auto_extract_affix(
-                        db, user_id, gear, gear_level, now,
-                        target_affix_type=effect if mode == "specific" else None,
-                        min_value=int(value), material_source=source, expected_slot=expected_slot,
-                    )
-                    await db.commit()
+                    async with get_connection() as db:
+                        try:
+                            gear_level = await player_manager.get_gear_level(db, user_id, gear)
+                            if next_slot is None:
+                                slots = affix_manager.slot_count(gear_level)
+                                filled = {a["slot_index"] for a in await affix_manager.get_affixes(db, user_id, gear)}
+                                next_slot = next((i for i in range(slots) if i not in filled), None)
+                                if next_slot is None:
+                                    break
+                            result = await affix_manager.auto_extract_affix(
+                                db, user_id, gear, gear_level, datetime.now(timezone.utc),
+                                target_affix_type=target if target != "any" else None,
+                                min_value=int(value), material_source=source, expected_slot=next_slot,
+                            )
+                            await db.commit()
+                        except Exception:
+                            await db.rollback()
+                            raise
                 except Exception:
-                    error = "⚠️ 抽取失敗，素材與詞條未變更。"
-                    await db.rollback()
+                    if not committed:
+                        error = "⚠️ 抽取失敗，素材與詞條未變更。"
+                    break
+                committed.append(result)
+                if scope == "one" or not result.get("affix"):
+                    break
+                next_slot = None
             if error:
                 await self._render_auto_affix(
-                    inter, gear, target_mode=mode, target_affix_type=effect if effect != "none" else None,
-                    min_value=int(value), material_source=source, error=error,
+                    inter, gear, target_affix_type=target, min_value=int(value),
+                    material_source=source, scope=scope, error=error,
                 )
                 return
-            await notification.dispatch_events(self.bot, [{
-                "type": "affix_auto_extracted",
-                "user_display_name": inter.user.display_name,
-                "gear_type": gear,
-                **result,
-            }])
+            if committed:
+                if scope == "one":
+                    event = {
+                        "type": "affix_auto_extracted",
+                        "user_display_name": inter.user.display_name,
+                        "gear_type": gear,
+                        **committed[0],
+                    }
+                else:
+                    event = {
+                        "type": "affix_auto_batch",
+                        "user_display_name": inter.user.display_name,
+                        "gear_type": gear,
+                        "material_source": source,
+                        "results": [
+                            {"affix": r.get("affix"), "attempts": r.get("attempts", 0),
+                             "material_spent": r.get("material_spent", 0)}
+                            for r in committed
+                        ],
+                    }
+                await notification.dispatch_events(self.bot, [event])
             await self._render_affix(inter, gear)
 
         elif cid.startswith("affix_extract:"):
@@ -908,33 +939,33 @@ class ActionsCog(commands.Cog):
             await self._render_auto_tool(
                 inter, selected_tool=tool_type, selected_target=target, selected_delta=delta
             )
-        elif cid.startswith(("auto_affix_kind:", "auto_affix_effect:", "auto_affix_value:", "auto_affix_material:")):
+        elif cid.startswith(("auto_affix_target:", "auto_affix_value:", "auto_affix_material:", "auto_affix_scope:")):
             parts = cid.split(":")
-            state = _parse_auto_affix_state([parts[0], *parts[1:]])
+            state = _parse_auto_affix_state(parts)
             prefix = parts[0]
             valid_values = {
-                "auto_affix_kind": {"any", "specific"},
-                "auto_affix_effect": _VALID_AFFIX_TYPES,
+                "auto_affix_target": {"any", *_VALID_AFFIX_TYPES},
                 "auto_affix_value": _VALID_AUTO_AFFIX_VALUES,
                 "auto_affix_material": {"tool", "universal"},
+                "auto_affix_scope": {"one", "all"},
             }
             if state is None or value not in valid_values[prefix]:
                 return
-            gear, mode, effect, threshold, source = state
-            if prefix == "auto_affix_kind":
-                mode = value
-            elif prefix == "auto_affix_effect":
-                effect = value
+            gear, target, threshold, source, scope = state
+            if prefix == "auto_affix_target":
+                target = value
             elif prefix == "auto_affix_value":
                 threshold = value
-            else:
+            elif prefix == "auto_affix_material":
                 source = value
+            else:
+                scope = value
             await self._render_auto_affix(
                 inter, gear if gear != "none" else None,
-                target_mode=mode if mode != "none" else None,
-                target_affix_type=effect if effect != "none" else None,
+                target_affix_type=target if target != "none" else None,
                 min_value=int(threshold) if threshold != "none" else None,
                 material_source=source if source != "none" else None,
+                scope=scope if scope != "none" else None,
             )
         elif cid == "trial_target_select":
             try:

@@ -1638,89 +1638,115 @@ class TestAutoAffixComponents(unittest.TestCase):
             button = next(c for row in rows for c in row.children if c.custom_id.startswith("open_auto_affix:"))
             self.assertEqual(button.disabled, disabled)
 
+    @staticmethod
+    def _confirm(rows):
+        return next(c for row in rows for c in row.children if c.custom_id.startswith("auto_affix_run:"))
+
     def test_settings_require_complete_choices_and_selected_balance(self):
         from cogs.ui_renderer import build_auto_affix_components
-        common = ("research", 0, 0, 1, [])
-        rows = build_auto_affix_components(*common)
-        confirm = next(c for row in rows for c in row.children if c.custom_id.startswith("auto_affix_run:"))
+        rows = build_auto_affix_components("research", 0, 0, 1, [])
+        confirm = self._confirm(rows)
         self.assertTrue(confirm.disabled)
         self.assertEqual(confirm.custom_id.rsplit(":", 1)[1], "none")
-        rows = build_auto_affix_components("research", 1, 0, 1, [], "any", None, 1, "tool", confirmation_token="abcdefgh")
-        confirm = next(c for row in rows for c in row.children if c.custom_id.startswith("auto_affix_run:"))
-        self.assertFalse(confirm.disabled)
-        rows = build_auto_affix_components("research", 99, 4, 1, [], "any", None, 1, "universal", confirmation_token="abcdefgh")
-        confirm = next(c for row in rows for c in row.children if c.custom_id.startswith("auto_affix_run:"))
-        self.assertTrue(confirm.disabled)
-        rows = build_auto_affix_components("research", 0, 5, 1, [], "specific", "efficiency", 5, "universal", confirmation_token="abcdefgh")
-        confirm = next(c for row in rows for c in row.children if c.custom_id.startswith("auto_affix_run:"))
-        self.assertFalse(confirm.disabled)
+        kw = dict(confirmation_token="abcdefgh")
+        self.assertFalse(self._confirm(build_auto_affix_components("research", 1, 0, 1, [], "any", 1, "tool", scope="one", **kw)).disabled)
+        self.assertTrue(self._confirm(build_auto_affix_components("research", 99, 4, 1, [], "any", 1, "universal", scope="one", **kw)).disabled)
+        self.assertFalse(self._confirm(build_auto_affix_components("research", 0, 5, 1, [], "efficiency", 5, "universal", scope="all", **kw)).disabled)
 
-    def test_choices_and_selected_state_are_rendered_in_custom_ids(self):
+    def test_confirm_disabled_when_any_single_setting_is_missing(self):
+        from cogs.ui_renderer import build_auto_affix_components
+        full = dict(target_affix_type="any", min_value=1, material_source="tool", scope="all")
+        self.assertFalse(self._confirm(build_auto_affix_components("research", 5, 0, 1, [], confirmation_token="abcdefgh", **full)).disabled)
+        for missing in full:
+            settings = {**full, missing: None}
+            rows = build_auto_affix_components("research", 5, 0, 1, [], confirmation_token="abcdefgh", **settings)
+            self.assertTrue(self._confirm(rows).disabled, missing)
+
+    def test_layout_is_five_rows_in_order_with_no_defaults(self):
+        import disnake
         from cogs.ui_renderer import build_auto_affix_components, AFFIX_TYPE_LABELS
-        rows = build_auto_affix_components("research", 3, 25, 2, [], "specific", "cycle_time_reduce", 4, "universal", confirmation_token="abcdefgh")
+        rows = build_auto_affix_components("research", 3, 25, 2, [], confirmation_token="abcdefgh")
         self.assertEqual(len(rows), 5)
-        selects = [row.children[0] for row in rows if isinstance(row.children[0], __import__("disnake").ui.StringSelect)]
-        self.assertEqual([o.label for o in selects[0].options], ["任意", "特定效果"])
-        self.assertEqual([o.label for o in selects[1].options], list(AFFIX_TYPE_LABELS.values()))
-        self.assertEqual(
-            [o.label for o in selects[1].options],
-            ["行動效率", "素材掉落", "強化成功", "素材退還", "週期縮短"],
-        )
-        self.assertEqual([o.label for o in selects[2].options], ["1+", "2+", "3+", "4+", "5"])
-        self.assertEqual([o.label for o in selects[3].options], ["工具素材", "萬能素材"])
-        self.assertTrue(selects[0].options[1].default)
-        self.assertTrue(selects[1].options[-1].default)
-        self.assertTrue(selects[2].options[3].default)
+        selects = [row.children[0] for row in rows[:4]]
+        self.assertTrue(all(isinstance(c, disnake.ui.StringSelect) for c in selects))
+        self.assertEqual([c.custom_id.split(":")[0] for c in selects],
+                         ["auto_affix_target", "auto_affix_value", "auto_affix_material", "auto_affix_scope"])
+        self.assertEqual([o.label for o in selects[0].options], ["任意", *AFFIX_TYPE_LABELS.values()])
+        self.assertEqual([o.label for o in selects[1].options], ["1+", "2+", "3+", "4+", "5"])
+        self.assertEqual([o.label for o in selects[2].options], ["工具素材", "萬能素材"])
+        self.assertEqual([o.label for o in selects[3].options], ["僅一格", "所有空格"])
+        self.assertFalse(any(o.default for c in selects for o in c.options))
+        self.assertTrue(all(isinstance(c, disnake.ui.Button) for c in rows[4].children))
+
+    def test_selected_state_is_rendered_in_custom_ids_and_defaults(self):
+        from cogs.ui_renderer import build_auto_affix_components
+        rows = build_auto_affix_components("research", 3, 25, 2, [], "cycle_time_reduce", 4, "universal",
+                                           confirmation_token="abcdefgh", scope="all")
+        selects = [row.children[0] for row in rows[:4]]
+        self.assertTrue(selects[0].options[-1].default)
+        self.assertTrue(selects[1].options[3].default)
+        self.assertTrue(selects[2].options[1].default)
         self.assertTrue(selects[3].options[1].default)
-        selector_ids = [c.custom_id for row in rows for c in row.children if c.custom_id.startswith("auto_affix_") and not c.custom_id.startswith("auto_affix_run:")]
-        self.assertTrue(all(cid.endswith(":research:specific:cycle_time_reduce:4:universal") for cid in selector_ids))
-        confirm = next(c for row in rows for c in row.children if c.custom_id.startswith("auto_affix_run:"))
-        self.assertTrue(confirm.custom_id.endswith(":research:specific:cycle_time_reduce:4:universal:0:abcdefgh"))
+        suffix = ":research:cycle_time_reduce:4:universal:all"
+        self.assertTrue(all(c.custom_id.endswith(suffix) for c in selects))
+        self.assertTrue(self._confirm(rows).custom_id.endswith(suffix + ":0:abcdefgh"))
 
     def test_confirm_needs_real_empty_slot_and_valid_gear(self):
         from cogs.ui_renderer import build_auto_affix_components
-        settings = ("any", None, 1, "tool")
+        settings = dict(target_affix_type="any", min_value=1, material_source="tool", scope="one", confirmation_token="abcdefgh")
         for gear, affixes, slots in ((None, [], 1), ("invalid", [], 1),
                                      ("research", [{"slot_index": 0}], 1)):
-            rows = build_auto_affix_components(gear, 1, 0, slots, affixes, *settings, confirmation_token="abcdefgh")
-            confirm = next(c for row in rows for c in row.children if c.custom_id.startswith("auto_affix_run:"))
-            self.assertTrue(confirm.disabled)
-        rows = build_auto_affix_components("research", 1, 0, 1, [{"slot_index": 8}], *settings, confirmation_token="abcdefgh")
-        confirm = next(c for row in rows for c in row.children if c.custom_id.startswith("auto_affix_run:"))
-        self.assertFalse(confirm.disabled)
+            rows = build_auto_affix_components(gear, 1, 0, slots, affixes, **settings)
+            self.assertTrue(self._confirm(rows).disabled)
+        rows = build_auto_affix_components("research", 1, 0, 1, [{"slot_index": 8}], **settings)
+        self.assertFalse(self._confirm(rows).disabled)
+        rows = build_auto_affix_components("research", 1, 0, 1, [], **{**settings, "confirmation_token": "bad"})
+        self.assertTrue(self._confirm(rows).disabled)
 
-    def test_auto_affix_embed_shows_fifth_threshold_and_cost(self):
+    def test_auto_affix_embed_shows_target_threshold_cost_and_scope(self):
         from cogs.ui_renderer import build_auto_affix_embed
-        embed = build_auto_affix_embed("research", 1, 5, 1, [], "any", None, 5, "universal")
+        embed = build_auto_affix_embed("research", 1, 5, 1, [])
+        for line in ("目標效果：未選擇", "目標數值：未選擇", "花費素材：未選擇", "抽取數量：未選擇"):
+            self.assertIn(line, embed.description)
+        self.assertNotIn("種類", embed.description)
+        embed = build_auto_affix_embed("research", 1, 5, 1, [], "any", 5, "universal", scope="all")
+        self.assertIn("目標效果：任意", embed.description)
         self.assertIn("目標數值：5", embed.description)
+        self.assertIn("抽取數量：所有空格", embed.description)
         self.assertIn("每次抽選：1 工具素材或 5 萬能素材", embed.description)
+        embed = build_auto_affix_embed("research", 1, 5, 1, [], "efficiency", 2, "tool", scope="one")
+        self.assertIn("目標效果：行動效率", embed.description)
+        self.assertIn("抽取數量：僅一格", embed.description)
 
     def test_custom_ids_stay_within_limit_for_all_setting_combinations(self):
         from itertools import product
-        from cogs.ui_renderer import build_auto_affix_components
-        for mode, effect, value, source in product((None, "any", "specific"), (None, "upgrade_material_refund"),
-                                                    (None, 1, 2, 3, 4, 5), (None, "tool", "universal")):
-            for candidate_effect in ((None, "upgrade_material_refund") if mode == "specific" else (None,)):
-                rows = build_auto_affix_components("research", 999, 999, 3, [], mode,
-                                                   candidate_effect, value, source, confirmation_token="abcdefgh")
-                self.assertLessEqual(len(rows), 5)
-                for row in rows:
-                    for component in row.children:
-                        self.assertLessEqual(len(component.custom_id), 100)
+        from cogs.ui_renderer import build_auto_affix_components, AFFIX_TYPE_LABELS
+        longest = 0
+        for target, value, source, scope in product((None, "any", *AFFIX_TYPE_LABELS), (None, 1, 2, 3, 4, 5),
+                                                    (None, "tool", "universal"), (None, "one", "all")):
+            rows = build_auto_affix_components("research", 999, 999, 3, [], target, value, source,
+                                               confirmation_token="abcdefgh", scope=scope)
+            self.assertEqual(len(rows), 5)
+            for row in rows:
+                for component in row.children:
+                    longest = max(longest, len(component.custom_id))
+                    self.assertLessEqual(len(component.custom_id), 100)
+        longest_id = "auto_affix_run:research:upgrade_material_refund:5:universal:all:2147483647:abcdefgh"
+        self.assertLessEqual(len(longest_id), 100)
+        self.assertGreater(longest, 0)
 
-    def test_confirmation_binds_first_empty_slot_and_stays_within_limit(self):
+    def test_confirmation_binds_first_empty_slot(self):
         from cogs.ui_renderer import build_auto_affix_components
-        settings = ("specific", "upgrade_material_refund", 5, "universal")
-        rows = build_auto_affix_components("research", 0, 5, 2, [{"slot_index": 0}], *settings, confirmation_token="abcdefgh")
-        confirm = next(c for row in rows for c in row.children if c.custom_id.startswith("auto_affix_run:"))
-        self.assertEqual(confirm.custom_id, "auto_affix_run:research:specific:upgrade_material_refund:5:universal:1:abcdefgh")
+        settings = dict(target_affix_type="upgrade_material_refund", min_value=5, material_source="universal",
+                        scope="all", confirmation_token="abcdefgh")
+        rows = build_auto_affix_components("research", 0, 5, 2, [{"slot_index": 0}], **settings)
+        confirm = self._confirm(rows)
+        self.assertEqual(confirm.custom_id, "auto_affix_run:research:upgrade_material_refund:5:universal:all:1:abcdefgh")
         self.assertFalse(confirm.disabled)
-        rows = build_auto_affix_components("research", 0, 5, 2, [{"slot_index": 0}, {"slot_index": 1}], *settings, confirmation_token="abcdefgh")
-        confirm = next(c for row in rows for c in row.children if c.custom_id.startswith("auto_affix_run:"))
+        rows = build_auto_affix_components("research", 0, 5, 2, [{"slot_index": 0}, {"slot_index": 1}], **settings)
+        confirm = self._confirm(rows)
         self.assertTrue(confirm.disabled)
         self.assertTrue(confirm.custom_id.endswith(":none:abcdefgh"))
-        longest_id = "auto_affix_run:research:specific:upgrade_material_refund:5:universal:2147483647:abcdefgh"
-        self.assertLessEqual(len(longest_id), 100)
 
 
 class TestAffixRouteRegistration(unittest.TestCase):
@@ -1791,12 +1817,12 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
             for component in row.children if component.custom_id.startswith(prefix)
         )
 
-    async def _render_confirm(self, cog, *, mode="any", effect=None, threshold=1, source="tool", gear="research"):
+    async def _render_confirm(self, cog, *, target="any", threshold=1, source="tool", scope="one", gear="research"):
         inter = self._inter(f"open_auto_affix:{gear}")
         await cog.on_button_click(inter)
         await cog._render_auto_affix(
-            inter, gear, target_mode=mode, target_affix_type=effect,
-            min_value=threshold, material_source=source,
+            inter, gear, target_affix_type=target,
+            min_value=threshold, material_source=source, scope=scope,
         )
         custom_id = next(
             component.custom_id
@@ -1814,14 +1840,14 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         bot.get_channel.return_value.send = sent
         cog = ActionsCog(bot)
         state = "research:none:none:none:none"
-        await self._select(cog, "auto_affix_kind", state, "specific")
-        state = "research:specific:none:none:none"
-        await self._select(cog, "auto_affix_effect", state, "cycle_time_reduce")
-        state = "research:specific:cycle_time_reduce:none:none"
+        await self._select(cog, "auto_affix_target", state, "cycle_time_reduce")
+        state = "research:cycle_time_reduce:none:none:none"
         await self._select(cog, "auto_affix_value", state, "4")
-        state = "research:specific:cycle_time_reduce:4:none"
-        last = await self._select(cog, "auto_affix_material", state, "tool")
-        self.assertIn("research:specific:cycle_time_reduce:4:tool", last.edit_original_response.call_args.kwargs["components"][0].children[0].custom_id)
+        state = "research:cycle_time_reduce:4:none:none"
+        await self._select(cog, "auto_affix_material", state, "tool")
+        state = "research:cycle_time_reduce:4:tool:none"
+        last = await self._select(cog, "auto_affix_scope", state, "one")
+        self.assertIn("research:cycle_time_reduce:4:tool:one", last.edit_original_response.call_args.kwargs["components"][0].children[0].custom_id)
         confirm_id = next(
             component.custom_id for row in last.edit_original_response.call_args.kwargs["components"]
             for component in row.children if component.custom_id.startswith("auto_affix_run:")
@@ -1838,7 +1864,7 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
             self.assertEqual(await (await db.execute("SELECT materials_research FROM players WHERE user_id='12345'")).fetchone(), (2,))
             self.assertEqual(await (await db.execute("SELECT slot_index, affix_type, value FROM gear_affixes WHERE user_id='12345'")).fetchone(), (0, "cycle_time_reduce", 4))
 
-    async def test_any_mode_ignores_stale_effect_and_stops_at_first_match(self):
+    async def test_any_target_stops_at_first_match(self):
         from cogs.actions import ActionsCog
         from database.schema import get_connection
         await self._player(tool=5)
@@ -1846,7 +1872,7 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         bot = MagicMock()
         bot.get_channel.return_value.send = sent
         cog = ActionsCog(bot)
-        cid, _ = await self._render_confirm(cog, mode="any", effect="upgrade_success", threshold=3)
+        cid, _ = await self._render_confirm(cog, target="any", threshold=3)
         with patch("cogs.actions.affix_manager.random.choice", side_effect=["efficiency", "cycle_time_reduce"]), patch(
             "cogs.actions.affix_manager.random.randint", side_effect=[1, 3]
         ):
@@ -1863,9 +1889,9 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         sent = AsyncMock()
         bot.get_channel.return_value.send = sent
         cog = ActionsCog(bot)
-        for cid in ("auto_affix_run:research:none:none:none:none:0", "auto_affix_run:research:any:bogus:1:tool:0", "auto_affix_run:research:any:none:1:tool:0:extra:0", "auto_affix_run:research:any:none:1:tool", "auto_affix_run:research:any:none:1:tool:-1"):
+        for cid in ("auto_affix_run:research:none:none:none:none:none:0", "auto_affix_run:research:bogus:1:tool:one:0", "auto_affix_run:research:any:1:tool:one:0:extra:0", "auto_affix_run:research:any:1:tool:one", "auto_affix_run:research:any:1:tool:one:-1", "auto_affix_run:research:any:1:tool:bogus:0:abcdefgh"):
             await cog.on_button_click(self._inter(cid))
-        malformed_select = self._inter("auto_affix_value:research:any:none:1:tool")
+        malformed_select = self._inter("auto_affix_value:research:any:1:tool:one")
         malformed_select.values = []
         await cog.on_dropdown(malformed_select)
         self.assertEqual(sent.await_count, 0)
@@ -1888,14 +1914,14 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         self.assertEqual(await self.fetchone("SELECT materials_research, materials_universal FROM players WHERE user_id='12345'"), (8, 4))
         self.assertIsNone(await self.fetchone("SELECT * FROM gear_affixes WHERE user_id='12345'"))
 
-    async def test_specific_requires_both_effect_and_threshold(self):
+    async def test_specific_target_requires_both_effect_and_threshold(self):
         from cogs.actions import ActionsCog
         await self._player(tool=2)
         sent = AsyncMock()
         bot = MagicMock()
         bot.get_channel.return_value.send = sent
         cog = ActionsCog(bot)
-        cid, _ = await self._render_confirm(cog, mode="specific", effect="efficiency", threshold=2)
+        cid, _ = await self._render_confirm(cog, target="efficiency", threshold=2)
         with patch("cogs.actions.affix_manager.random.choice", side_effect=["efficiency", "upgrade_success"]), patch(
             "cogs.actions.affix_manager.random.randint", side_effect=[1, 5]
         ):
@@ -1935,7 +1961,7 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         bot.get_channel.return_value.send = sent
         cog = ActionsCog(bot)
         first_id, _ = await self._render_confirm(cog)
-        self.assertTrue(first_id.startswith("auto_affix_run:research:any:none:1:tool:0:"))
+        self.assertTrue(first_id.startswith("auto_affix_run:research:any:1:tool:one:0:"))
         token = first_id.rsplit(":", 1)[1]
         self.assertEqual(len(token), 8)
         self.assertTrue(all(character.isascii() and (character.isalnum() or character in "-_") for character in token))
@@ -1955,12 +1981,12 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
 
         reopened = self._inter("open_auto_affix:research")
         await cog.on_button_click(reopened)
-        await cog._render_auto_affix(reopened, "research", target_mode="any", min_value=1, material_source="tool")
+        await cog._render_auto_affix(reopened, "research", target_affix_type="any", min_value=1, material_source="tool", scope="one")
         second_id = next(
             component.custom_id for row in reopened.edit_original_response.call_args.kwargs["components"]
             for component in row.children if component.custom_id.startswith("auto_affix_run:")
         )
-        self.assertTrue(second_id.startswith("auto_affix_run:research:any:none:1:tool:1:"))
+        self.assertTrue(second_id.startswith("auto_affix_run:research:any:1:tool:one:1:"))
         await cog.on_button_click(self._inter(second_id))
         self.assertEqual(sent.await_count, 2)
         self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (2,))
@@ -2049,7 +2075,7 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         bot = MagicMock()
         bot.get_channel.return_value.send = sent
         cog = ActionsCog(bot)
-        cid, _ = await self._render_confirm(cog, mode="specific", effect="efficiency", threshold=5)
+        cid, _ = await self._render_confirm(cog, target="efficiency", threshold=5)
         with patch("cogs.actions.affix_manager.random.choice", return_value="upgrade_success"), patch(
             "cogs.actions.affix_manager.random.randint", return_value=5
         ):
@@ -2062,7 +2088,7 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (2,))
         self.assertEqual(sent.await_count, 1)
         self.assertIsNone(await self.fetchone("SELECT * FROM gear_affixes WHERE user_id='12345'"))
-        new_id, _ = await self._render_confirm(cog, mode="specific", effect="efficiency", threshold=5)
+        new_id, _ = await self._render_confirm(cog, target="efficiency", threshold=5)
         with patch("cogs.actions.affix_manager.random.choice", return_value="efficiency"), patch(
             "cogs.actions.affix_manager.random.randint", return_value=5
         ):
@@ -2114,8 +2140,8 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         bot.get_channel.return_value.send = sent
         cog = ActionsCog(bot)
         cid, page = await self._render_confirm(cog)
-        selector_id = self._component_id(page, "auto_affix_kind:")
-        selector = self._inter(selector_id, "specific")
+        selector_id = self._component_id(page, "auto_affix_target:")
+        selector = self._inter(selector_id, "efficiency")
         original_defer = selector.response.defer
 
         async def assert_consumed_before_defer(*args, **kwargs):
@@ -2186,7 +2212,7 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         other_page = self._inter("open_auto_affix:research")
         other_page.user.id = 67890
         await cog.on_button_click(other_page)
-        await cog._render_auto_affix(other_page, "research", target_mode="any", min_value=1, material_source="tool")
+        await cog._render_auto_affix(other_page, "research", target_affix_type="any", min_value=1, material_source="tool", scope="one")
         other_id = self._component_id(other_page, "auto_affix_run:")
 
         await cog.on_button_click(self._inter("back_to_affix:research"))
@@ -2218,7 +2244,7 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         other_user.user.id = 67890
         await cog.on_button_click(other_user)
         parts = current_id.split(":")
-        parts[4] = "2" if parts[4] == "1" else "1"
+        parts[3] = "2" if parts[3] == "1" else "1"
         await cog.on_button_click(self._inter(":".join(parts)))
         parts = current_id.split(":")
         parts[7] = "!!!!!!!!"
@@ -2232,24 +2258,155 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (1,))
         self.assertEqual(sent.await_count, 1)
 
-    async def test_kind_switch_round_trip_uses_rendered_dropdown_ids_and_retains_settings(self):
+    async def test_target_switch_round_trip_uses_rendered_dropdown_ids_and_retains_settings(self):
         from cogs.actions import ActionsCog
         await self._player(tool=0, universal=50)
         cog = ActionsCog(MagicMock())
         page = self._inter("open_auto_affix:research")
         await cog.on_button_click(page)
-        page = await self._select_id(cog, self._component_id(page, "auto_affix_kind:"), "specific")
-        page = await self._select_id(cog, self._component_id(page, "auto_affix_effect:"), "cycle_time_reduce")
+        page = await self._select_id(cog, self._component_id(page, "auto_affix_target:"), "cycle_time_reduce")
         page = await self._select_id(cog, self._component_id(page, "auto_affix_value:"), "4")
         page = await self._select_id(cog, self._component_id(page, "auto_affix_material:"), "universal")
-        page = await self._select_id(cog, self._component_id(page, "auto_affix_kind:"), "any")
-        self.assertIn("目標種類：任意", page.edit_original_response.call_args.kwargs["embed"].description)
-        page = await self._select_id(cog, self._component_id(page, "auto_affix_kind:"), "specific")
+        page = await self._select_id(cog, self._component_id(page, "auto_affix_scope:"), "all")
+        page = await self._select_id(cog, self._component_id(page, "auto_affix_target:"), "any")
+        description = page.edit_original_response.call_args.kwargs["embed"].description
+        self.assertIn("目標效果：任意", description)
+        self.assertIn("抽取數量：所有空格", description)
+        self.assertNotIn("種類", description)
         component_ids = [component.custom_id for row in page.edit_original_response.call_args.kwargs["components"] for component in row.children]
-        self.assertTrue(any(cid.startswith("auto_affix_effect:research:specific:cycle_time_reduce:4:universal") for cid in component_ids))
-        self.assertTrue(any(cid.startswith("auto_affix_value:research:specific:cycle_time_reduce:4:universal") for cid in component_ids))
-        self.assertTrue(any(cid.startswith("auto_affix_material:research:specific:cycle_time_reduce:4:universal") for cid in component_ids))
+        for prefix in ("auto_affix_target", "auto_affix_value", "auto_affix_material", "auto_affix_scope"):
+            self.assertTrue(any(cid.startswith(f"{prefix}:research:any:4:universal:all") for cid in component_ids), prefix)
         self.assertEqual(await self.fetchone("SELECT materials_research, materials_universal FROM players WHERE user_id='12345'"), (0, 50))
+
+    async def _scope_all_confirm(self, cog, *, threshold=1, source="tool"):
+        return await self._render_confirm(cog, target="any", threshold=threshold, source=source, scope="all")
+
+    async def test_scope_all_fills_every_empty_slot_with_same_conditions_and_one_batch_event(self):
+        from cogs.actions import ActionsCog
+        await self._player(tool=10, level=10)
+        sent = AsyncMock()
+        bot = MagicMock()
+        bot.get_channel.return_value.send = sent
+        cog = ActionsCog(bot)
+        slots = 3
+        cid, _ = await self._scope_all_confirm(cog, threshold=3)
+        self.assertTrue(cid.startswith("auto_affix_run:research:any:3:tool:all:0:"))
+        draws = iter(["efficiency", "cycle_time_reduce", "efficiency", "cycle_time_reduce"])
+        values = iter([1, 3, 5, 4])
+        with patch("cogs.actions.affix_manager.random.choice", side_effect=lambda _: next(draws)), patch(
+            "cogs.actions.affix_manager.random.randint", side_effect=lambda *_: next(values)
+        ), patch("cogs.actions.affix_manager.slot_count", return_value=slots):
+            page = self._inter(cid)
+            await cog.on_button_click(page)
+        self.assertEqual(sent.await_count, 1)
+        text = sent.call_args.args[0]
+        self.assertIn("自動抽取所有空格", text)
+        self.assertEqual(text.count("抽到詞條"), 3)
+        rows = await self.fetchall("SELECT slot_index, affix_type, value FROM gear_affixes WHERE user_id='12345' ORDER BY slot_index")
+        self.assertEqual(rows, [(0, "cycle_time_reduce", 3), (1, "efficiency", 5), (2, "cycle_time_reduce", 4)])
+        self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (6,))
+
+    async def test_scope_all_stops_at_slot_that_exhausts_material_and_leaves_later_slots_empty(self):
+        from cogs.actions import ActionsCog
+        await self._player(tool=3, level=10)
+        sent = AsyncMock()
+        bot = MagicMock()
+        bot.get_channel.return_value.send = sent
+        cog = ActionsCog(bot)
+        cid, _ = await self._scope_all_confirm(cog, threshold=3)
+        values = iter([3, 1, 1])
+        with patch("cogs.actions.affix_manager.random.choice", return_value="efficiency"), patch(
+            "cogs.actions.affix_manager.random.randint", side_effect=lambda *_: next(values)
+        ), patch("cogs.actions.affix_manager.slot_count", return_value=3):
+            await cog.on_button_click(self._inter(cid))
+        self.assertEqual(sent.await_count, 1)
+        lines = sent.call_args.args[0].split("\n")
+        self.assertEqual(len(lines), 3)
+        self.assertIn("抽到詞條", lines[1])
+        self.assertIn("未抽到目標詞條，抽選次數2 (2工具素材)", lines[2])
+        self.assertEqual(await self.fetchall("SELECT slot_index FROM gear_affixes WHERE user_id='12345'"), [(0,)])
+        self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (0,))
+
+    async def test_scope_all_midrun_exception_keeps_filled_slots_and_reports_them(self):
+        from cogs.actions import ActionsCog
+        await self._player(tool=10, level=10)
+        sent = AsyncMock()
+        bot = MagicMock()
+        bot.get_channel.return_value.send = sent
+        cog = ActionsCog(bot)
+        cid, _ = await self._scope_all_confirm(cog)
+        from managers import affix_manager
+        real = affix_manager.auto_extract_affix
+        calls = {"n": 0}
+
+        async def flaky(*args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 3:
+                raise RuntimeError("database is locked")
+            return await real(*args, **kwargs)
+
+        with patch("cogs.actions.affix_manager.random.choice", return_value="efficiency"), patch(
+            "cogs.actions.affix_manager.random.randint", return_value=1
+        ), patch("cogs.actions.affix_manager.slot_count", return_value=4), patch(
+            "cogs.actions.affix_manager.auto_extract_affix", new=flaky
+        ):
+            await cog.on_button_click(self._inter(cid))
+        self.assertEqual(await self.fetchall("SELECT slot_index FROM gear_affixes WHERE user_id='12345' ORDER BY slot_index"), [(0,), (1,)])
+        self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (8,))
+        self.assertEqual(sent.await_count, 1)
+        self.assertEqual(sent.call_args.args[0].count("抽到詞條"), 2)
+
+    async def test_scope_all_first_slot_failure_shows_error_and_sends_nothing(self):
+        from cogs.actions import ActionsCog
+        await self._player(tool=3, level=10)
+        sent = AsyncMock()
+        bot = MagicMock()
+        bot.get_channel.return_value.send = sent
+        cog = ActionsCog(bot)
+        cid, _ = await self._scope_all_confirm(cog)
+        click = self._inter(cid)
+        with patch("cogs.actions.affix_manager.auto_extract_affix", new=AsyncMock(side_effect=RuntimeError("boom"))):
+            await cog.on_button_click(click)
+        self.assertEqual(sent.await_count, 0)
+        self.assertIn("抽取失敗", click.edit_original_response.call_args.kwargs["embed"].description)
+        self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (3,))
+
+    async def test_scope_one_fills_only_one_slot_and_sends_single_event(self):
+        from cogs.actions import ActionsCog
+        await self._player(tool=10, level=10)
+        sent = AsyncMock()
+        bot = MagicMock()
+        bot.get_channel.return_value.send = sent
+        cog = ActionsCog(bot)
+        cid, _ = await self._render_confirm(cog, scope="one")
+        with patch("cogs.actions.affix_manager.random.choice", return_value="efficiency"), patch(
+            "cogs.actions.affix_manager.random.randint", return_value=1
+        ), patch("cogs.actions.affix_manager.slot_count", return_value=3):
+            await cog.on_button_click(self._inter(cid))
+        self.assertEqual(await self.fetchall("SELECT slot_index FROM gear_affixes WHERE user_id='12345'"), [(0,)])
+        self.assertEqual(sent.await_count, 1)
+        self.assertNotIn("自動抽取所有空格", sent.call_args.args[0])
+
+    async def test_scope_all_stops_when_no_empty_slot_remains(self):
+        from cogs.actions import ActionsCog
+        await self._player(tool=10, level=10)
+        sent = AsyncMock()
+        bot = MagicMock()
+        bot.get_channel.return_value.send = sent
+        cog = ActionsCog(bot)
+        async with schema.get_connection() as db:
+            await db.execute("INSERT INTO gear_affixes VALUES ('12345', 'research', 0, 'efficiency', 2)")
+            await db.commit()
+        cid, _ = await self._scope_all_confirm(cog)
+        self.assertTrue(cid.startswith("auto_affix_run:research:any:1:tool:all:1:"))
+        with patch("cogs.actions.affix_manager.random.choice", return_value="efficiency"), patch(
+            "cogs.actions.affix_manager.random.randint", return_value=1
+        ), patch("cogs.actions.affix_manager.slot_count", return_value=2):
+            await cog.on_button_click(self._inter(cid))
+        self.assertEqual(await self.fetchone("SELECT COUNT(*) FROM gear_affixes WHERE user_id='12345'"), (2,))
+        self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (9,))
+        self.assertEqual(sent.await_count, 1)
+        self.assertEqual(sent.call_args.args[0].count("抽到詞條"), 1)
 
 
 class TestAutoToolRouteRegistration(unittest.TestCase):
