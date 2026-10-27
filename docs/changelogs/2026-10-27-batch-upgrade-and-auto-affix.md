@@ -1,6 +1,6 @@
 ---
 title: "工具強化執行次數與自動抽取所有空格"
-status: Ready-to-review
+status: Reviewed
 created: 2026-10-27
 doc_type: change
 last_reviewed: 2026-10-27
@@ -167,3 +167,8 @@ Task 1 (notification) -> Task 2 (gear count) -> Task 3 (auto affix scope)
   - 修正：Task 2 AC 補上 1122、1128、1243、1450 行。Task 3 新增 AC：既有自動抽取測試改用 `{target}` 與 `{scope}` 新格式，`目標種類` 斷言改為 `目標效果`。
 
 ## Review Issues
+
+- [ ] [Minor] `source_paths` 漏列本分支修改的兩個測試檔。
+  - `git diff --name-only origin/main...HEAD` 列出 `tests/test_discord_commands.py` 與 `tests/test_discord_notifications.py`。
+  - frontmatter `source_paths`（第 7-15 行）只列 docs 與 `src/` 檔案。
+  - 修正：`source_paths` 加入這兩個測試檔。
