@@ -154,5 +154,15 @@ Task 1 (notification) -> Task 2 (gear count) -> Task 3 (auto affix scope)
 - [x] [Minor] `docs/discord/command-handler.md`「自動抽取確認」段落結尾仍寫「handler 提交成功後才 dispatch `affix_auto_extracted`」。
   - 所有空格發送的是 `affix_auto_batch`，同檔 `auto_affix_run` 列已這樣寫。
   - 修正：該句改為「handler 提交成功後才 dispatch 通知事件」，事件類型由路由表那一列說明。
+- [ ] [Major] 斷言舊 custom_id 格式的既有測試只列出 3 處，Task 2 漏列多處，Task 3 完全沒列。
+  - Task 2 漏列 `tests/test_discord_commands.py` 1122、1128、1450 行的 `attempt_upgrade:gathering:normal`，新格式多一段 `{count}`。
+  - Task 2 漏列同檔 1243 行的 `upgrade_mode_select:none`，新格式為 `upgrade_mode_select:none:none`。
+  - Task 3 涉及同檔約 1600-2221 行的自動抽取測試，都用舊的 `{mode}:{effect}` 狀態。
+    - 1631-1648 行斷言第一個選單為「任意 / 特定效果」，且 ID 結尾為 `:research:specific:cycle_time_reduce:4:universal`。
+    - 1686、1692、1836、1838、1908、1933 行使用舊 8 段確認 ID 或舊選單 ID。
+    - 1787-1793、2087、2211-2221 行選 `auto_affix_kind` / `auto_affix_effect`，2216 行斷言 `目標種類：任意`。
+    - 1768、1928、2159 行以 `target_mode=` 呼叫 `_render_auto_affix`。
+  - 情境：coder 依 AC 只改列出的 3 處，其餘測試失敗。coder 可能改回舊格式讓測試通過。
+  - 修正：Task 2 AC 補上 1122、1128、1243、1450 行。Task 3 新增 AC：既有自動抽取測試改用 `{target}` 與 `{scope}` 新格式，`目標種類` 斷言改為 `目標效果`。
 
 ## Review Issues
