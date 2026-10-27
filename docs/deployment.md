@@ -1,7 +1,7 @@
 ---
 title: Deployment
 doc_type: operations
-last_reviewed: 2026-08-15
+last_reviewed: 2026-10-27
 source_paths:
   - Dockerfile
   - fly.toml
@@ -23,7 +23,7 @@ IdleVillage runs as a single Docker container deployed to [Fly.io](https://fly.i
 ## Local Setup
 
 1. Copy `.env.example` and fill in `DISCORD_TOKEN`.
-2. Set `TRIAL_TARGET_STEP=25000` and `TRIAL_RESOURCE_RESERVE=10000`.
+2. Set `TRIAL_TARGET_STEP=250000` and `TRIAL_RESOURCE_RESERVE=10000`.
 3. Install dependencies: `pip install -r src/requirements.txt`.
 4. Run: `python src/main.py`.
 

@@ -1,7 +1,7 @@
 ---
 title: "Module: trial-manager"
 doc_type: module
-last_reviewed: 2026-10-08
+last_reviewed: 2026-10-27
 source_paths:
   - src/managers/trial_manager.py
 ---
@@ -129,7 +129,7 @@ reward_i = ceil(equal_part_i + contribution_part_i)
 | :--- | :--- | :--- |
 | `TRIAL_DURATION_SECONDS` | 43200（12 小時） | 試煉開始後的達標期限 |
 | `TRIAL_COOLDOWN_SECONDS` | 43200（12 小時） | 試煉結束（成功或失敗）後，多久才能開啟新試煉 |
-| `TRIAL_TARGET_STEP` | 25000 | 玩家可選目標的級距 |
+| `TRIAL_TARGET_STEP` | 250000 | 玩家可選目標的級距 |
 | `TRIAL_RESOURCE_RESERVE` | 10000 | 扣款後每種資源必須保留的最低存量 |
 | `TRIAL_REWARD_DIVISOR` | 100 | 獎勵池計算除數：`reward_pool = target / TRIAL_REWARD_DIVISOR` |
 
@@ -142,6 +142,7 @@ reward_i = ceil(equal_part_i + contribution_part_i)
 
 ## Changelog
 
+- 2026-10-27: `TRIAL_TARGET_STEP` 預設改為 `250000`，最小目標與級距皆為 250000。
 - 2026-10-08: 試煉獎勵改為 25% 均分給 `contribution > 0` 的參與者，75% 依貢獻度分配，每人總和進位一次。
 - 2026-08-15: 試煉目標改為玩家選擇的 `25000` 級距。新增 `10000` 資源保留量、分頁目標契約及原子提交驗證。
 - 2026-07-17: `add_progress` 新增「自動工具完整週期」為呼叫來源，貢獻歸於自動工具擁有者（見 `managers/auto-tool-manager.md`）。
