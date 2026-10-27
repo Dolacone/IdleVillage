@@ -129,12 +129,13 @@ Task 1 (notification) -> Task 2 (gear count) -> Task 3 (auto affix scope)
   - AC: 次數 N 時最多呼叫 `attempt_upgrade` N 次；強化失敗不中斷；raise 任何例外時停止；`inf` 只在 raise 時停止。
   - AC: 次數 1 發送一個既有 `gear_success`/`gear_fail` 事件；其他次數且至少一次成功執行時發送一個 `gear_batch` 事件，包含每次結果。
   - AC: 子選單重繪時保留模式與次數。結果區顯示最後一次成功執行的結果；第一次就 raise 時顯示錯誤。
-  - AC: 既有測試中舊格式 `attempt_upgrade:{gear}` 的 ID（`tests/test_discord_notifications.py` 582、614 行，`tests/test_discord_commands.py` 2734 行）改為 `attempt_upgrade:{gear}:{mode}:1`。
+  - AC: `tests/` 內所有使用 `attempt_upgrade:`、`upgrade_mode_select:` 舊格式的測試改用新格式；舊格式只出現在驗證「舊 ID 被忽略」的測試中。檢查：`grep -rn "attempt_upgrade:\|upgrade_mode_select:" tests/` 的每個命中都符合新格式或屬於上述測試。
 - [ ] Task 3: 自動抽取目標效果合併與所有空格（`src/cogs/ui_renderer.py`、`src/cogs/actions.py`；tests: `tests/test_discord_commands.py`）
   - AC: 自動抽取設定畫面固定 5 列：目標效果（任意 + 5 種效果）、目標數值、花費素材、抽取數量（僅一格 / 所有空格）、按鈕列。
   - AC: Embed 顯示目標效果與抽取數量，不再顯示目標種類。
   - AC: 確認 ID 為 8 段新格式，長度不超過 100；設定未完成（含抽取數量）時停用。
   - AC: 僅一格行為與現有自動抽取相同，發送既有 `affix_auto_extracted`。
+  - AC: `tests/` 內所有使用 `auto_affix_kind`、`auto_affix_effect`、舊 `{mode}:{effect}` 狀態、`target_mode=` 參數或斷言「目標種類」的測試改用新狀態與新選單；不以改回舊格式讓測試通過。檢查：`grep -rn "auto_affix_kind\|auto_affix_effect\|target_mode\|目標種類" tests/ src/` 無命中。
   - AC: 所有空格依 Architecture Decisions 的迴圈逐格抽取，已完成的格子保留；發送一個 `affix_auto_batch` 事件，包含每格結果（含最後未抽中的那格）。
 
 ## Plan Review Issues
@@ -154,7 +155,7 @@ Task 1 (notification) -> Task 2 (gear count) -> Task 3 (auto affix scope)
 - [x] [Minor] `docs/discord/command-handler.md`「自動抽取確認」段落結尾仍寫「handler 提交成功後才 dispatch `affix_auto_extracted`」。
   - 所有空格發送的是 `affix_auto_batch`，同檔 `auto_affix_run` 列已這樣寫。
   - 修正：該句改為「handler 提交成功後才 dispatch 通知事件」，事件類型由路由表那一列說明。
-- [ ] [Major] 斷言舊 custom_id 格式的既有測試只列出 3 處，Task 2 漏列多處，Task 3 完全沒列。
+- [x] [Major] 斷言舊 custom_id 格式的既有測試只列出 3 處，Task 2 漏列多處，Task 3 完全沒列。
   - Task 2 漏列 `tests/test_discord_commands.py` 1122、1128、1450 行的 `attempt_upgrade:gathering:normal`，新格式多一段 `{count}`。
   - Task 2 漏列同檔 1243 行的 `upgrade_mode_select:none`，新格式為 `upgrade_mode_select:none:none`。
   - Task 3 涉及同檔約 1600-2221 行的自動抽取測試，都用舊的 `{mode}:{effect}` 狀態。
