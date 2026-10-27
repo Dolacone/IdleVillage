@@ -579,7 +579,7 @@ class TestGearUpgradeActionDispatch(DatabaseTestCase):
         inter = SimpleNamespace(
             guild_id=int(ALL_TEST_ENV["DISCORD_GUILD_ID"]),
             user=SimpleNamespace(id=123, display_name="Alice"),
-            component=SimpleNamespace(custom_id="attempt_upgrade:gathering"),
+            component=SimpleNamespace(custom_id="attempt_upgrade:gathering:normal:1"),
             response=SimpleNamespace(defer=AsyncMock()),
         )
         result = {
@@ -611,7 +611,7 @@ class TestGearUpgradeActionDispatch(DatabaseTestCase):
         inter = SimpleNamespace(
             guild_id=int(ALL_TEST_ENV["DISCORD_GUILD_ID"]),
             user=SimpleNamespace(id=123, display_name="Bob"),
-            component=SimpleNamespace(custom_id="attempt_upgrade:combat"),
+            component=SimpleNamespace(custom_id="attempt_upgrade:combat:normal:1"),
             response=SimpleNamespace(defer=AsyncMock()),
         )
         result = {
@@ -636,6 +636,130 @@ class TestGearUpgradeActionDispatch(DatabaseTestCase):
         self.assertEqual(event["current_level"], 1)
         self.assertEqual(event["target_level"], 2)
         self.assertEqual(event["failure_count"], 3)
+
+
+class TestGearUpgradeBatchExecution(DatabaseTestCase):
+    def _inter(self, custom_id):
+        return SimpleNamespace(
+            guild_id=int(ALL_TEST_ENV["DISCORD_GUILD_ID"]),
+            user=SimpleNamespace(id=123, display_name="Alice"),
+            component=SimpleNamespace(custom_id=custom_id),
+            response=SimpleNamespace(defer=AsyncMock()),
+        )
+
+    @staticmethod
+    def _res(success, level=1):
+        return {
+            "success": success, "new_level": level + 1 if success else level, "current_level": level,
+            "target_level": level + 1, "rate": 0.5, "pity_before": 2, "pity_after": 0 if success else 3,
+            "mode": "normal",
+        }
+
+    async def _run(self, custom_id, side_effect):
+        from cogs.actions import ActionsCog
+
+        cog = ActionsCog(bot=object())
+        manager = AsyncMock(side_effect=side_effect)
+        with patch("cogs.actions.gear_manager.attempt_upgrade", new=manager), \
+             patch.object(cog, "_render_gear", new=AsyncMock()) as render, \
+             patch("cogs.actions.notification.dispatch_events", new=AsyncMock()) as dispatch:
+            await cog.on_button_click(self._inter(custom_id))
+        return manager, render, dispatch
+
+    async def test_count_n_stops_after_n_attempts(self):
+        manager, _, dispatch = await self._run(
+            "attempt_upgrade:gathering:normal:5", [self._res(True)] * 10
+        )
+        self.assertEqual(manager.await_count, 5)
+        dispatch.assert_called_once()
+        event = dispatch.call_args.args[1][0]
+        self.assertEqual(event["type"], "gear_batch")
+        self.assertEqual(len(event["results"]), 5)
+
+    async def test_failed_upgrade_does_not_stop_loop(self):
+        manager, _, dispatch = await self._run(
+            "attempt_upgrade:gathering:normal:5", [self._res(False)] * 5
+        )
+        self.assertEqual(manager.await_count, 5)
+        results = dispatch.call_args.args[1][0]["results"]
+        self.assertEqual([r["success"] for r in results], [False] * 5)
+        self.assertEqual(results[0]["failure_count"], 3)
+
+    async def test_inf_stops_when_precondition_fails(self):
+        manager, render, dispatch = await self._run(
+            "attempt_upgrade:gathering:normal:inf",
+            [self._res(True), self._res(False), ValueError("Insufficient AP")],
+        )
+        self.assertEqual(manager.await_count, 3)
+        event = dispatch.call_args.args[1][0]
+        self.assertEqual(event["type"], "gear_batch")
+        self.assertEqual(len(event["results"]), 2)
+        shown = render.call_args.kwargs["result"]
+        self.assertNotIn("error", shown)
+        self.assertFalse(shown["success"])
+        self.assertEqual(render.call_args.kwargs["count"], "inf")
+        self.assertEqual(render.call_args.kwargs["mode"], "normal")
+
+    async def test_mid_loop_non_value_error_keeps_prior_results(self):
+        manager, render, dispatch = await self._run(
+            "attempt_upgrade:gathering:risky:20",
+            [self._res(True), self._res(True, 2), RuntimeError("database is locked")],
+        )
+        self.assertEqual(manager.await_count, 3)
+        dispatch.assert_called_once()
+        event = dispatch.call_args.args[1][0]
+        self.assertEqual(event["type"], "gear_batch")
+        self.assertEqual(event["mode"], "risky")
+        self.assertEqual(len(event["results"]), 2)
+        self.assertNotIn("error", render.call_args.kwargs["result"])
+
+    async def test_first_attempt_raising_shows_error_and_sends_no_notification(self):
+        manager, render, dispatch = await self._run(
+            "attempt_upgrade:gathering:normal:10", [ValueError("Insufficient AP")]
+        )
+        self.assertEqual(manager.await_count, 1)
+        dispatch.assert_not_called()
+        self.assertEqual(render.call_args.kwargs["result"]["error"], "Insufficient AP")
+
+    async def test_count_one_sends_single_line_event(self):
+        _, _, dispatch = await self._run("attempt_upgrade:gathering:normal:1", [self._res(False)])
+        dispatch.assert_called_once()
+        self.assertEqual(dispatch.call_args.args[1][0]["type"], "gear_fail")
+
+    async def test_old_and_malformed_ids_are_ignored(self):
+        for cid in (
+            "attempt_upgrade:gathering:normal",
+            "attempt_upgrade:gathering",
+            "attempt_upgrade:gathering:normal:none",
+            "attempt_upgrade:gathering:none:5",
+            "attempt_upgrade:gathering:normal:7",
+        ):
+            manager, render, dispatch = await self._run(cid, [self._res(True)])
+            manager.assert_not_awaited()
+            render.assert_not_awaited()
+            dispatch.assert_not_called()
+
+    async def test_selects_preserve_the_other_selection(self):
+        from cogs.actions import ActionsCog
+
+        cog = ActionsCog(bot=object())
+        cases = (
+            ("upgrade_mode_select:gathering:10", "risky", {"mode": "risky", "count": "10"}),
+            ("upgrade_mode_select:gathering:none", "risky", {"mode": "risky", "count": None}),
+            ("upgrade_count_select:gathering:buffer", "20", {"mode": "buffer", "count": "20"}),
+            ("upgrade_count_select:gathering:none", "inf", {"mode": None, "count": "inf"}),
+        )
+        for cid, value, expected in cases:
+            inter = SimpleNamespace(
+                guild_id=int(ALL_TEST_ENV["DISCORD_GUILD_ID"]),
+                user=SimpleNamespace(id=123),
+                component=SimpleNamespace(custom_id=cid),
+                values=[value],
+                response=SimpleNamespace(defer=AsyncMock()),
+            )
+            with patch.object(cog, "_render_gear", new=AsyncMock()) as render:
+                await cog.on_dropdown(inter)
+            render.assert_awaited_once_with(inter, "gathering", **expected)
 
 
 class TestDashboardUpdate(DatabaseTestCase):
@@ -1093,6 +1217,112 @@ class TestAffixNotificationSign(unittest.TestCase):
         })
         self.assertIn("抽到詞條：週期縮短（+3%）", text)
         self.assertNotIn("-3%", text)
+
+
+class TestBatchNotifications(DatabaseTestCase):
+    def _results(self, n, success=False):
+        return [
+            {"success": success, "current_level": i, "target_level": i + 1, "failure_count": i}
+            for i in range(n)
+        ]
+
+    def test_gear_batch_is_one_message_with_header_and_line_per_result(self):
+        from core.notification import _format_event
+        text = _format_event({
+            "type": "gear_batch", "user_display_name": "Player", "gear_type": "research",
+            "mode": "normal",
+            "results": [
+                {"success": True, "current_level": 3, "target_level": 4, "failure_count": 0},
+                {"success": False, "current_level": 4, "target_level": 5, "failure_count": 1},
+            ],
+        })
+        self.assertEqual(text.split("\n"), [
+            "Player 的 研究工具 標準連續升級",
+            "成功 :tada: Lv3 -> Lv4（總失敗次數：0）",
+            "失敗 :boom: Lv4 -> Lv5（總失敗次數：1）",
+        ])
+
+    def test_gear_batch_failure_line_and_header_differ_per_mode(self):
+        from core.notification import _format_event
+        expected = {
+            "normal": ("標準", "失敗 :boom: Lv1 -> Lv2"),
+            "risky": ("鐵齒", "失敗（等級歸零） :skull: Lv1 -> Lv2"),
+            "buffer": ("墊檔", "改造加固 :shield: Lv1 -> Lv2"),
+        }
+        for mode, (label, line) in expected.items():
+            text = _format_event({
+                "type": "gear_batch", "user_display_name": "P", "gear_type": "combat",
+                "mode": mode,
+                "results": [{"success": False, "current_level": 1, "target_level": 2, "failure_count": 1}],
+            })
+            lines = text.split("\n")
+            self.assertEqual(lines[0], f"P 的 狩獵工具 {label}連續升級")
+            self.assertEqual(lines[1], f"{line}（總失敗次數：1）")
+
+    def test_affix_auto_batch_lines_match_single_event_wording(self):
+        from core.notification import _format_event
+        text = _format_event({
+            "type": "affix_auto_batch", "user_display_name": "Player", "gear_type": "research",
+            "material_source": "universal",
+            "results": [
+                {"affix": {"affix_type": "cycle_time_reduce", "value": 4}, "attempts": 50, "material_spent": 250},
+                {"affix": None, "attempts": 50, "material_spent": 250},
+            ],
+        })
+        self.assertEqual(text.split("\n"), [
+            "Player 的 研究工具 自動抽取所有空格",
+            "抽到詞條：週期縮短（+4%），抽選次數50 (250萬能素材)",
+            "未抽到目標詞條，抽選次數50 (250萬能素材)",
+        ])
+
+    def test_affix_auto_batch_tool_source_uses_tool_material_label(self):
+        from core.notification import _format_event
+        text = _format_event({
+            "type": "affix_auto_batch", "user_display_name": "P", "gear_type": "research",
+            "material_source": "tool",
+            "results": [{"affix": None, "attempts": 2, "material_spent": 2}],
+        })
+        self.assertTrue(text.endswith("未抽到目標詞條，抽選次數2 (2工具素材)"))
+
+    def test_split_message_short_text_is_single_chunk(self):
+        from core.notification import _split_message
+        text = "a" * 2000
+        self.assertEqual(_split_message(text), [text])
+
+    def test_split_message_breaks_at_lines_without_losing_or_reordering(self):
+        from core.notification import _split_message
+        lines = [f"line {i:04d} " + "x" * 40 for i in range(200)]
+        text = "\n".join(lines)
+        self.assertGreater(len(text), 2000)
+        chunks = _split_message(text)
+        self.assertGreater(len(chunks), 1)
+        self.assertTrue(all(len(c) <= 2000 for c in chunks))
+        self.assertEqual([ln for c in chunks for ln in c.split("\n")], lines)
+
+    async def test_dispatch_sends_long_batch_as_multiple_messages_and_short_as_one(self):
+        from core import notification
+        async with get_connection() as db:
+            await db.execute("UPDATE village_state SET announcement_channel_id='123' WHERE id=1")
+            await db.commit()
+        channel = SimpleNamespace(send=AsyncMock(), guild=SimpleNamespace())
+        bot = SimpleNamespace(get_channel=lambda cid: channel if cid == 123 else None)
+
+        def event(n):
+            return {
+                "type": "gear_batch", "user_display_name": "P", "gear_type": "research",
+                "mode": "normal", "results": self._results(n),
+            }
+
+        await notification.dispatch_events(bot, [event(5)])
+        self.assertEqual(channel.send.await_count, 1)
+
+        channel.send.reset_mock()
+        await notification.dispatch_events(bot, [event(120)])
+        sent = [c.args[0] for c in channel.send.await_args_list]
+        self.assertGreater(len(sent), 1)
+        self.assertTrue(all(len(m) <= 2000 for m in sent))
+        full = notification._format_event(event(120))
+        self.assertEqual("\n".join(sent), full)
 
 
 if __name__ == "__main__":
