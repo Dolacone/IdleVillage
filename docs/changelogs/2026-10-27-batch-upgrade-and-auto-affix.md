@@ -171,7 +171,7 @@ Task 1 (notification) -> Task 2 (gear count) -> Task 3 (auto affix scope)
 
 ## Review Issues
 
-- [ ] [Minor] `source_paths` 漏列本分支修改的兩個測試檔。
+- [x] [Minor] `source_paths` 漏列本分支修改的兩個測試檔。
   - `git diff --name-only origin/main...HEAD` 列出 `tests/test_discord_commands.py` 與 `tests/test_discord_notifications.py`。
   - frontmatter `source_paths`（第 7-15 行）只列 docs 與 `src/` 檔案。
   - 修正：`source_paths` 加入這兩個測試檔。
