@@ -4,7 +4,13 @@ status: Ready-to-implement
 created: 2026-11-05
 doc_type: change
 last_reviewed: 2026-11-05
-source_paths: []
+source_paths:
+  - "src/core/settlement.py"
+  - "src/core/notification.py"
+  - "tests/test_discord_notifications.py"
+  - "docs/README.md"
+  - "docs/discord/notification.md"
+  - "docs/managers/building-manager.md"
 scope: "Tracks this change from design through review."
 ---
 
@@ -83,7 +89,7 @@ Dependency graph:
 Task 1 (settlement.py + notification.py + tests)
 ```
 
-- [ ] Task 1: Stop emitting and formatting `building_upgrade`
+- [x] Task 1: Stop emitting and formatting `building_upgrade`
   - Files: `src/core/settlement.py`, `src/core/notification.py`, `tests/test_discord_notifications.py`.
   - Parallel: none.
   - Acceptance criteria:

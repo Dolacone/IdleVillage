@@ -48,15 +48,6 @@ async def _read_player(db, user_id: str) -> dict | None:
 # Core single-cycle logic
 # ---------------------------------------------------------------------------
 
-async def _read_building_levels(db) -> dict[str, int]:
-    """Return {building_type: level} for all buildings."""
-    levels: dict[str, int] = {}
-    async with db.execute("SELECT building_type, level FROM buildings") as cur:
-        async for row in cur:
-            levels[row[0]] = row[1]
-    return levels
-
-
 async def _run_one_cycle(
     db, user_id: str, cycle_end_time: datetime, *,
     action: str, action_target: str | None = None,
@@ -79,7 +70,6 @@ async def _run_one_cycle(
     Returns a list of notification events emitted during this cycle.
     """
     events: list[dict] = []
-    building_pre_events: list[dict] = []  # buffered until after stage events
 
     if action is None or action not in VALID_ACTIONS:
         return events
@@ -132,29 +122,7 @@ async def _run_one_cycle(
         )
         stages_cleared = await stage_manager.get_stages_cleared(db)
 
-        async with db.execute(
-            "SELECT level FROM buildings WHERE building_type=?", (target_building,)
-        ) as cur:
-            row = await cur.fetchone()
-        pre_level = row[0] if row else 0
-
         await building_manager.add_xp(db, target_building, settlement_output, stages_cleared, cycle_end_time)
-
-        async with db.execute(
-            "SELECT level FROM buildings WHERE building_type=?", (target_building,)
-        ) as cur:
-            row = await cur.fetchone()
-        post_level = row[0] if row else 0
-
-        xp_per = get_env_int("BUILDING_XP_PER_LEVEL")
-        for lvl in range(pre_level + 1, post_level + 1):
-            building_pre_events.append({
-                "type": "building_upgrade",
-                "building_type": target_building,
-                "old_level": lvl - 1,
-                "new_level": lvl,
-                "next_xp_req": (lvl + 1) * xp_per,
-            })
 
     # Stage progress uses pre-penalty output
     new_stages_cleared = await stage_manager.add_progress(db, action, output, cycle_end_time)
@@ -174,24 +142,7 @@ async def _run_one_cycle(
                 "next_target": stage_post.get("current_stage_target", 0),
             })
 
-            buildings_before = await _read_building_levels(db)
             await building_manager.check_all_upgrades(db, new_stages_cleared, cycle_end_time)
-            buildings_after = await _read_building_levels(db)
-
-            xp_per = get_env_int("BUILDING_XP_PER_LEVEL")
-            for btype, pre_lv in buildings_before.items():
-                post_lv = buildings_after.get(btype, pre_lv)
-                for lvl in range(pre_lv + 1, post_lv + 1):
-                    events.append({
-                        "type": "building_upgrade",
-                        "building_type": btype,
-                        "old_level": lvl - 1,
-                        "new_level": lvl,
-                        "next_xp_req": (lvl + 1) * xp_per,
-                    })
-
-    # Emit buffered building upgrades (from add_xp) after stage events
-    events.extend(building_pre_events)
 
     # Village trial progress — parallel to and independent of stage progress.
     # Uses the same pre-shortage-penalty output as stage progress (all action types count).
