@@ -1,10 +1,11 @@
 ---
 title: "取消建築升級通知"
-status: Refactored
+status: Done
 created: 2026-11-05
 doc_type: change
 last_reviewed: 2026-11-05
 source_paths:
+  - CHANGELOG.md
   - "src/core/settlement.py"
   - "src/core/notification.py"
   - "tests/test_discord_notifications.py"
