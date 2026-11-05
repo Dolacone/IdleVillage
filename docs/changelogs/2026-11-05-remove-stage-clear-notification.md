@@ -1,6 +1,6 @@
 ---
 title: "取消一般關卡通關通知，只保留升級關通關通知"
-status: Reviewed
+status: Refactored
 created: 2026-11-05
 doc_type: change
 last_reviewed: 2026-11-05
