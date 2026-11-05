@@ -110,7 +110,7 @@ async def _run_one_cycle(
                 "target": stage_pre["current_stage_target"],
             })
 
-    # Distribute settlement_output (with building upgrade detection)
+    # Distribute settlement_output
     if action == "gathering":
         await resource_manager.deposit(db, "food", settlement_output, cycle_end_time)
         await resource_manager.deposit(db, "wood", settlement_output, cycle_end_time)
