@@ -91,7 +91,7 @@ Dependency graph:
 Task 1 (settlement.py + notification.py + tests)
 ```
 
-- [ ] Task 1: Stop emitting and formatting `stage_clear`
+- [x] Task 1: Stop emitting and formatting `stage_clear`
   - Files: `src/core/settlement.py`, `src/core/notification.py`, `tests/test_discord_notifications.py`.
   - Parallel: none.
   - Acceptance criteria:

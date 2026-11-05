@@ -132,37 +132,15 @@ class TestSettlementEventEmission(DatabaseTestCase):
         self.assertTrue(success)
         self.assertIsInstance(events, list)
 
-    async def test_stage_clear_event_emitted(self):
-        """A stage_clear event is emitted when a stage completes."""
-        from core.settlement import settle_complete_cycles
-        from managers import stage_manager
-
-        # Set stage progress near target so one cycle clears it
-        base = int(ALL_TEST_ENV["BASE_OUTPUT"])
-        async with get_connection() as db:
-            target = base  # exactly one cycle worth — will clear on first cycle
-            await db.execute(
-                """UPDATE stage_state SET current_stage_type='gathering',
-                   current_stage_progress=0, current_stage_target=?,
-                   stage_started_at=? WHERE id=1""",
-                (target, _now().isoformat()),
-            )
-            await db.commit()
-
-        await self._setup_player(action="gathering")
-        now = _now()
-        events = await settle_complete_cycles(self.TEST_USER, now)
-        types = [e["type"] for e in events]
-        self.assertIn("stage_clear", types)
-
-    async def test_stage_clear_event_has_correct_fields(self):
-        """stage_clear event has stages_cleared, next_stage_type, next_target fields."""
+    async def test_normal_stage_clear_emits_no_stage_clear_events(self):
+        """Clearing a non-upgrade stage emits neither stage_clear nor upgrade_stage_clear."""
         from core.settlement import settle_complete_cycles
 
         base = int(ALL_TEST_ENV["BASE_OUTPUT"])
         async with get_connection() as db:
             await db.execute(
-                """UPDATE stage_state SET current_stage_type='gathering',
+                """UPDATE stage_state SET stages_cleared=1,
+                   current_stage_type='gathering',
                    current_stage_progress=0, current_stage_target=?,
                    stage_started_at=? WHERE id=1""",
                 (base, _now().isoformat()),
@@ -171,13 +149,37 @@ class TestSettlementEventEmission(DatabaseTestCase):
 
         await self._setup_player(action="gathering")
         events = await settle_complete_cycles(self.TEST_USER, _now())
-        clear_events = [e for e in events if e["type"] == "stage_clear"]
-        self.assertTrue(len(clear_events) >= 1)
-        ev = clear_events[0]
-        self.assertIn("stages_cleared", ev)
+        async with get_connection() as db:
+            async with db.execute("SELECT stages_cleared FROM stage_state WHERE id=1") as cur:
+                cleared = (await cur.fetchone())[0]
+        self.assertEqual(cleared, 2)
+        types = [e["type"] for e in events]
+        self.assertNotIn("stage_clear", types)
+        self.assertNotIn("upgrade_stage_clear", types)
+
+    async def test_upgrade_stage_clear_emits_only_upgrade_event(self):
+        """Clearing the upgrade stage emits upgrade_stage_clear with next-stage fields and no stage_clear."""
+        from core.settlement import settle_complete_cycles
+
+        base = int(ALL_TEST_ENV["BASE_OUTPUT"])
+        async with get_connection() as db:
+            await db.execute(
+                """UPDATE stage_state SET stages_cleared=4,
+                   current_stage_type='gathering',
+                   current_stage_progress=0, current_stage_target=?,
+                   stage_started_at=? WHERE id=1""",
+                (base, _now().isoformat()),
+            )
+            await db.commit()
+
+        await self._setup_player(action="gathering")
+        events = await settle_complete_cycles(self.TEST_USER, _now())
+        types = [e["type"] for e in events]
+        self.assertNotIn("stage_clear", types)
+        self.assertEqual(types.count("upgrade_stage_clear"), 1)
+        ev = next(e for e in events if e["type"] == "upgrade_stage_clear")
         self.assertIn("next_stage_type", ev)
         self.assertIn("next_target", ev)
-        self.assertIsInstance(ev["stages_cleared"], int)
 
     async def test_upgrade_stage_clear_event_at_5th_stage(self):
         """upgrade_stage_clear event is emitted when stages_cleared becomes a multiple of 5."""
@@ -294,18 +296,6 @@ class TestNotificationFormatting(unittest.TestCase):
         # Ensure env vars are set for config helpers
         for k, v in ALL_TEST_ENV.items():
             os.environ.setdefault(k, str(v))
-
-    def test_format_stage_clear(self):
-        from core.notification import _format_event
-        ev = {
-            "type": "stage_clear",
-            "stages_cleared": 3,
-            "next_stage_type": "combat",
-            "next_target": 200,
-        }
-        text = _format_event(ev)
-        self.assertIn("3", text)
-        self.assertIn("200", text)
 
     def test_format_upgrade_stage_clear(self):
         from core.notification import _format_event
@@ -532,7 +522,8 @@ class TestActionChangeNotificationDispatch(DatabaseTestCase):
                    WHERE resource_type IN ('food', 'wood', 'knowledge')"""
             )
             await db.execute(
-                """UPDATE stage_state SET current_stage_type='gathering',
+                """UPDATE stage_state SET stages_cleared=4,
+                   current_stage_type='gathering',
                    current_stage_progress=0, current_stage_target=?,
                    stage_started_at=?, overtime_notified=0 WHERE id=1""",
                 (base, now.isoformat()),
@@ -569,7 +560,7 @@ class TestActionChangeNotificationDispatch(DatabaseTestCase):
 
         dispatch.assert_called_once()
         events = dispatch.call_args.args[1]
-        self.assertIn("stage_clear", [event["type"] for event in events])
+        self.assertIn("upgrade_stage_clear", [event["type"] for event in events])
 
 
 class TestGearUpgradeActionDispatch(DatabaseTestCase):

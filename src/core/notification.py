@@ -93,17 +93,6 @@ def _format_event(event: dict, name_map: dict[str, str] | None = None) -> str | 
     kind = event.get("type")
     name_map = name_map or {}
 
-    if kind == "stage_clear":
-        cleared = event["stages_cleared"]
-        next_type = event.get("next_stage_type", "")
-        next_target = event.get("next_target", 0)
-        next_name = STAGE_TYPE_LABELS.get(next_type, next_type)
-        return (
-            f"通過第 {cleared} 關\n"
-            f"下一目標：{next_name}\n"
-            f"目標需求：{next_target}"
-        )
-
     if kind == "upgrade_stage_clear":
         round_n = event["round"]
         old_cap = event["old_cap"]

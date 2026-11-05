@@ -161,13 +161,6 @@ async def _run_one_cycle(
 
     if new_stages_cleared is not None:
         stage_post = await stage_manager.get_stage_info(db)
-        events.append({
-            "type": "stage_clear",
-            "stages_cleared": new_stages_cleared,
-            "next_stage_type": stage_post.get("current_stage_type", ""),
-            "next_target": stage_post.get("current_stage_target", 0),
-        })
-
         # If upgrade stage cleared (every 5th), emit upgrade_stage_clear and check buildings
         if new_stages_cleared % 5 == 0:
             old_cap = (new_stages_cleared - 1) // 5 + 1
