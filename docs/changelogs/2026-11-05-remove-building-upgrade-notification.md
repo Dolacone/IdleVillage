@@ -1,6 +1,6 @@
 ---
 title: "取消建築升級通知"
-status: Ready-to-review
+status: Reviewed
 created: 2026-11-05
 doc_type: change
 last_reviewed: 2026-11-05
@@ -100,3 +100,5 @@ Task 1 (settlement.py + notification.py + tests)
     - `uv run python -m pytest` passes.
 
 ## Review Issues
+
+- None.
