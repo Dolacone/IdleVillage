@@ -1,9 +1,10 @@
 ---
 title: "Module: stage-manager"
 doc_type: module
-last_reviewed: 2026-05-01
+last_reviewed: 2026-11-05
 source_paths:
   - src/managers/stage_manager.py
+  - src/core/settlement.py
 ---
 
 # Module: stage-manager
@@ -70,7 +71,7 @@ round_difficulty = STAGE_BASE_TARGET × (1 + (round_number - 1) × STAGE_TARGET_
   4. current_stage_progress = 0
   5. stage_started_at = now()
   6. overtime_notified = false
-  7. 觸發通關通知（所有關卡都通知）
+  7. 若通過升級關，觸發升級關通關通知（第 1-4 關不通知）
 ```
 
 超額進度不帶入下一關。單次 settlement 最多只會讓當前關卡通關一次；剩餘量捨棄。Burst 的 3 次完整 settlement 各自獨立判定。
@@ -80,3 +81,7 @@ round_difficulty = STAGE_BASE_TARGET × (1 + (round_number - 1) × STAGE_TARGET_
 - `addProgress(amount, actionType)` — 新增進度（自動判斷是否計入、是否逾時減半）
 - `getStageInfo()` — 回傳當前關卡類型、進度、目標、剩餘時間
 - `getStageClearedCount()` — 回傳已通過總關卡數（供 formula 模組取用）
+
+## Changelog
+
+- 2026-11-05: 通關通知只在升級關通關時發送，見 `discord/notification.md`。

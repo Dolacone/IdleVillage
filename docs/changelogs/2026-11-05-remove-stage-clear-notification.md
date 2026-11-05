@@ -5,7 +5,13 @@ created: 2026-11-05
 doc_type: change
 last_reviewed: 2026-11-05
 source_paths:
+  - docs/README.md
   - docs/changelogs/2026-11-05-remove-stage-clear-notification.md
+  - docs/discord/notification.md
+  - docs/managers/stage-manager.md
+  - src/core/notification.py
+  - src/core/settlement.py
+  - tests/test_discord_notifications.py
 scope: "Tracks this change from design through review."
 ---
 
@@ -71,6 +77,28 @@ Not Doing:
 
 ## Architecture Decisions
 
+- 在事件來源移除 `stage_clear`：`src/core/settlement.py` 不再 append `stage_clear` 事件。
+  - `stage_clear` 只有 `src/core/notification.py` 的 `_format_event` 消費。
+  - `upgrade_stage_clear` 已帶 `next_stage_type` 與 `next_target`，不依賴 `stage_clear`。
+- 刪除 `_format_event` 的 `stage_clear` 分支，不留無來源的範本。
+- 升級關通關判定 `new_stages_cleared % 5 == 0`、`stage_post` 讀取、建築升級檢查維持原位。
+
 ## Tasks
+
+Dependency graph:
+
+```
+Task 1 (settlement.py + notification.py + tests)
+```
+
+- [ ] Task 1: Stop emitting and formatting `stage_clear`
+  - Files: `src/core/settlement.py`, `src/core/notification.py`, `tests/test_discord_notifications.py`.
+  - Parallel: none.
+  - Acceptance criteria:
+    - Clearing stage 1-4 (`stages_cleared` not a multiple of 5) returns no `stage_clear` event and no `upgrade_stage_clear` event.
+    - Clearing the upgrade stage (`stages_cleared` becomes 5) returns exactly one stage-related event, `upgrade_stage_clear`, with `round`, `old_cap`, `new_cap`, `next_stage_type`, `next_target`; building upgrade events still follow.
+    - `_format_event` has no `stage_clear` branch; `upgrade_stage_clear` text is unchanged.
+    - `TestActionChangeNotificationDispatch.test_confirm_action_dispatches_overdue_catchup_events` asserts dispatch of catch-up events with a marker other than `stage_clear` (for example `upgrade_stage_clear` with `stages_cleared=4`).
+    - `uv run python -m pytest` passes.
 
 ## Review Issues
