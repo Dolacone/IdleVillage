@@ -68,6 +68,29 @@ Not Doing:
 
 ## Architecture Decisions
 
+- 在事件來源移除 `building_upgrade`：`src/core/settlement.py` 不再產生 `building_upgrade` 事件。
+  - `building_upgrade` 只有 `src/core/notification.py` 的 `_format_event` 消費。
+  - 刪除只為產生事件而存在的等級前後讀取：`building`/`research` 分支的 `pre_level`/`post_level` 查詢、`building_pre_events`、升級關分支的 `buildings_before`/`buildings_after` 差異與 `_read_building_levels`。
+  - `building_manager.add_xp` 與 `building_manager.check_all_upgrades` 呼叫維持原位。
+- 刪除 `_format_event` 的 `building_upgrade` 分支與不再使用的 `BUILDING_LABELS` import，不留無來源的範本。
+- 比照 `2026-11-05-remove-stage-clear-notification.md` 的做法：來源停發、刪除範本、在 `tests/test_discord_notifications.py` 驗證事件不再出現。
+
 ## Tasks
+
+Dependency graph:
+
+```
+Task 1 (settlement.py + notification.py + tests)
+```
+
+- [ ] Task 1: Stop emitting and formatting `building_upgrade`
+  - Files: `src/core/settlement.py`, `src/core/notification.py`, `tests/test_discord_notifications.py`.
+  - Parallel: none.
+  - Acceptance criteria:
+    - A `building` or `research` cycle whose XP raises the target building level returns no `building_upgrade` event; the building level in DB still rises.
+    - Clearing the upgrade stage while a building has enough XP for the new cap returns `upgrade_stage_clear` and no `building_upgrade` event; the building level in DB still rises.
+    - `_format_event` has no `building_upgrade` branch; `test_format_building_upgrade` is removed.
+    - `test_dispatch_events_mixed_batch_only_resolves_trial_success_names` uses a non-trial event other than `building_upgrade` and still asserts two sends.
+    - `uv run python -m pytest` passes.
 
 ## Review Issues
