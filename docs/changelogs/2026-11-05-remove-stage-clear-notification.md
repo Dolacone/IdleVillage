@@ -1,10 +1,11 @@
 ---
 title: "取消一般關卡通關通知，只保留升級關通關通知"
-status: Refactored
+status: Done
 created: 2026-11-05
 doc_type: change
 last_reviewed: 2026-11-05
 source_paths:
+  - CHANGELOG.md
   - docs/README.md
   - docs/changelogs/2026-11-05-remove-stage-clear-notification.md
   - docs/discord/notification.md
