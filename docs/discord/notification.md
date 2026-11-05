@@ -1,10 +1,11 @@
 ---
 title: "Module: notification"
 doc_type: module
-last_reviewed: 2026-10-27
+last_reviewed: 2026-11-05
 source_paths:
   - src/core/notification.py
   - src/cogs/actions.py
+  - src/core/settlement.py
 ---
 
 # Module: notification
@@ -28,9 +29,8 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 
 | 事件 | 觸發時機 | 訊息內容 | 公開/私人 |
 | :--- | :--- | :--- | :--- |
-| 關卡通關 | stage-manager 判定進度達標 | 通過第 X 關 + 下一目標 + 目標需求 | Public |
 | 關卡逾時 | Watcher 結算時首次偵測到 `now - stage_started_at > STAGE_OVERTIME_SECONDS` | ⚠️ 逾時警告，說明後續進度減半計算 | Public |
-| 升級關通關 | 每輪第 5 關通關時 | 附加建築等級上限提升資訊，但不取代一般關卡通關通知 | Public |
+| 升級關通關 | 每輪第 5 關通關時 | 第 X 輪完成 + 建築等級上限提升 + 下一目標 + 目標需求 | Public |
 | 建築升級 | building-manager 觸發升級 | `{建築名稱}` 從 Lv{x} 變成 Lv{y}，下一等級需求 {z} | Public |
 | 工具強化成功 | gear-manager 回傳成功 | `{user_display_name} 的 {gear_name} 升級成功 :tada: Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）` | Public |
 | 工具強化失敗 | gear-manager 回傳失敗 | `{user_display_name} 的 {gear_name} 升級失敗 :boom: Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）` | Public |
@@ -46,7 +46,8 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 ## 通知去重
 
 - 不使用 persistent notification log。
-- 關卡通關通知只在關卡切換處理瞬間發送。所有關卡都通知，不只升級關。
+- 第 1-4 關通關不發送通知。
+- 升級關通關通知只在關卡切換處理瞬間發送。
 - 關卡逾時通知只在首次檢查發現逾時且 `overtime_notified = false` 時發送，發送後設為 true。
 - 關卡切換時 `overtime_notified` reset to false。
 - 建築升級通知只在升級處理瞬間發送。
@@ -58,20 +59,12 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 
 ## 同一 settlement 內的通知順序
 
-1. 關卡通關通知
-2. 升級關建築等級上限通知
-3. 建築升級通知（若多級，逐級發送）
-4. 試煉達成/失敗通知
-5. Dashboard 更新
+1. 升級關通關通知
+2. 建築升級通知（若多級，逐級發送）
+3. 試煉達成/失敗通知
+4. Dashboard 更新
 
 ## 訊息範本
-
-### 關卡通關
-```
-通過第 {cleared_stage_number} 關
-下一目標：{next_stage_name}
-目標需求：{next_target}
-```
 
 ### 逾時警告
 ```
@@ -179,6 +172,7 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 
 ## Changelog
 
+- 2026-11-05: 移除一般關卡通關通知；只在升級關通關時發送升級關通關通知。
 - 2026-10-27: 新增工具連續強化與詞條自動抽取所有空格通知；超過 2000 字元的訊息依行拆分。
 - 2026-10-08: 試煉開始與達成通知改為說明 25% 平均分配、75% 依貢獻度分配。
 - 2026-10-08: 詞條通知說明移除 `upgrade_cost_reduce` 特例。
