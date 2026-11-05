@@ -224,6 +224,66 @@ class TestSettlementEventEmission(DatabaseTestCase):
         self.assertEqual(ev["new_cap"], 2)
         self.assertEqual(ev["round"], 1)
 
+    async def _building_level(self, building_type):
+        async with get_connection() as db:
+            async with db.execute(
+                "SELECT level FROM buildings WHERE building_type=?", (building_type,)
+            ) as cur:
+                return (await cur.fetchone())[0]
+
+    async def _assert_building_cycle_levels_up_silently(self, action, action_target, building_type):
+        from core.settlement import settle_complete_cycles
+
+        xp_per = int(ALL_TEST_ENV["BUILDING_XP_PER_LEVEL"])
+        async with get_connection() as db:
+            await db.execute(
+                "UPDATE buildings SET level=0, xp_progress=? WHERE building_type=?",
+                (xp_per - 1, building_type),
+            )
+            await db.commit()
+
+        await self._setup_player(action=action, action_target=action_target)
+        events = await settle_complete_cycles(self.TEST_USER, _now())
+        self.assertNotIn("building_upgrade", [e["type"] for e in events])
+        self.assertEqual(await self._building_level(building_type), 1)
+
+    async def test_building_cycle_level_up_emits_no_building_upgrade(self):
+        await self._assert_building_cycle_levels_up_silently(
+            "building", "gathering_field", "gathering_field"
+        )
+
+    async def test_research_cycle_level_up_emits_no_building_upgrade(self):
+        await self._assert_building_cycle_levels_up_silently(
+            "research", None, "research_lab"
+        )
+
+    async def test_upgrade_stage_clear_levels_up_buildings_without_building_upgrade(self):
+        """Raising the level cap on an upgrade-stage clear still levels buildings, with no building_upgrade event."""
+        from core.settlement import settle_complete_cycles
+
+        base = int(ALL_TEST_ENV["BASE_OUTPUT"])
+        xp_per = int(ALL_TEST_ENV["BUILDING_XP_PER_LEVEL"])
+        async with get_connection() as db:
+            await db.execute(
+                """UPDATE stage_state SET stages_cleared=4,
+                   current_stage_type='gathering',
+                   current_stage_progress=0, current_stage_target=?,
+                   stage_started_at=? WHERE id=1""",
+                (base, _now().isoformat()),
+            )
+            await db.execute(
+                "UPDATE buildings SET level=1, xp_progress=? WHERE building_type='gathering_field'",
+                (2 * xp_per,),
+            )
+            await db.commit()
+
+        await self._setup_player(action="gathering")
+        events = await settle_complete_cycles(self.TEST_USER, _now())
+        types = [e["type"] for e in events]
+        self.assertIn("upgrade_stage_clear", types)
+        self.assertNotIn("building_upgrade", types)
+        self.assertEqual(await self._building_level("gathering_field"), 2)
+
     async def test_overtime_event_emitted_when_stage_overdue(self):
         """overtime event is emitted when stage is overdue and overtime_notified is 0."""
         from core.settlement import settle_complete_cycles
@@ -311,20 +371,6 @@ class TestNotificationFormatting(unittest.TestCase):
         self.assertIn("2", text)
         self.assertIn("Lv2", text)
         self.assertIn("Lv3", text)
-
-    def test_format_building_upgrade(self):
-        from core.notification import _format_event
-        ev = {
-            "type": "building_upgrade",
-            "building_type": "gathering_field",
-            "old_level": 0,
-            "new_level": 1,
-            "next_xp_req": 200,
-        }
-        text = _format_event(ev)
-        self.assertIn("Lv0", text)
-        self.assertIn("Lv1", text)
-        self.assertIn("200", text)
 
     def test_format_overtime(self):
         from core.notification import _format_event
@@ -1030,11 +1076,10 @@ class TestDispatchEventsTrialSuccessNames(DatabaseTestCase):
 
         events = [
             {
-                "type": "building_upgrade",
-                "building_type": "farm",
-                "old_level": 1,
-                "new_level": 2,
-                "next_xp_req": 100,
+                "type": "overtime",
+                "stages_cleared": 4,
+                "progress": 100,
+                "target": 500,
             },
             {
                 "type": "trial_success",
@@ -1052,7 +1097,7 @@ class TestDispatchEventsTrialSuccessNames(DatabaseTestCase):
         self.assertEqual(channel.send.await_count, 2)
         texts = [call.args[0] for call in channel.send.await_args_list]
         self.assertTrue(any("貢獻 5000 (50 素材)：Alice" in t for t in texts))
-        self.assertTrue(any("farm" in t or "Lv1" in t or "Lv2" in t for t in texts))
+        self.assertTrue(any("目前進度：100 / 500" in t for t in texts))
 
 
 class TestGearUpgradeEventDispatch(unittest.TestCase):
