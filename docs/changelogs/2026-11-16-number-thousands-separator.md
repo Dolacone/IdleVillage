@@ -1,6 +1,6 @@
 ---
 title: "數字顯示加上千分位逗號"
-status: Ready-to-review
+status: Issues-confirmed
 created: 2026-11-16
 doc_type: change
 last_reviewed: 2026-11-16
@@ -176,3 +176,10 @@ Tasks 2、3、4 互相獨立，可平行執行。
   - Resolved without per-line lists: each task now carries one AC that existing assertions on its displays expect comma-formatted values.
 - [x] Plan Issue 13: 三個 scope 內、正常運作會達到 1,000 的顯示點沒有 AC，漏格式化時 AC 不會失敗。Task 1：`📊 效率` 的 `{output}(+{pct}%)`（`src/cogs/ui_renderer.py:327`），`.env.example` 的 `GEAR_BONUS_PER_LEVEL=0.03` 下工具 Lv334 起 pct 超過 1,000；現有個人區 AC 只檢查 `1,500`、`12,345`、`🌟 2,000`、試煉貢獻。Task 2：`build_auto_affix_embed` 的 `持有素材：{materials} 個`（`:905`），以及 `build_affix_components` 自己的 `gear_description`（`:795-802`），Scope「gear type dropdown descriptions」沒有點名後者，AC 只檢查 `build_gear_components`。修正：Task 1 個人區 AC 加入「工具等級 `1500`（測試環境 `GEAR_BONUS_PER_LEVEL=0.05`、`BASE_OUTPUT=20`、關卡與設施 0）顯示 `1,520(+7,500%)`」；Task 2 Scope 點名 `build_gear_components` 與 `build_affix_components` 的工具類型選單，AC 加入「`build_affix_components` 工具類型選單 description 在 level `1024`、每級 1% 時含 `+1,024% → +1,025%`」與「`build_auto_affix_embed` 持有 `12345` 時含 `持有素材：12,345 個`」。
   - Tool type description AC uses the test env `GEAR_BONUS_PER_LEVEL=0.05`: `+5,120% → +5,125%`; the earlier 1% example could not hold in tests.
+
+## Review Issues
+
+- [ ] [Major] Issue 1: 升級關通關與逾時通知的關卡、輪數沒有加 `,`。`src/core/notification.py:104` 輸出 `第 {round_n} 輪完成`，`:119` 輸出 `第 {stage_n} 關已超過`，兩者都沒有呼叫 `fmt_num`。`round` 等於 `old_cap`（`src/core/settlement.py:134-138`），因此同一則通知出現 `升級關通關，第 1000 輪完成` 與 `建築等級上限從 Lv1,000 變成 Lv1,001`。`stage_n` 是 `stages_cleared + 1`，Dashboard 已對 `stages_cleared` 加 `,`（`src/cogs/ui_renderer.py:271`），同一關在通知顯示 `第 5001 關`。這違反 `docs/discord/ui-renderer.md`「數字格式」的「所有玩家可見的數字」與 `docs/discord/notification.md:66`「範本中的數字欄位依...數字格式顯示」。`tests/test_discord_notifications.py` 的 `test_upgrade_stage_clear_caps_and_target` 用 `round: 2, old_cap: 1000`，這組值在 production 不會出現，所以測試沒有抓到。修正：兩處改用 `fmt_num`，測試 fixture 改為 `round` 等於 `old_cap`，並斷言 `第 1,000 輪完成` 與 `第 5,001 關`。
+- [ ] [Minor] Issue 2: `source_paths` 漏列本變更修改的 `tests/test_discord_commands.py` 與 `tests/test_discord_notifications.py`（`git diff --stat` 列出兩者）。
+- [ ] [Minor] Issue 3: `tests/test_discord_commands.py` 的 `test_main_embed_personal_section_formats_numbers` 斷言 `"1,500"`，但 `_ap: 1500` 讓 AP 行 `⚡ AP：1,500 / 24` 也符合。移除 `gear_parts` 的 `fmt_num`（`src/cogs/ui_renderer.py:307`）時測試不會失敗。修正：斷言 `🌾 1,500 | ` 或把 `_ap` 改成小於 1,000 的值。
+- [ ] [Minor] Issue 4: `tests/test_discord_notifications.py` 的 `TestNotificationThousandsSeparators` 定義在 `if __name__ == "__main__": unittest.main()` 之後。直接執行該檔時 `unittest.main()` 先跑，這個 class 的測試不會執行。修正：把 class 移到 `__main__` 區塊之前。
