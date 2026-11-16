@@ -1,6 +1,6 @@
 ---
 title: "數字顯示加上千分位逗號"
-status: Ready-to-implement
+status: Ready-to-review
 created: 2026-11-16
 doc_type: change
 last_reviewed: 2026-11-16
