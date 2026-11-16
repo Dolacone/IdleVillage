@@ -73,10 +73,7 @@ MVP Scope:
 
 Not Doing:
 
-- 不改 Discord 時間戳記語法 `<t:{unix}:R>`。
-- 不改 custom_id 與 Select option value；這些值會被程式解析。
-- 不改 Modal 輸入欄位的預設值；管理員提交後程式會解析。
-- 不改玩家 ID fallback 顯示；ID 是識別碼，不是數量。
+- 不加逗號的值依 `docs/discord/ui-renderer.md`「數字格式」。
 - 不改例外訊息與錯誤回覆中回顯的原始輸入（manager `ValueError` 文字、`player_manager_cog` 的輸入錯誤訊息）。
 - 不改 log 輸出。
 - 不改數值縮寫（不使用 萬、K、M）。
@@ -90,12 +87,8 @@ Not Doing:
   - `ui_renderer.py` 已是 `notification.py` 與 `actions.py` 匯入顯示常數的來源，格式函式放在同一處。
   - 鐵齒加成顯示既有 `:g` 規則（去除尾隨零），`,g` 保留此規則。
 - 每個顯示點直接呼叫 `fmt_num`，不對最終字串做後處理。
-- 以下值維持原樣，不呼叫 `fmt_num`：
-  - `<t:{unix}:R>` 與 `<t:{unix}:t>` 的 unix 秒數。
-  - custom_id 內的數字。
-  - `SelectOption.value`。
-  - Modal `TextInput` 的預設值。
-  - 試煉達成與排行榜中找不到名稱時 fallback 的 `user_id`。
+- 不加逗號的值依 `docs/discord/ui-renderer.md`「數字格式」的排除清單。
+- 正常運作下不會達到 1,000 的顯示點不呼叫 `fmt_num`：自動工具小時選單（上限 `AUTO_TOOL_MAX_HOURS`）、`affix_extracted`/`affix_cleared` 通知（詞條數值 1..5）。
 - `trial_target_select` 的 option label 改為 `fmt_num(target)`，value 維持 `str(target)`。
 - 數字格式規則由 `docs/discord/ui-renderer.md` 的「數字格式」擁有；`docs/discord/notification.md` 引用該節。
 
@@ -113,7 +106,7 @@ Task 1 (ui_renderer.py: fmt_num + village/main/trial/action menus)
 Tasks 2、3、4 互相獨立，可平行執行。
 
 - [ ] Task 1: Add `fmt_num` and format the village, main, trial target, and action menu displays
-  - Files: `src/cogs/ui_renderer.py`, `tests/test_discord_commands.py`.
+  - Files: `src/cogs/ui_renderer.py`, `tests/test_discord_commands.py`, `tests/test_discord_notifications.py`.
   - Parallel: none.
   - Scope: `fmt_num`, trial status line, `build_trial_target_embed`, `build_trial_target_components`, village section (stage, resources, building levels and cap, villager action counts), personal section (efficiency output and pct, tool levels, materials, AP, trial contribution), action and building target dropdowns.
   - Acceptance criteria:
@@ -121,14 +114,15 @@ Tasks 2、3、4 互相獨立，可平行執行。
     - Village embed with stage progress `156618`, target `750000`, food `12345`, level cap `1000` contains `156,618 / 750,000`, `🌾 12,345`, `等級上限：Lv1,000`; the deadline still renders as `<t:{unix}:R>` with no comma.
     - Active trial line with progress `156618` and target `750000` contains `🏆 試煉 156,618 / 750,000`.
     - Trial target options show label `250,000` with value `250000`; the embed shows `最大目標：1,000,000` for a max target of `1000000`.
-    - Building target option shows `Lv1,024` and `XP: 1,234/2,048` for level `1024`, xp `1234`, requirement `2048`.
+    - Building target option shows `Lv1,024` and `XP: 1,234/1,025,000` for level `1024`, xp `1234`, `BUILDING_XP_PER_LEVEL=1000`.
+    - The `update_dashboard` trial-line assertion in `tests/test_discord_notifications.py` expects `1,200 / 5,000`.
     - Personal section with tool level `1500`, materials `12345`, universal `2000`, trial contribution `156618` contains `1,500`, `12,345`, `🌟 2,000`, `🏆 試煉貢獻：156,618`.
     - `uv run python -m pytest` passes.
 - [ ] Task 2: Format gear, affix, auto-affix, auto-tool, admin, and ranking displays
   - Files: `src/cogs/ui_renderer.py`, `tests/test_discord_commands.py`.
   - Depends on: Task 1.
   - Parallel: with Task 3 and Task 4.
-  - Scope: `build_gear_embed` (levels, rates, pity, risky bonus, cost, holdings, AP, cap, affix totals, sacrifice and result lines), gear type dropdown descriptions, affix summary, group list, affix management embed and group dropdown, auto-affix embed, auto-tool embed and hour dropdown labels, `build_manager_embed`, resource admin embed and delta button labels, `build_ranking_text`.
+  - Scope: `build_gear_embed` (levels, rates, pity, risky bonus, cost, holdings, AP, cap, affix totals, sacrifice and result lines), gear type dropdown descriptions, affix summary, group list, affix management embed and group dropdown, auto-affix embed, auto-tool embed, `build_manager_embed`, resource admin embed and delta button labels, `build_ranking_text`.
   - Acceptance criteria:
     - Gear embed for level `1024`, material cost `1025`, holdings `12345`, universal `2000`, `risky_failed_levels` `150000`, `risky_bonus_pct` `1500.0` contains `Lv1,024 → Lv1,025`, `+ 1,025 個`, `持有素材：12,345 個 ｜ 🌟 萬能素材：2,000 個`, `鐵齒率：150,000 x 0.01% = 1,500%`.
     - Gear type dropdown description for level `1024` with 1% per level contains `+1,024% → +1,025%`.
@@ -137,13 +131,12 @@ Tasks 2、3、4 互相獨立，可平行執行。
     - Manager embed with materials `12345` and `risky_failed_levels` `150000` shows `12,345` and `150,000`.
     - Resource admin embed with amount `1234567` shows `1,234,567`; delta buttons for `1000` show `+1,000` and `-1,000`.
     - Ranking text for level `1024` contains `- Lv1,024: {name}`; an unresolved name still shows the raw `user_id`.
-    - Every custom_id and `SelectOption.value` built by these functions contains no comma.
     - `uv run python -m pytest` passes.
 - [ ] Task 3: Format all Public notification numbers
   - Files: `src/core/notification.py`, `tests/test_discord_notifications.py`.
   - Depends on: Task 1.
   - Parallel: with Task 2 and Task 4.
-  - Scope: every `_format_event` branch: `upgrade_stage_clear`, `overtime`, `gear_success`, `gear_fail`, `gear_batch`, `affix_auto_batch`, `affix_extracted`, `affix_cleared`, `affix_auto_extracted`, `trial_start`, `trial_success`, `trial_fail`.
+  - Scope: every `_format_event` branch: `upgrade_stage_clear`, `overtime`, `gear_success`, `gear_fail`, `gear_batch`, `affix_auto_batch`, `affix_auto_extracted`, `trial_start`, `trial_success`, `trial_fail`.
   - Acceptance criteria:
     - `trial_success` with target `750000`, 12 participants, `total_awarded` `7505`, and a participant with contribution `156618`, reward `1331`, name `𝕯𝖔𝖑𝖆` renders these exact lines:
       - `🎉 村莊試煉達成！目標 750,000 點行動產出已完成`
@@ -163,15 +156,14 @@ Tasks 2、3、4 互相獨立，可平行執行。
   - Parallel: with Task 2 and Task 3.
   - Acceptance criteria:
     - With holdings `12345`, the sacrifice modal label contains `（持有：12,345）` and the placeholder is `1 ~ 12,345`.
-    - Submitting `12345` in that modal still sacrifices 12345 materials.
     - `uv run python -m pytest` passes.
 
 ## Plan Review Issues
 
-- [ ] Plan Issue 1: Task 1 的建設目標 AC `XP: 1,234/2,048`（level `1024`）無法成立。`next_req = (blevel + 1) * BUILDING_XP_PER_LEVEL`（`src/cogs/ui_renderer.py:454`），level `1024` 的需求必為 `1025` 的倍數；測試環境 `BUILDING_XP_PER_LEVEL=1000`。修正：AC 改為 level `1024`、xp `1234` 顯示 `Lv1,024` 與 `XP: 1,234/1,025,000`。
-- [ ] Plan Issue 2: Task 1 的 Files 漏列 `tests/test_discord_notifications.py`。`tests/test_discord_notifications.py:858` 斷言 `update_dashboard` 的試煉行含 `"1200 / 5000"`，Task 1 改 `_build_trial_line` 後變成 `1,200 / 5,000`，pytest AC 會失敗。修正：Task 1 Files 加入 `tests/test_discord_notifications.py`，並更新該斷言。
-- [ ] Plan Issue 3: 「Modal 輸入欄位的預設值」排除項描述不存在的行為。`src/` 內 16 個 `TextInput` 都沒有設定 `value=`。修正：從 Not Doing、Architecture Decisions 與 `docs/discord/ui-renderer.md`「數字格式」的排除清單刪除此項。
-- [ ] Plan Issue 4: Task 4 AC「Submitting `12345` in that modal still sacrifices 12345 materials」無法因本變更失敗。送出路徑讀玩家輸入 `int(raw)`（`src/cogs/actions.py:857`），本變更不碰它；`tests/test_discord_commands.py:2823` 已覆蓋送出。修正：刪除此 AC。
-- [ ] Plan Issue 5: Task 2 AC「Every custom_id and `SelectOption.value` built by these functions contains no comma」無法失敗。Task 2 函式的 custom_id 與 value 數字只有小時（上限 `AUTO_TOOL_MAX_HOURS=24`）與詞條數值（`AFFIX_VALUE_MAX=5`），其餘為字串 ID。修正：刪除此 AC。
-- [ ] Plan Issue 6: 部分顯示點的數字在正常運作下不會達到 1,000，加 `fmt_num` 不改變輸出。自動工具小時選單 label 上限 24（`.env.example:61`）；`affix_extracted`、`affix_cleared` 通知只有 `{value}`，範圍 1..5（`src/managers/affix_manager.py:26-27`）。修正：從 Task 2 Scope 刪除 hour dropdown labels，從 Task 3 Scope 刪除 `affix_extracted` 與 `affix_cleared`。
-- [ ] Plan Issue 7: 排除清單與格式規則寫在多處。擁有者是 `docs/discord/ui-renderer.md`「數字格式」，本文件的 Not Doing 與 Architecture Decisions 各重寫一次；`ui-renderer.md` 內「本文件與 `discord/notification.md` 範本中的數字欄位...」又重述「範圍」一項。修正：Architecture Decisions 的「以下值維持原樣」清單改為一行指向 `ui-renderer.md`「數字格式」；Not Doing 只留該節沒有的項目（例外與錯誤回覆、log、數值縮寫）；刪除 `ui-renderer.md` 的「本文件與 `discord/notification.md` 範本...」一項。
+- [x] Plan Issue 1: Task 1 的建設目標 AC `XP: 1,234/2,048`（level `1024`）無法成立。`next_req = (blevel + 1) * BUILDING_XP_PER_LEVEL`（`src/cogs/ui_renderer.py:454`），level `1024` 的需求必為 `1025` 的倍數；測試環境 `BUILDING_XP_PER_LEVEL=1000`。修正：AC 改為 level `1024`、xp `1234` 顯示 `Lv1,024` 與 `XP: 1,234/1,025,000`。
+- [x] Plan Issue 2: Task 1 的 Files 漏列 `tests/test_discord_notifications.py`。`tests/test_discord_notifications.py:858` 斷言 `update_dashboard` 的試煉行含 `"1200 / 5000"`，Task 1 改 `_build_trial_line` 後變成 `1,200 / 5,000`，pytest AC 會失敗。修正：Task 1 Files 加入 `tests/test_discord_notifications.py`，並更新該斷言。
+- [x] Plan Issue 3: 「Modal 輸入欄位的預設值」排除項描述不存在的行為。`src/` 內 16 個 `TextInput` 都沒有設定 `value=`。修正：從 Not Doing、Architecture Decisions 與 `docs/discord/ui-renderer.md`「數字格式」的排除清單刪除此項。
+- [x] Plan Issue 4: Task 4 AC「Submitting `12345` in that modal still sacrifices 12345 materials」無法因本變更失敗。送出路徑讀玩家輸入 `int(raw)`（`src/cogs/actions.py:857`），本變更不碰它；`tests/test_discord_commands.py:2823` 已覆蓋送出。修正：刪除此 AC。
+- [x] Plan Issue 5: Task 2 AC「Every custom_id and `SelectOption.value` built by these functions contains no comma」無法失敗。Task 2 函式的 custom_id 與 value 數字只有小時（上限 `AUTO_TOOL_MAX_HOURS=24`）與詞條數值（`AFFIX_VALUE_MAX=5`），其餘為字串 ID。修正：刪除此 AC。
+- [x] Plan Issue 6: 部分顯示點的數字在正常運作下不會達到 1,000，加 `fmt_num` 不改變輸出。自動工具小時選單 label 上限 24（`.env.example:61`）；`affix_extracted`、`affix_cleared` 通知只有 `{value}`，範圍 1..5（`src/managers/affix_manager.py:26-27`）。修正：從 Task 2 Scope 刪除 hour dropdown labels，從 Task 3 Scope 刪除 `affix_extracted` 與 `affix_cleared`。
+- [x] Plan Issue 7: 排除清單與格式規則寫在多處。擁有者是 `docs/discord/ui-renderer.md`「數字格式」，本文件的 Not Doing 與 Architecture Decisions 各重寫一次；`ui-renderer.md` 內「本文件與 `discord/notification.md` 範本中的數字欄位...」又重述「範圍」一項。修正：Architecture Decisions 的「以下值維持原樣」清單改為一行指向 `ui-renderer.md`「數字格式」；Not Doing 只留該節沒有的項目（例外與錯誤回覆、log、數值縮寫）；刪除 `ui-renderer.md` 的「本文件與 `discord/notification.md` 範本...」一項。

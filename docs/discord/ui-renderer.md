@@ -13,18 +13,16 @@ source_paths:
 
 ## 數字格式
 
-所有玩家可見的數字以 `fmt_num` 格式化，整數部分每三位加 `,`。
+所有玩家可見的數字，整數部分每三位加 `,`。
 
 - 範圍：Embed 文字、元件 label/description/placeholder、Modal label/placeholder、Public 通知、排行榜文字。
 - 等級也套用，例如 `Lv1,024`。
 - 整數：`1234567` -> `1,234,567`。
 - 小數：去除尾隨零後套用，例如 `10.0` -> `10`、`0.05` -> `0.05`、`1234.5` -> `1,234.5`。
-- 本文件與 `discord/notification.md` 範本中的數字欄位（例如 `{progress}`、`{n}`、`Lv{n}`）都依此格式顯示。
 - 以下值維持原樣，不加 `,`：
   - Discord 時間戳記 `<t:{unix}:R>`、`<t:{unix}:t>` 的 unix 秒數。
   - custom_id 內的數字。
   - Select option 的 value。
-  - Modal 輸入欄位的預設值。
   - 找不到玩家名稱時 fallback 顯示的 `user_id`。
 
 ## 村莊 Dashboard Embed（Public，由 Watcher 持續更新）
