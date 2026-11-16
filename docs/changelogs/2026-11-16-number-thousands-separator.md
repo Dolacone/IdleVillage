@@ -165,3 +165,13 @@ Tasks 2、3、4 互相獨立，可平行執行。
     - With holdings `12345`, the sacrifice modal label contains `（持有：12,345）` and the placeholder is `1 ~ 12,345`.
     - Submitting `12345` in that modal still sacrifices 12345 materials.
     - `uv run python -m pytest` passes.
+
+## Plan Review Issues
+
+- [ ] Plan Issue 1: Task 1 的建設目標 AC `XP: 1,234/2,048`（level `1024`）無法成立。`next_req = (blevel + 1) * BUILDING_XP_PER_LEVEL`（`src/cogs/ui_renderer.py:454`），level `1024` 的需求必為 `1025` 的倍數；測試環境 `BUILDING_XP_PER_LEVEL=1000`。修正：AC 改為 level `1024`、xp `1234` 顯示 `Lv1,024` 與 `XP: 1,234/1,025,000`。
+- [ ] Plan Issue 2: Task 1 的 Files 漏列 `tests/test_discord_notifications.py`。`tests/test_discord_notifications.py:858` 斷言 `update_dashboard` 的試煉行含 `"1200 / 5000"`，Task 1 改 `_build_trial_line` 後變成 `1,200 / 5,000`，pytest AC 會失敗。修正：Task 1 Files 加入 `tests/test_discord_notifications.py`，並更新該斷言。
+- [ ] Plan Issue 3: 「Modal 輸入欄位的預設值」排除項描述不存在的行為。`src/` 內 16 個 `TextInput` 都沒有設定 `value=`。修正：從 Not Doing、Architecture Decisions 與 `docs/discord/ui-renderer.md`「數字格式」的排除清單刪除此項。
+- [ ] Plan Issue 4: Task 4 AC「Submitting `12345` in that modal still sacrifices 12345 materials」無法因本變更失敗。送出路徑讀玩家輸入 `int(raw)`（`src/cogs/actions.py:857`），本變更不碰它；`tests/test_discord_commands.py:2823` 已覆蓋送出。修正：刪除此 AC。
+- [ ] Plan Issue 5: Task 2 AC「Every custom_id and `SelectOption.value` built by these functions contains no comma」無法失敗。Task 2 函式的 custom_id 與 value 數字只有小時（上限 `AUTO_TOOL_MAX_HOURS=24`）與詞條數值（`AFFIX_VALUE_MAX=5`），其餘為字串 ID。修正：刪除此 AC。
+- [ ] Plan Issue 6: 部分顯示點的數字在正常運作下不會達到 1,000，加 `fmt_num` 不改變輸出。自動工具小時選單 label 上限 24（`.env.example:61`）；`affix_extracted`、`affix_cleared` 通知只有 `{value}`，範圍 1..5（`src/managers/affix_manager.py:26-27`）。修正：從 Task 2 Scope 刪除 hour dropdown labels，從 Task 3 Scope 刪除 `affix_extracted` 與 `affix_cleared`。
+- [ ] Plan Issue 7: 排除清單與格式規則寫在多處。擁有者是 `docs/discord/ui-renderer.md`「數字格式」，本文件的 Not Doing 與 Architecture Decisions 各重寫一次；`ui-renderer.md` 內「本文件與 `discord/notification.md` 範本中的數字欄位...」又重述「範圍」一項。修正：Architecture Decisions 的「以下值維持原樣」清單改為一行指向 `ui-renderer.md`「數字格式」；Not Doing 只留該節沒有的項目（例外與錯誤回覆、log、數值縮寫）；刪除 `ui-renderer.md` 的「本文件與 `discord/notification.md` 範本...」一項。
