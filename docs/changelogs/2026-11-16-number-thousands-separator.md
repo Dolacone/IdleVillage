@@ -4,7 +4,13 @@ status: Draft
 created: 2026-11-16
 doc_type: change
 last_reviewed: 2026-11-16
-source_paths: []
+source_paths:
+  - "docs/README.md"
+  - "docs/discord/ui-renderer.md"
+  - "docs/discord/notification.md"
+  - "src/cogs/ui_renderer.py"
+  - "src/core/notification.py"
+  - "src/cogs/actions.py"
 scope: "Tracks this change from design through review."
 ---
 
@@ -71,5 +77,91 @@ Not Doing:
 - 不改 custom_id 與 Select option value；這些值會被程式解析。
 - 不改 Modal 輸入欄位的預設值；管理員提交後程式會解析。
 - 不改玩家 ID fallback 顯示；ID 是識別碼，不是數量。
+- 不改例外訊息與錯誤回覆中回顯的原始輸入（manager `ValueError` 文字、`player_manager_cog` 的輸入錯誤訊息）。
 - 不改 log 輸出。
 - 不改數值縮寫（不使用 萬、K、M）。
+
+## Architecture Decisions
+
+- 新增 `fmt_num(value: int | float) -> str` 於 `src/cogs/ui_renderer.py`。
+  - `int` 回傳 `f"{value:,}"`，例如 `1234567` -> `1,234,567`。
+  - `float` 回傳 `f"{value:,g}"`，例如 `10.0` -> `10`、`0.05` -> `0.05`、`1234.5` -> `1,234.5`。
+  - `src/` 內沒有既有的數字格式函式（grep `:,}`、`def fmt`、`def format_` 無結果）。
+  - `ui_renderer.py` 已是 `notification.py` 與 `actions.py` 匯入顯示常數的來源，格式函式放在同一處。
+  - 鐵齒加成顯示既有 `:g` 規則（去除尾隨零），`,g` 保留此規則。
+- 每個顯示點直接呼叫 `fmt_num`，不對最終字串做後處理。
+- 以下值維持原樣，不呼叫 `fmt_num`：
+  - `<t:{unix}:R>` 與 `<t:{unix}:t>` 的 unix 秒數。
+  - custom_id 內的數字。
+  - `SelectOption.value`。
+  - Modal `TextInput` 的預設值。
+  - 試煉達成與排行榜中找不到名稱時 fallback 的 `user_id`。
+- `trial_target_select` 的 option label 改為 `fmt_num(target)`，value 維持 `str(target)`。
+- 數字格式規則由 `docs/discord/ui-renderer.md` 的「數字格式」擁有；`docs/discord/notification.md` 引用該節。
+
+## Tasks
+
+Dependency graph:
+
+```
+Task 1 (ui_renderer.py: fmt_num + village/main/trial/action menus)
+├── Task 2 (ui_renderer.py: gear/affix/auto-tool/admin/ranking)
+├── Task 3 (notification.py)
+└── Task 4 (actions.py sacrifice modal)
+```
+
+Tasks 2、3、4 互相獨立，可平行執行。
+
+- [ ] Task 1: Add `fmt_num` and format the village, main, trial target, and action menu displays
+  - Files: `src/cogs/ui_renderer.py`, `tests/test_discord_commands.py`.
+  - Parallel: none.
+  - Scope: `fmt_num`, trial status line, `build_trial_target_embed`, `build_trial_target_components`, village section (stage, resources, building levels and cap, villager action counts), personal section (efficiency output and pct, tool levels, materials, AP, trial contribution), action and building target dropdowns.
+  - Acceptance criteria:
+    - `fmt_num(999) == "999"`, `fmt_num(1234567) == "1,234,567"`, `fmt_num(10.0) == "10"`, `fmt_num(0.05) == "0.05"`, `fmt_num(1234.5) == "1,234.5"`.
+    - Village embed with stage progress `156618`, target `750000`, food `12345`, level cap `1000` contains `156,618 / 750,000`, `🌾 12,345`, `等級上限：Lv1,000`; the deadline still renders as `<t:{unix}:R>` with no comma.
+    - Active trial line with progress `156618` and target `750000` contains `🏆 試煉 156,618 / 750,000`.
+    - Trial target options show label `250,000` with value `250000`; the embed shows `最大目標：1,000,000` for a max target of `1000000`.
+    - Building target option shows `Lv1,024` and `XP: 1,234/2,048` for level `1024`, xp `1234`, requirement `2048`.
+    - Personal section with tool level `1500`, materials `12345`, universal `2000`, trial contribution `156618` contains `1,500`, `12,345`, `🌟 2,000`, `🏆 試煉貢獻：156,618`.
+    - `uv run python -m pytest` passes.
+- [ ] Task 2: Format gear, affix, auto-affix, auto-tool, admin, and ranking displays
+  - Files: `src/cogs/ui_renderer.py`, `tests/test_discord_commands.py`.
+  - Depends on: Task 1.
+  - Parallel: with Task 3 and Task 4.
+  - Scope: `build_gear_embed` (levels, rates, pity, risky bonus, cost, holdings, AP, cap, affix totals, sacrifice and result lines), gear type dropdown descriptions, affix summary, group list, affix management embed and group dropdown, auto-affix embed, auto-tool embed and hour dropdown labels, `build_manager_embed`, resource admin embed and delta button labels, `build_ranking_text`.
+  - Acceptance criteria:
+    - Gear embed for level `1024`, material cost `1025`, holdings `12345`, universal `2000`, `risky_failed_levels` `150000`, `risky_bonus_pct` `1500.0` contains `Lv1,024 → Lv1,025`, `+ 1,025 個`, `持有素材：12,345 個 ｜ 🌟 萬能素材：2,000 個`, `鐵齒率：150,000 x 0.01% = 1,500%`.
+    - Gear type dropdown description for level `1024` with 1% per level contains `+1,024% → +1,025%`.
+    - Affix management embed holdings `12345` contains `持有素材：12,345 個`.
+    - Auto-tool embed with tool material `1500` contains `素材可撐 1,500 小時`.
+    - Manager embed with materials `12345` and `risky_failed_levels` `150000` shows `12,345` and `150,000`.
+    - Resource admin embed with amount `1234567` shows `1,234,567`; delta buttons for `1000` show `+1,000` and `-1,000`.
+    - Ranking text for level `1024` contains `- Lv1,024: {name}`; an unresolved name still shows the raw `user_id`.
+    - Every custom_id and `SelectOption.value` built by these functions contains no comma.
+    - `uv run python -m pytest` passes.
+- [ ] Task 3: Format all Public notification numbers
+  - Files: `src/core/notification.py`, `tests/test_discord_notifications.py`.
+  - Depends on: Task 1.
+  - Parallel: with Task 2 and Task 4.
+  - Scope: every `_format_event` branch: `upgrade_stage_clear`, `overtime`, `gear_success`, `gear_fail`, `gear_batch`, `affix_auto_batch`, `affix_extracted`, `affix_cleared`, `affix_auto_extracted`, `trial_start`, `trial_success`, `trial_fail`.
+  - Acceptance criteria:
+    - `trial_success` with target `750000`, 12 participants, `total_awarded` `7505`, and a participant with contribution `156618`, reward `1331`, name `𝕯𝖔𝖑𝖆` renders these exact lines:
+      - `🎉 村莊試煉達成！目標 750,000 點行動產出已完成`
+      - `共 12 位玩家瓜分了 7,505 個 🌟萬能素材（25% 平均分配、75% 依貢獻度）：`
+      - `貢獻 156,618 (1,331 素材)：𝕯𝖔𝖑𝖆`
+    - `trial_start` with target `750000` and reward pool `7500` shows `花費 750,000 個`, `累積 750,000 點`, `共 7,500 個`; `<t:{deadline_unix}:R>` has no comma.
+    - `trial_fail` with target `750000` and progress `123456` shows `（進度：123,456/750,000）`.
+    - `overtime` with progress `156618` and target `750000` shows `目前進度：156,618 / 750,000`.
+    - `upgrade_stage_clear` with caps `1000`/`1005` and next target `1250000` shows `Lv1,000 變成 Lv1,005` and `目標需求：1,250,000`.
+    - `gear_success`, `gear_fail`, `gear_batch` with level `1024` and failure count `1203` show `Lv1,024 -> Lv1,025（總失敗次數：1,203）`.
+    - `affix_auto_extracted` and `affix_auto_batch` with attempts `1500` and spent `3000` show `抽選次數1,500 (3,000工具素材)`.
+    - An unresolved trial participant still shows the raw `user_id` with no comma.
+    - `uv run python -m pytest` passes.
+- [ ] Task 4: Format the sacrifice modal holdings
+  - Files: `src/cogs/actions.py`, `tests/test_discord_commands.py`.
+  - Depends on: Task 1.
+  - Parallel: with Task 2 and Task 3.
+  - Acceptance criteria:
+    - With holdings `12345`, the sacrifice modal label contains `（持有：12,345）` and the placeholder is `1 ~ 12,345`.
+    - Submitting `12345` in that modal still sacrifices 12345 materials.
+    - `uv run python -m pytest` passes.

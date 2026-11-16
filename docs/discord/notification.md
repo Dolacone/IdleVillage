@@ -1,7 +1,7 @@
 ---
 title: "Module: notification"
 doc_type: module
-last_reviewed: 2026-11-05
+last_reviewed: 2026-11-16
 source_paths:
   - src/core/notification.py
   - src/cogs/actions.py
@@ -62,6 +62,8 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 3. Dashboard 更新
 
 ## 訊息範本
+
+範本中的數字欄位依 `discord/ui-renderer.md` 的「數字格式」顯示。
 
 ### 逾時警告
 ```
@@ -163,6 +165,7 @@ Bot 維護一則**固定的 Public 訊息**作為村莊狀態看板（Dashboard�
 
 ## Changelog
 
+- 2026-11-16: 所有通知數字依 `discord/ui-renderer.md` 的「數字格式」加千分位 `,`。
 - 2026-11-05: 移除建築升級通知。
 - 2026-11-05: 移除一般關卡通關通知；只在升級關通關時發送升級關通關通知。
 - 2026-10-27: 新增工具連續強化與詞條自動抽取所有空格通知；超過 2000 字元的訊息依行拆分。
