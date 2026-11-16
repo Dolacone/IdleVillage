@@ -1361,10 +1361,6 @@ class TestBatchNotifications(DatabaseTestCase):
         self.assertEqual("\n".join(sent), full)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestNotificationThousandsSeparators(unittest.TestCase):
     """Public notification numbers carry thousands separators; unix and user_id do not."""
 
@@ -1453,3 +1449,7 @@ class TestNotificationThousandsSeparators(unittest.TestCase):
         })
         self.assertIn(expected, single)
         self.assertIn(expected, batch)
+
+
+if __name__ == "__main__":
+    unittest.main()
