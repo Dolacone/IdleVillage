@@ -65,6 +65,12 @@ UI_BUILDING_TARGETS = ("gathering_field", "workshop", "hunting_ground")
 TRIAL_TARGETS_PER_PAGE = 25
 
 
+def fmt_num(value: int | float) -> str:
+    if isinstance(value, float):
+        return f"{value:,g}"
+    return f"{value:,}"
+
+
 def _progress_bar(progress: int, target: int, width: int = 10) -> str:
     if target <= 0:
         return "░" * width
@@ -110,7 +116,7 @@ def _build_trial_line(trial_data: dict, resources: dict, now_ts: int) -> str:
         trial_bar = _progress_bar(trial_progress, trial_target)
         trial_deadline_unix = _unix_from_iso(trial_data.get("started_at", "")) + get_env_int("TRIAL_DURATION_SECONDS")
         return (
-            f"\n🏆 試煉 {trial_progress} / {trial_target} ({trial_pct}%)\n"
+            f"\n🏆 試煉 {fmt_num(trial_progress)} / {fmt_num(trial_target)} ({trial_pct}%)\n"
             f"   {trial_bar}\n"
             f"   ⏰ 期限: <t:{trial_deadline_unix}:R>\n"
         )
@@ -150,8 +156,8 @@ def build_trial_target_embed(resources: dict, page: int = 0) -> disnake.Embed:
         total_pages = (target_count - 1) // TRIAL_TARGETS_PER_PAGE + 1
         description = (
             f"選擇試煉目標（第 {clamped_page + 1}/{total_pages} 頁）\n"
-            f"目標範圍：{first_target} - {last_target}\n"
-            f"最大目標：{max_target}"
+            f"目標範圍：{fmt_num(first_target)} - {fmt_num(last_target)}\n"
+            f"最大目標：{fmt_num(max_target)}"
         )
     return disnake.Embed(title="🏆 開啟試煉", description=description, color=disnake.Color.blue())
 
@@ -173,7 +179,7 @@ def build_trial_target_components(resources: dict, page: int = 0) -> list:
     first_index = clamped_page * TRIAL_TARGETS_PER_PAGE + 1
     last_index = min((clamped_page + 1) * TRIAL_TARGETS_PER_PAGE, target_count)
     options = [
-        disnake.SelectOption(label=str(index * step), value=str(index * step))
+        disnake.SelectOption(label=fmt_num(index * step), value=str(index * step))
         for index in range(first_index, last_index + 1)
     ]
     return [
@@ -253,24 +259,24 @@ def _build_village_section(
         bxp = b.get("xp_progress", 0)
         next_req = (blevel + 1) * xp_per_level
         bpct = math.floor(bxp / max(next_req, 1) * 100)
-        building_lines.append(f"{blabel} Lv{blevel} ({bpct}%)")
+        building_lines.append(f"{blabel} Lv{fmt_num(blevel)} ({bpct}%)")
 
     sorted_counts = sorted(action_counts, key=lambda x: (-x[2], x[0]))
-    action_lines = [_action_display_name(a, t) + f": {c}" for a, t, c in sorted_counts]
+    action_lines = [_action_display_name(a, t) + f": {fmt_num(c)}" for a, t, c in sorted_counts]
     action_block = "\n".join(action_lines) if action_lines else "（無）"
 
     building_block = "\n".join(building_lines)
     return (
         f"(Last Update: <t:{unix_ts}:R>)\n\n"
         f"**Idle Village**\n\n"
-        f"📋 關卡 {stages_cleared}: {stage_name}\n"
-        f"   {bar}  {progress} / {target} ({pct}%)\n"
+        f"📋 關卡 {fmt_num(stages_cleared)}: {stage_name}\n"
+        f"   {bar}  {fmt_num(progress)} / {fmt_num(target)} ({pct}%)\n"
         f"   ⏰ 期限: <t:{deadline_unix}:R>\n"
         f"{overtime_line}"
         f"{trial_line}"
         f"\n公用資源\n"
-        f"🌾 {food} | 🪵 {wood} | 🧠 {knowledge}\n"
-        f"\n公用設施 (等級上限：Lv{level_cap})\n"
+        f"🌾 {fmt_num(food)} | 🪵 {fmt_num(wood)} | 🧠 {fmt_num(knowledge)}\n"
+        f"\n公用設施 (等級上限：Lv{fmt_num(level_cap)})\n"
         f"{building_block}\n"
         f"\n村民行動\n"
         f"```\n{action_block}\n```"
@@ -298,14 +304,14 @@ def build_main_embed(
     village_text = _build_village_section(stage_data, resources, buildings, action_counts, trial_data)
 
     gear_parts = [
-        f"{ACTION_EMOJIS[a]} {player_row.get(f'gear_{a}', 0)}"
+        f"{ACTION_EMOJIS[a]} {fmt_num(player_row.get(f'gear_{a}', 0))}"
         for a in ("gathering", "building", "combat", "research")
     ]
     mat_parts = [
-        f"{ACTION_EMOJIS[a]} {player_row.get(f'materials_{a}', 0)}"
+        f"{ACTION_EMOJIS[a]} {fmt_num(player_row.get(f'materials_{a}', 0))}"
         for a in ("gathering", "building", "combat", "research")
     ]
-    mat_parts.append(f"🌟 {player_row.get('materials_universal', 0)}")
+    mat_parts.append(f"🌟 {fmt_num(player_row.get('materials_universal', 0))}")
     base_output = get_env_int("BASE_OUTPUT")
     stage_bonus_per = get_env_float("STAGE_BONUS_PER_CLEAR")
     gear_bonus_per = get_env_float("GEAR_BONUS_PER_LEVEL")
@@ -324,7 +330,7 @@ def build_main_embed(
         )
         output = math.floor(base_output * (1 + bonus))
         pct = math.floor(bonus * 100)
-        efficiency_parts.append(f"{ACTION_EMOJIS[action_type]} {output}(+{pct}%)")
+        efficiency_parts.append(f"{ACTION_EMOJIS[action_type]} {fmt_num(output)}(+{fmt_num(pct)}%)")
 
     action = player_row.get("action")
     action_target = player_row.get("action_target")
@@ -346,11 +352,11 @@ def build_main_embed(
     ap_full_time_unix = _unix_from_iso(player_row.get("ap_full_time") or "")
     if ap < ap_cap and ap_full_time_unix:
         next_ap_unix = ap_full_time_unix - (ap_cap - ap - 1) * recovery_mins * 60
-        ap_line = f"⚡ AP：{ap} / {ap_cap}（下次：<t:{next_ap_unix}:R>）"
+        ap_line = f"⚡ AP：{fmt_num(ap)} / {fmt_num(ap_cap)}（下次：<t:{next_ap_unix}:R>）"
     else:
-        ap_line = f"⚡ AP：{ap} / {ap_cap}"
+        ap_line = f"⚡ AP：{fmt_num(ap)} / {fmt_num(ap_cap)}"
 
-    trial_contrib_line = f"\n🏆 試煉貢獻：{trial_contribution}" if (trial_data or {}).get("is_active") else ""
+    trial_contrib_line = f"\n🏆 試煉貢獻：{fmt_num(trial_contribution)}" if (trial_data or {}).get("is_active") else ""
     trial_message_line = f"\n{trial_message}" if trial_message else ""
 
     player_section = (
@@ -454,9 +460,9 @@ def build_main_components(
             next_req = (blevel + 1) * xp_per_level
             target_options.append(
                 disnake.SelectOption(
-                    label=f"{BUILDING_LABELS[btype]} Lv{blevel}",
+                    label=f"{BUILDING_LABELS[btype]} Lv{fmt_num(blevel)}",
                     value=btype,
-                    description=f"XP: {bxp}/{next_req}",
+                    description=f"XP: {fmt_num(bxp)}/{fmt_num(next_req)}",
                     default=(pending_target == btype),
                 )
             )
@@ -501,7 +507,7 @@ def _build_affix_summary(affixes: list) -> list[str]:
         if affix_type in totals:
             totals[affix_type] += affix["value"]
     lines = [
-        f"{label}: {totals[affix_type]}%"
+        f"{label}: {fmt_num(totals[affix_type])}%"
         for affix_type, label in AFFIX_TYPE_LABELS.items()
         if totals[affix_type] > 0
     ]
@@ -523,19 +529,19 @@ def _group_affixes(affixes: list) -> list[tuple[str, int, int]]:
 
 
 def _affix_group_label(affix_type: str, value: int) -> str:
-    return f"{AFFIX_TYPE_LABELS.get(affix_type, affix_type)}（+{value}%）"
+    return f"{AFFIX_TYPE_LABELS.get(affix_type, affix_type)}（+{fmt_num(value)}%）"
 
 
 def _build_affix_section(affixes: list, max_slots: int) -> str:
     """Return grouped affix text block, or empty string when no slots unlocked."""
     if max_slots == 0:
         return ""
-    lines = ["─────────────────────────────", f"詞條槽（{len(affixes)}/{max_slots}）"]
+    lines = ["─────────────────────────────", f"詞條槽（{fmt_num(len(affixes))}/{fmt_num(max_slots)}）"]
     for affix_type, value, count in _group_affixes(affixes):
-        lines.append(f"{_affix_group_label(affix_type, value)} x {count}")
+        lines.append(f"{_affix_group_label(affix_type, value)} x {fmt_num(count)}")
     empty = max_slots - len(affixes)
     if empty > 0:
-        lines.append(f"空槽 x {empty}")
+        lines.append(f"空槽 x {fmt_num(empty)}")
     return "\n" + "\n".join(lines)
 
 
@@ -585,8 +591,8 @@ def build_gear_embed(
     if mode in ("normal", "risky") and rate > final_rate:
         final_rate_pct = _rate_percent(min(1.0, rate))
 
-    pity_total_pct = pity * pity_display
-    risky_bonus_display = f"{risky_bonus_pct:g}"
+    pity_total_pct = fmt_num(pity * pity_display)
+    risky_bonus_display = fmt_num(risky_bonus_pct)
 
     if mode == "buffer":
         rate_line = "成功率：0%（墊檔不進行強化）"
@@ -596,44 +602,44 @@ def build_gear_embed(
     lines = [
         "🔨 工具強化",
         "─────────────────────────────",
-        f"{label}：Lv{gear_level} → Lv{target_level}",
+        f"{label}：Lv{fmt_num(gear_level)} → Lv{fmt_num(target_level)}",
         f"模式：{mode_label}",
         rate_line,
     ]
 
     if mode in ("normal", "risky"):
         lines.extend([
-            f"保底率：{pity} x {pity_display}% = {pity_total_pct}%",
-            f"鐵齒率：{risky_failed_levels} x 0.01% = {risky_bonus_display}%",
+            f"保底率：{fmt_num(pity)} x {fmt_num(pity_display)}% = {pity_total_pct}%",
+            f"鐵齒率：{fmt_num(risky_failed_levels)} x 0.01% = {risky_bonus_display}%",
         ])
 
     lines.extend([
-        f"消耗：⚡ 1 AP + {material_cost} 個 {mat_label}",
-        f"持有素材：{materials} 個 ｜ 🌟 萬能素材：{universal_materials} 個",
-        f"⚡ AP：{ap} / {ap_cap}",
-        f"工具等級上限：Lv{gear_cap}（研究所 Lv{gear_cap}）",
+        f"消耗：⚡ 1 AP + {fmt_num(material_cost)} 個 {mat_label}",
+        f"持有素材：{fmt_num(materials)} 個 ｜ 🌟 萬能素材：{fmt_num(universal_materials)} 個",
+        f"⚡ AP：{fmt_num(ap)} / {fmt_num(ap_cap)}",
+        f"工具等級上限：Lv{fmt_num(gear_cap)}（研究所 Lv{fmt_num(gear_cap)}）",
     ])
 
     if max_slots > 0:
         current_affixes = affixes or []
         lines.append(
             "\n─────────────────────────────\n"
-            f"詞條槽（{len(current_affixes)}/{max_slots}）\n"
+            f"詞條槽（{fmt_num(len(current_affixes))}/{fmt_num(max_slots)}）\n"
             + "\n".join(_build_affix_summary(current_affixes))
         )
 
     if result is not None:
         if result.get("type") == "sacrifice":
             n = result.get("sacrificed", 0)
-            lines.append(f"\n🩸 獻祭完成！消耗 {n} 個 {mat_label}，鐵齒加成 +{round(n * 0.01, 2):g}%")
+            lines.append(f"\n🩸 獻祭完成！消耗 {fmt_num(n)} 個 {mat_label}，鐵齒加成 +{fmt_num(round(n * 0.01, 2))}%")
         elif result.get("error"):
             lines.append(f"\n⚠️ 操作失敗：{result['error']}")
         else:
             result_mode = result.get("mode", "normal")
             if result.get("success"):
-                lines.append(f"\n✅ 強化成功！{label} 升至 Lv{result.get('new_level', target_level)}")
+                lines.append(f"\n✅ 強化成功！{label} 升至 Lv{fmt_num(result.get('new_level', target_level))}")
             elif result_mode == "buffer":
-                lines.append(f"\n🛡️ 墊檔完成。保底計數 +1（現為 {result.get('pity_after', pity + 1)}）")
+                lines.append(f"\n🛡️ 墊檔完成。保底計數 +1（現為 {fmt_num(result.get('pity_after', pity + 1))}）")
             elif result_mode == "risky":
                 lines.append(f"\n💀 鐵齒失敗！等級與保底計數歸零")
             else:
@@ -669,12 +675,12 @@ def build_gear_components(
     def gear_description(g: str) -> str:
         current = player_gear.get(g, 0)
         if current >= gear_cap:
-            return f"已達等級上限 Lv{gear_cap}"
+            return f"已達等級上限 Lv{fmt_num(gear_cap)}"
         current_total = current * bonus_pct
         next_total = (current + 1) * bonus_pct
         return (
-            f"Lv{current} → Lv{current + 1}: "
-            f"{ACTION_LABELS[g]}產出 +{current_total}% → +{next_total}%"
+            f"Lv{fmt_num(current)} → Lv{fmt_num(current + 1)}: "
+            f"{ACTION_LABELS[g]}產出 +{fmt_num(current_total)}% → +{fmt_num(next_total)}%"
         )
 
     gear_options = [
@@ -767,7 +773,7 @@ def build_affix_embed(
     label = GEAR_LABELS.get(gear_type, gear_type)
     lines = [
         f"🔮 詞條管理 — {ACTION_EMOJIS.get(gear_type, '')} {label}",
-        f"持有素材：{materials} 個 ｜ 🌟 萬能素材：{universal_materials} 個",
+        f"持有素材：{fmt_num(materials)} 個 ｜ 🌟 萬能素材：{fmt_num(universal_materials)} 個",
     ]
     affix_section = _build_affix_section(affixes, max_slots)
     if affix_section:
@@ -794,12 +800,12 @@ def build_affix_components(
     def gear_description(g: str) -> str:
         current = player_gear.get(g, 0)
         if current >= gear_cap:
-            return f"已達等級上限 Lv{gear_cap}"
+            return f"已達等級上限 Lv{fmt_num(gear_cap)}"
         current_total = current * bonus_pct
         next_total = (current + 1) * bonus_pct
         return (
-            f"Lv{current} → Lv{current + 1}: "
-            f"{ACTION_LABELS[g]}產出 +{current_total}% → +{next_total}%"
+            f"Lv{fmt_num(current)} → Lv{fmt_num(current + 1)}: "
+            f"{ACTION_LABELS[g]}產出 +{fmt_num(current_total)}% → +{fmt_num(next_total)}%"
         )
 
     gear_options = [
@@ -902,8 +908,8 @@ def build_auto_affix_embed(
     scope: str | None = None,
 ) -> disnake.Embed:
     label = GEAR_LABELS.get(gear_type, gear_type or "")
-    lines = [f"✨ 自動抽取 — {label}", f"持有素材：{materials} 個 ｜ 🌟 萬能素材：{universal_materials} 個"]
-    lines.append(f"詞條槽（{len(affixes)}/{max_slots}）")
+    lines = [f"✨ 自動抽取 — {label}", f"持有素材：{fmt_num(materials)} 個 ｜ 🌟 萬能素材：{fmt_num(universal_materials)} 個"]
+    lines.append(f"詞條槽（{fmt_num(len(affixes))}/{fmt_num(max_slots)}）")
     if error:
         lines.append(error)
     effect = "任意" if target_affix_type == "any" else AFFIX_TYPE_LABELS.get(target_affix_type, "未選擇")
@@ -1011,7 +1017,7 @@ def build_auto_tool_embed(
             line = f"{label} — 到期 <t:{deadline}:R>"
             if tt == "building" and row.get("action_target"):
                 line += f"（{BUILDING_LABELS.get(row['action_target'], row['action_target'])}）"
-            line += f"｜素材可撐 {materials.get(tt, 0)} 小時"
+            line += f"｜素材可撐 {fmt_num(materials.get(tt, 0))} 小時"
             lines.append(line)
     else:
         lines.append("目前沒有運行中的自動工具。")
@@ -1176,16 +1182,16 @@ def build_manager_embed(target_user_display_name: str, player_data: dict) -> dis
         ("pity", "保底計數"),
     ):
         value = " ｜ ".join(
-            f"{ACTION_LABELS[a]} {player_data.get(f'{prefix}_{a}', 0)}"
+            f"{ACTION_LABELS[a]} {fmt_num(player_data.get(f'{prefix}_{a}', 0))}"
             for a in ("gathering", "building", "combat", "research")
         )
         if prefix == "materials":
-            value += f" ｜ 萬能 {player_data.get('materials_universal', 0)}"
+            value += f" ｜ 萬能 {fmt_num(player_data.get('materials_universal', 0))}"
         embed.add_field(name=field_name, value=value, inline=False)
 
     embed.add_field(
         name="鐵齒失敗累積",
-        value=str(player_data.get("risky_failed_levels", 0)),
+        value=fmt_num(player_data.get("risky_failed_levels", 0)),
         inline=False,
     )
 
@@ -1222,7 +1228,7 @@ def build_manager_components(target_user_id: str) -> list:
 def build_admin_embed(resource_type: str, amount: int) -> disnake.Embed:
     label = RESOURCE_LABELS.get(resource_type, resource_type)
     emoji = RESOURCE_EMOJIS.get(resource_type, "")
-    text = f"⚙️ 資源管理\n\n當前 {emoji} {label}：{amount}"
+    text = f"⚙️ 資源管理\n\n當前 {emoji} {label}：{fmt_num(amount)}"
     return disnake.Embed(description=text, color=disnake.Color(0xFFA500))
 
 
@@ -1247,22 +1253,22 @@ def build_admin_components(resource_type: str) -> list:
         ),
         disnake.ui.ActionRow(
             disnake.ui.Button(
-                label=f"+{small}",
+                label=f"+{fmt_num(small)}",
                 style=disnake.ButtonStyle.success,
                 custom_id=f"resource_add_small:{resource_type}",
             ),
             disnake.ui.Button(
-                label=f"+{large}",
+                label=f"+{fmt_num(large)}",
                 style=disnake.ButtonStyle.success,
                 custom_id=f"resource_add_large:{resource_type}",
             ),
             disnake.ui.Button(
-                label=f"-{small}",
+                label=f"-{fmt_num(small)}",
                 style=disnake.ButtonStyle.danger,
                 custom_id=f"resource_sub_small:{resource_type}",
             ),
             disnake.ui.Button(
-                label=f"-{large}",
+                label=f"-{fmt_num(large)}",
                 style=disnake.ButtonStyle.danger,
                 custom_id=f"resource_sub_large:{resource_type}",
             ),
@@ -1297,6 +1303,6 @@ def build_ranking_text(sliced_rankings: dict, name_map: dict) -> str:
             lines = [header]
             for user_id, level in entries:
                 name = name_map.get(user_id, user_id)
-                lines.append(f"- Lv{level}: {name}")
+                lines.append(f"- Lv{fmt_num(level)}: {name}")
             sections.append("\n".join(lines))
     return "\n".join(sections)
