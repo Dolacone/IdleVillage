@@ -1408,17 +1408,19 @@ class TestNotificationThousandsSeparators(unittest.TestCase):
     def test_overtime_seconds_and_progress(self):
         from core.notification import _format_event
         text = _format_event(
-            {"type": "overtime", "stages_cleared": 4, "progress": 156618, "target": 750000}
+            {"type": "overtime", "stages_cleared": 5000, "progress": 156618, "target": 750000}
         )
+        self.assertIn("第 5,001 關已超過 86,400 秒", text)
         self.assertIn("已超過 86,400 秒", text)
         self.assertIn("目前進度：156,618 / 750,000", text)
 
     def test_upgrade_stage_clear_caps_and_target(self):
         from core.notification import _format_event
         text = _format_event({
-            "type": "upgrade_stage_clear", "round": 2, "old_cap": 1000, "new_cap": 1005,
+            "type": "upgrade_stage_clear", "round": 1000, "old_cap": 1000, "new_cap": 1005,
             "next_stage_type": "gathering", "next_target": 1250000,
         })
+        self.assertIn("第 1,000 輪完成", text)
         self.assertIn("Lv1,000 變成 Lv1,005", text)
         self.assertIn("目標需求：1,250,000", text)
 

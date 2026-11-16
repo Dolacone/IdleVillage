@@ -101,7 +101,7 @@ def _format_event(event: dict, name_map: dict[str, str] | None = None) -> str | 
         next_target = event.get("next_target", 0)
         next_name = STAGE_TYPE_LABELS.get(next_type, next_type)
         return (
-            f"升級關通關，第 {round_n} 輪完成\n"
+            f"升級關通關，第 {fmt_num(round_n)} 輪完成\n"
             f"建築等級上限從 Lv{fmt_num(old_cap)} 變成 Lv{fmt_num(new_cap)}\n"
             f"下一目標：{next_name}\n"
             f"目標需求：{fmt_num(next_target)}"
@@ -116,7 +116,7 @@ def _format_event(event: dict, name_map: dict[str, str] | None = None) -> str | 
         pct = _pct(progress, target)
         stage_n = stages_cleared + 1
         return (
-            f"第 {stage_n} 關已超過 {fmt_num(overtime_secs)} 秒\n"
+            f"第 {fmt_num(stage_n)} 關已超過 {fmt_num(overtime_secs)} 秒\n"
             f"後續貢獻計入關卡進度時將乘上 {multiplier}\n"
             f"目前進度：{fmt_num(progress)} / {fmt_num(target)}（{pct}%）"
         )
