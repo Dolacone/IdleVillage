@@ -132,7 +132,7 @@ Tasks 2、3、4 互相獨立，可平行執行。
     - Resource admin embed with amount `1234567` shows `1,234,567`; delta buttons for `1000` show `+1,000` and `-1,000`.
     - Ranking text for level `1024` contains `- Lv1,024: {name}`.
     - `uv run python -m pytest` passes.
-- [ ] Task 3: Format all Public notification numbers
+- [x] Task 3: Format all Public notification numbers
   - Files: `src/core/notification.py`, `tests/test_discord_notifications.py`.
   - Depends on: Task 1.
   - Parallel: with Task 2 and Task 4.

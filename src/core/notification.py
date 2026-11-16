@@ -23,6 +23,7 @@ from cogs.ui_renderer import (
     RESOURCE_EMOJIS,
     RESOURCE_LABELS,
     STAGE_TYPE_LABELS,
+    fmt_num,
 )
 
 logger = logging.getLogger(__name__)
@@ -101,9 +102,9 @@ def _format_event(event: dict, name_map: dict[str, str] | None = None) -> str | 
         next_name = STAGE_TYPE_LABELS.get(next_type, next_type)
         return (
             f"升級關通關，第 {round_n} 輪完成\n"
-            f"建築等級上限從 Lv{old_cap} 變成 Lv{new_cap}\n"
+            f"建築等級上限從 Lv{fmt_num(old_cap)} 變成 Lv{fmt_num(new_cap)}\n"
             f"下一目標：{next_name}\n"
-            f"目標需求：{next_target}"
+            f"目標需求：{fmt_num(next_target)}"
         )
 
     if kind == "overtime":
@@ -115,9 +116,9 @@ def _format_event(event: dict, name_map: dict[str, str] | None = None) -> str | 
         pct = _pct(progress, target)
         stage_n = stages_cleared + 1
         return (
-            f"第 {stage_n} 關已超過 {overtime_secs} 秒\n"
+            f"第 {stage_n} 關已超過 {fmt_num(overtime_secs)} 秒\n"
             f"後續貢獻計入關卡進度時將乘上 {multiplier}\n"
-            f"目前進度：{progress} / {target}（{pct}%）"
+            f"目前進度：{fmt_num(progress)} / {fmt_num(target)}（{pct}%）"
         )
 
     if kind == "gear_success":
@@ -131,7 +132,7 @@ def _format_event(event: dict, name_map: dict[str, str] | None = None) -> str | 
         result_label = "鐵齒升級成功" if mode == "risky" else "標準升級成功"
         return (
             f"{user_name} 的 {gear_name} {result_label} :tada: "
-            f"Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）"
+            f"Lv{fmt_num(current_level)} -> Lv{fmt_num(target_level)}（總失敗次數：{fmt_num(failure_count)}）"
         )
 
     if kind == "gear_fail":
@@ -150,7 +151,7 @@ def _format_event(event: dict, name_map: dict[str, str] | None = None) -> str | 
             result_label, result_emoji = "標準升級失敗", ":boom:"
         return (
             f"{user_name} 的 {gear_name} {result_label} {result_emoji} "
-            f"Lv{current_level} -> Lv{target_level}（總失敗次數：{failure_count}）"
+            f"Lv{fmt_num(current_level)} -> Lv{fmt_num(target_level)}（總失敗次數：{fmt_num(failure_count)}）"
         )
 
     if kind == "gear_batch":
@@ -168,8 +169,8 @@ def _format_event(event: dict, name_map: dict[str, str] | None = None) -> str | 
             target_level = r.get("target_level", current_level + 1)
             head = "成功 :tada:" if r.get("success") else fail_label
             lines.append(
-                f"{head} Lv{current_level} -> Lv{target_level}"
-                f"（總失敗次數：{r.get('failure_count', 0)}）"
+                f"{head} Lv{fmt_num(current_level)} -> Lv{fmt_num(target_level)}"
+                f"（總失敗次數：{fmt_num(r.get('failure_count', 0))}）"
             )
         return "\n".join(lines)
 
@@ -187,7 +188,7 @@ def _format_event(event: dict, name_map: dict[str, str] | None = None) -> str | 
             else:
                 result = "未抽到目標詞條"
             lines.append(
-                f"{result}，抽選次數{r.get('attempts', 0)} ({r.get('material_spent', 0)}{cost_label})"
+                f"{result}，抽選次數{fmt_num(r.get('attempts', 0))} ({fmt_num(r.get('material_spent', 0))}{cost_label})"
             )
         return "\n".join(lines)
 
@@ -215,7 +216,7 @@ def _format_event(event: dict, name_map: dict[str, str] | None = None) -> str | 
             result = f"抽到詞條：{affix_label}（+{affix.get('value', 0)}%）"
         else:
             result = "未抽到目標詞條"
-        return f"{user_name} 的 {gear_name} {result}，抽選次數{attempts} ({spent}{cost_label})"
+        return f"{user_name} 的 {gear_name} {result}，抽選次數{fmt_num(attempts)} ({fmt_num(spent)}{cost_label})"
 
     if kind == "trial_start":
         resource_type = event.get("resource_type", "")
@@ -227,10 +228,10 @@ def _format_event(event: dict, name_map: dict[str, str] | None = None) -> str | 
         equal_pct = trial_manager.TRIAL_REWARD_EQUAL_SHARE_PERCENT
         contribution_pct = 100 - equal_pct
         return (
-            f"🏆 村莊試煉開始！花費 {target} 個 {r_emoji}{r_label}\n"
-            f"目標：全服玩家共同累積 {target} 點行動產出\n"
+            f"🏆 村莊試煉開始！花費 {fmt_num(target)} 個 {r_emoji}{r_label}\n"
+            f"目標：全服玩家共同累積 {fmt_num(target)} 點行動產出\n"
             f"期限：<t:{deadline_unix}:R> 前\n"
-            f"達成後共 {reward_pool} 個 🌟萬能素材：{equal_pct}% 由參與者平均分配，{contribution_pct}% 依貢獻度分配"
+            f"達成後共 {fmt_num(reward_pool)} 個 🌟萬能素材：{equal_pct}% 由參與者平均分配，{contribution_pct}% 依貢獻度分配"
         )
 
     if kind == "trial_success":
@@ -240,15 +241,15 @@ def _format_event(event: dict, name_map: dict[str, str] | None = None) -> str | 
         equal_pct = trial_manager.TRIAL_REWARD_EQUAL_SHARE_PERCENT
         contribution_pct = 100 - equal_pct
         lines = [
-            f"🎉 村莊試煉達成！目標 {target} 點行動產出已完成",
+            f"🎉 村莊試煉達成！目標 {fmt_num(target)} 點行動產出已完成",
             (
-                f"共 {len(participants)} 位玩家瓜分了 {total_awarded} 個 🌟萬能素材"
+                f"共 {len(participants)} 位玩家瓜分了 {fmt_num(total_awarded)} 個 🌟萬能素材"
                 f"（{equal_pct}% 平均分配、{contribution_pct}% 依貢獻度）："
             ),
         ]
         for p in participants:
             display_name = name_map.get(p["user_id"], p["user_id"])
-            lines.append(f"貢獻 {p['contribution']} ({p['reward']} 素材)：{display_name}")
+            lines.append(f"貢獻 {fmt_num(p['contribution'])} ({fmt_num(p['reward'])} 素材)：{display_name}")
         text = "\n".join(lines)
         if len(text) > 1900:
             text = text[:1900] + "\n（清單過長，部分內容已省略）"
@@ -259,7 +260,7 @@ def _format_event(event: dict, name_map: dict[str, str] | None = None) -> str | 
         progress = event.get("progress", 0)
         cooldown_hours = get_env_int("TRIAL_COOLDOWN_SECONDS") // 3600
         return (
-            f"⌛ 村莊試煉逾時失敗！目標 {target} 點行動產出未達成（進度：{progress}/{target}）\n"
+            f"⌛ 村莊試煉逾時失敗！目標 {fmt_num(target)} 點行動產出未達成（進度：{fmt_num(progress)}/{fmt_num(target)}）\n"
             f"資源不予退還。{cooldown_hours} 小時內無法開啟新試煉。"
         )
 
