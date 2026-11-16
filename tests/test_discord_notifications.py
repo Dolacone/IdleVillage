@@ -1407,7 +1407,6 @@ class TestNotificationThousandsSeparators(unittest.TestCase):
             {"type": "overtime", "stages_cleared": 5000, "progress": 156618, "target": 750000}
         )
         self.assertIn("第 5,001 關已超過 86,400 秒", text)
-        self.assertIn("已超過 86,400 秒", text)
         self.assertIn("目前進度：156,618 / 750,000", text)
 
     def test_upgrade_stage_clear_caps_and_target(self):
