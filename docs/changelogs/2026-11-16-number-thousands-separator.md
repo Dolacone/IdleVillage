@@ -1,10 +1,11 @@
 ---
 title: "數字顯示加上千分位逗號"
-status: Refactored
+status: Done
 created: 2026-11-16
 doc_type: change
 last_reviewed: 2026-11-16
 source_paths:
+  - "CHANGELOG.md"
   - "docs/README.md"
   - "docs/discord/ui-renderer.md"
   - "docs/discord/notification.md"
