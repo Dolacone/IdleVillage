@@ -772,7 +772,8 @@ class TestRendererThousandsSeparators(unittest.TestCase):
             trial_data=trial, trial_contribution=156618,
         )
         desc = embed.description
-        self.assertIn("1,500", desc)
+        tool_line = next(l for l in desc.split("\n") if l.startswith("🏅 工具"))
+        self.assertIn("🌾 1,500", tool_line)
         self.assertIn("12,345", desc)
         self.assertIn("🌟 2,000", desc)
         self.assertIn("🏆 試煉貢獻：156,618", desc)
