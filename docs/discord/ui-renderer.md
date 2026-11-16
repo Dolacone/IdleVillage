@@ -24,6 +24,7 @@ source_paths:
   - custom_id 內的數字。
   - Select option 的 value。
   - 找不到玩家名稱時 fallback 顯示的 `user_id`。
+  - 例外訊息與錯誤回覆中的數字：`⚠️ 操作失敗：` 後的 manager 錯誤文字、管理員輸入錯誤回覆。
 
 ## 村莊 Dashboard Embed（Public，由 Watcher 持續更新）
 
