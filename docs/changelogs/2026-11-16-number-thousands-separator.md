@@ -104,7 +104,7 @@ Task 1 (ui_renderer.py: fmt_num + village/main/trial/action menus)
 
 Tasks 2、3、4 互相獨立，可平行執行。
 
-- [ ] Task 1: Add `fmt_num` and format the village, main, trial target, and action menu displays
+- [x] Task 1: Add `fmt_num` and format the village, main, trial target, and action menu displays
   - Files: `src/cogs/ui_renderer.py`, `tests/test_discord_commands.py`, `tests/test_discord_notifications.py`.
   - Parallel: none.
   - Scope: `fmt_num`, trial status line, `build_trial_target_embed`, `build_trial_target_components`, village section (stage, resources, building levels and cap, villager action counts), personal section (efficiency output and pct, tool levels, materials, AP, trial contribution), action and building target dropdowns.

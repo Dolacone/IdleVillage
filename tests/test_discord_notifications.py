@@ -855,7 +855,7 @@ class TestDashboardUpdate(DatabaseTestCase):
 
         embed = message.edit.call_args.kwargs["embed"]
         self.assertIn("🏆 試煉", embed.description)
-        self.assertIn("1200 / 5000", embed.description)
+        self.assertIn("1,200 / 5,000", embed.description)
 
     async def test_update_dashboard_clears_deleted_message_reference(self):
         from core import notification

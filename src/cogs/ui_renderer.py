@@ -65,6 +65,12 @@ UI_BUILDING_TARGETS = ("gathering_field", "workshop", "hunting_ground")
 TRIAL_TARGETS_PER_PAGE = 25
 
 
+def fmt_num(value: int | float) -> str:
+    if isinstance(value, float):
+        return f"{value:,g}"
+    return f"{value:,}"
+
+
 def _progress_bar(progress: int, target: int, width: int = 10) -> str:
     if target <= 0:
         return "░" * width
@@ -110,7 +116,7 @@ def _build_trial_line(trial_data: dict, resources: dict, now_ts: int) -> str:
         trial_bar = _progress_bar(trial_progress, trial_target)
         trial_deadline_unix = _unix_from_iso(trial_data.get("started_at", "")) + get_env_int("TRIAL_DURATION_SECONDS")
         return (
-            f"\n🏆 試煉 {trial_progress} / {trial_target} ({trial_pct}%)\n"
+            f"\n🏆 試煉 {fmt_num(trial_progress)} / {fmt_num(trial_target)} ({trial_pct}%)\n"
             f"   {trial_bar}\n"
             f"   ⏰ 期限: <t:{trial_deadline_unix}:R>\n"
         )
@@ -150,8 +156,8 @@ def build_trial_target_embed(resources: dict, page: int = 0) -> disnake.Embed:
         total_pages = (target_count - 1) // TRIAL_TARGETS_PER_PAGE + 1
         description = (
             f"選擇試煉目標（第 {clamped_page + 1}/{total_pages} 頁）\n"
-            f"目標範圍：{first_target} - {last_target}\n"
-            f"最大目標：{max_target}"
+            f"目標範圍：{fmt_num(first_target)} - {fmt_num(last_target)}\n"
+            f"最大目標：{fmt_num(max_target)}"
         )
     return disnake.Embed(title="🏆 開啟試煉", description=description, color=disnake.Color.blue())
 
@@ -173,7 +179,7 @@ def build_trial_target_components(resources: dict, page: int = 0) -> list:
     first_index = clamped_page * TRIAL_TARGETS_PER_PAGE + 1
     last_index = min((clamped_page + 1) * TRIAL_TARGETS_PER_PAGE, target_count)
     options = [
-        disnake.SelectOption(label=str(index * step), value=str(index * step))
+        disnake.SelectOption(label=fmt_num(index * step), value=str(index * step))
         for index in range(first_index, last_index + 1)
     ]
     return [
@@ -253,24 +259,24 @@ def _build_village_section(
         bxp = b.get("xp_progress", 0)
         next_req = (blevel + 1) * xp_per_level
         bpct = math.floor(bxp / max(next_req, 1) * 100)
-        building_lines.append(f"{blabel} Lv{blevel} ({bpct}%)")
+        building_lines.append(f"{blabel} Lv{fmt_num(blevel)} ({bpct}%)")
 
     sorted_counts = sorted(action_counts, key=lambda x: (-x[2], x[0]))
-    action_lines = [_action_display_name(a, t) + f": {c}" for a, t, c in sorted_counts]
+    action_lines = [_action_display_name(a, t) + f": {fmt_num(c)}" for a, t, c in sorted_counts]
     action_block = "\n".join(action_lines) if action_lines else "（無）"
 
     building_block = "\n".join(building_lines)
     return (
         f"(Last Update: <t:{unix_ts}:R>)\n\n"
         f"**Idle Village**\n\n"
-        f"📋 關卡 {stages_cleared}: {stage_name}\n"
-        f"   {bar}  {progress} / {target} ({pct}%)\n"
+        f"📋 關卡 {fmt_num(stages_cleared)}: {stage_name}\n"
+        f"   {bar}  {fmt_num(progress)} / {fmt_num(target)} ({pct}%)\n"
         f"   ⏰ 期限: <t:{deadline_unix}:R>\n"
         f"{overtime_line}"
         f"{trial_line}"
         f"\n公用資源\n"
-        f"🌾 {food} | 🪵 {wood} | 🧠 {knowledge}\n"
-        f"\n公用設施 (等級上限：Lv{level_cap})\n"
+        f"🌾 {fmt_num(food)} | 🪵 {fmt_num(wood)} | 🧠 {fmt_num(knowledge)}\n"
+        f"\n公用設施 (等級上限：Lv{fmt_num(level_cap)})\n"
         f"{building_block}\n"
         f"\n村民行動\n"
         f"```\n{action_block}\n```"
@@ -298,14 +304,14 @@ def build_main_embed(
     village_text = _build_village_section(stage_data, resources, buildings, action_counts, trial_data)
 
     gear_parts = [
-        f"{ACTION_EMOJIS[a]} {player_row.get(f'gear_{a}', 0)}"
+        f"{ACTION_EMOJIS[a]} {fmt_num(player_row.get(f'gear_{a}', 0))}"
         for a in ("gathering", "building", "combat", "research")
     ]
     mat_parts = [
-        f"{ACTION_EMOJIS[a]} {player_row.get(f'materials_{a}', 0)}"
+        f"{ACTION_EMOJIS[a]} {fmt_num(player_row.get(f'materials_{a}', 0))}"
         for a in ("gathering", "building", "combat", "research")
     ]
-    mat_parts.append(f"🌟 {player_row.get('materials_universal', 0)}")
+    mat_parts.append(f"🌟 {fmt_num(player_row.get('materials_universal', 0))}")
     base_output = get_env_int("BASE_OUTPUT")
     stage_bonus_per = get_env_float("STAGE_BONUS_PER_CLEAR")
     gear_bonus_per = get_env_float("GEAR_BONUS_PER_LEVEL")
@@ -324,7 +330,7 @@ def build_main_embed(
         )
         output = math.floor(base_output * (1 + bonus))
         pct = math.floor(bonus * 100)
-        efficiency_parts.append(f"{ACTION_EMOJIS[action_type]} {output}(+{pct}%)")
+        efficiency_parts.append(f"{ACTION_EMOJIS[action_type]} {fmt_num(output)}(+{fmt_num(pct)}%)")
 
     action = player_row.get("action")
     action_target = player_row.get("action_target")
@@ -346,11 +352,11 @@ def build_main_embed(
     ap_full_time_unix = _unix_from_iso(player_row.get("ap_full_time") or "")
     if ap < ap_cap and ap_full_time_unix:
         next_ap_unix = ap_full_time_unix - (ap_cap - ap - 1) * recovery_mins * 60
-        ap_line = f"⚡ AP：{ap} / {ap_cap}（下次：<t:{next_ap_unix}:R>）"
+        ap_line = f"⚡ AP：{fmt_num(ap)} / {fmt_num(ap_cap)}（下次：<t:{next_ap_unix}:R>）"
     else:
-        ap_line = f"⚡ AP：{ap} / {ap_cap}"
+        ap_line = f"⚡ AP：{fmt_num(ap)} / {fmt_num(ap_cap)}"
 
-    trial_contrib_line = f"\n🏆 試煉貢獻：{trial_contribution}" if (trial_data or {}).get("is_active") else ""
+    trial_contrib_line = f"\n🏆 試煉貢獻：{fmt_num(trial_contribution)}" if (trial_data or {}).get("is_active") else ""
     trial_message_line = f"\n{trial_message}" if trial_message else ""
 
     player_section = (
@@ -454,9 +460,9 @@ def build_main_components(
             next_req = (blevel + 1) * xp_per_level
             target_options.append(
                 disnake.SelectOption(
-                    label=f"{BUILDING_LABELS[btype]} Lv{blevel}",
+                    label=f"{BUILDING_LABELS[btype]} Lv{fmt_num(blevel)}",
                     value=btype,
-                    description=f"XP: {bxp}/{next_req}",
+                    description=f"XP: {fmt_num(bxp)}/{fmt_num(next_req)}",
                     default=(pending_target == btype),
                 )
             )
