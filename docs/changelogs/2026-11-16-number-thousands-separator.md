@@ -150,7 +150,7 @@ Tasks 2、3、4 互相獨立，可平行執行。
     - `affix_auto_extracted` and `affix_auto_batch` with attempts `1500` and spent `3000` show `抽選次數1,500 (3,000工具素材)`.
     - Existing assertions on notification text in `tests/test_discord_notifications.py` expect comma-formatted values, for example `貢獻 3,000`.
     - `uv run python -m pytest` passes.
-- [ ] Task 4: Format the sacrifice modal holdings
+- [x] Task 4: Format the sacrifice modal holdings
   - Files: `src/cogs/actions.py`, `tests/test_discord_commands.py`.
   - Depends on: Task 1.
   - Parallel: with Task 2 and Task 3.

@@ -21,6 +21,7 @@ from cogs.ui_renderer import (
     build_ranking_text,
     build_trial_target_components,
     build_trial_target_embed,
+    fmt_num,
 )
 from core import notification
 from core.config import get_discord_guild_id, get_env_int
@@ -826,10 +827,10 @@ class ActionsCog(commands.Cog):
                     custom_id=f"modal_sacrifice:{gear_type}",
                     components=[
                         disnake.ui.TextInput(
-                            label=f"投入 {mat_label}（持有：{holdings}）",
+                            label=f"投入 {mat_label}（持有：{fmt_num(holdings)}）",
                             custom_id="sacrifice_amount",
                             style=disnake.TextInputStyle.short,
-                            placeholder=f"1 ~ {holdings}",
+                            placeholder=f"1 ~ {fmt_num(holdings)}",
                             required=True,
                         ),
                     ],

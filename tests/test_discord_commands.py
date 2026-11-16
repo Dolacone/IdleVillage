@@ -3013,6 +3013,41 @@ class TestAffixClearByGroup(DatabaseTestCase):
         self.assertEqual((slots, mats), ([0], 10))
 
 
+class TestSacrificeModalOpen(unittest.IsolatedAsyncioTestCase):
+    """sacrifice_material:{gear_type} button opens a modal with comma-formatted holdings."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    async def test_modal_label_and_placeholder_use_thousands_separators(self):
+        from cogs.actions import ActionsCog
+
+        cursor = MagicMock()
+        cursor.fetchone = AsyncMock(return_value=(12345,))
+        execute_cm = MagicMock()
+        execute_cm.__aenter__ = AsyncMock(return_value=cursor)
+        execute_cm.__aexit__ = AsyncMock(return_value=False)
+        db = MagicMock()
+        db.execute = MagicMock(return_value=execute_cm)
+        conn_cm = MagicMock()
+        conn_cm.__aenter__ = AsyncMock(return_value=db)
+        conn_cm.__aexit__ = AsyncMock(return_value=False)
+
+        inter = MagicMock()
+        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+        inter.user.id = 12345
+        inter.component.custom_id = "sacrifice_material:gathering"
+        inter.response.send_modal = AsyncMock()
+        with patch("cogs.actions.get_connection", return_value=conn_cm):
+            await ActionsCog(bot=MagicMock()).on_button_click(inter)
+
+        modal = inter.response.send_modal.call_args.args[0]
+        text_input = modal.components[0].children[0] if hasattr(modal.components[0], "children") else modal.components[0]
+        self.assertIn("（持有：12,345）", text_input.label)
+        self.assertEqual(text_input.placeholder, "1 ~ 12,345")
+
+
 class TestSacrificeModalSubmit(unittest.IsolatedAsyncioTestCase):
     """on_modal_submit handles modal_sacrifice:{gear_type} correctly."""
 
