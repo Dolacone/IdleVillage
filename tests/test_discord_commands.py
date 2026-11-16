@@ -790,6 +790,115 @@ class TestRendererThousandsSeparators(unittest.TestCase):
         self.assertEqual(option.description, "XP: 1,234/1,025,000")
 
 
+class TestRendererGearAdminThousandsSeparators(unittest.TestCase):
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def test_gear_embed_formats_levels_cost_holdings_and_risky_rate(self):
+        from cogs.ui_renderer import build_gear_embed
+
+        info = {
+            "gear_level": 1024,
+            "target_level": 1025,
+            "material_cost": 1025,
+            "rate": 0.5,
+            "pity": 0,
+            "ap": 3,
+            "gear_cap": 2000,
+            "materials": 12345,
+            "universal_materials": 2000,
+            "mode": "risky",
+            "risky_failed_levels": 150000,
+            "risky_bonus_pct": 1500.0,
+        }
+        desc = build_gear_embed(info, "gathering").description
+        self.assertIn("Lv1,024 → Lv1,025", desc)
+        self.assertIn("+ 1,025 個", desc)
+        self.assertIn("持有素材：12,345 個 ｜ 🌟 萬能素材：2,000 個", desc)
+        self.assertIn("鐵齒率：150,000 x 0.01% = 1,500%", desc)
+        self.assertIn("工具等級上限：Lv2,000（研究所 Lv2,000）", desc)
+
+    def test_gear_embed_formats_sacrifice_and_result_lines(self):
+        from cogs.ui_renderer import build_gear_embed
+
+        info = {"gear_level": 1, "target_level": 2, "gear_cap": 5000}
+        sacrifice = build_gear_embed(info, "gathering", {"type": "sacrifice", "sacrificed": 12345}).description
+        self.assertIn("消耗 12,345 個", sacrifice)
+        self.assertIn("鐵齒加成 +123.45%", sacrifice)
+        success = build_gear_embed(info, "gathering", {"success": True, "new_level": 1025}).description
+        self.assertIn("升至 Lv1,025", success)
+
+    def test_gear_embed_error_text_stays_unformatted(self):
+        from cogs.ui_renderer import build_gear_embed
+
+        info = {"gear_level": 1, "target_level": 2}
+        desc = build_gear_embed(info, "gathering", {"error": "need 20000, have 12345"}).description
+        self.assertIn("⚠️ 操作失敗：need 20000, have 12345", desc)
+
+    def _description_for_tool(self, rows, select_id, tool="gathering"):
+        select = next(c for r in rows for c in r.children if getattr(c, "custom_id", None) == select_id)
+        return next(o for o in select.options if o.value == tool).description
+
+    def test_gear_and_affix_tool_dropdown_descriptions_format_bonus(self):
+        from cogs.ui_renderer import build_affix_components, build_gear_components
+
+        player_gear = {"gathering": 1024}
+        gear_rows = build_gear_components("gathering", "normal", True, player_gear, 5000)
+        affix_rows = build_affix_components("gathering", player_gear, 5000, [], 1)
+        for rows, select_id in ((gear_rows, "gear_type_select"), (affix_rows, "affix_gear_select")):
+            desc = self._description_for_tool(rows, select_id)
+            self.assertIn("Lv1,024 → Lv1,025", desc)
+            self.assertIn("+5,120% → +5,125%", desc)
+        capped = build_gear_components("gathering", "normal", True, {"gathering": 5000}, 5000)
+        self.assertEqual(self._description_for_tool(capped, "gear_type_select"), "已達等級上限 Lv5,000")
+
+    def test_affix_embed_and_auto_affix_embed_format_holdings(self):
+        from cogs.ui_renderer import build_affix_embed, build_auto_affix_embed
+
+        affix = build_affix_embed("gathering", {"gathering": 1}, [], 1, materials=12345)
+        self.assertIn("持有素材：12,345 個", affix.description)
+        auto = build_auto_affix_embed("gathering", 12345, 2000, 1, [])
+        self.assertIn("持有素材：12,345 個 ｜ 🌟 萬能素材：2,000 個", auto.description)
+
+    def test_auto_tool_embed_formats_runway_hours(self):
+        from cogs.ui_renderer import build_auto_tool_embed
+
+        expires = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+        rows = [{"tool_type": "gathering", "expires_at": expires}]
+        embed = build_auto_tool_embed(rows, 24, materials={"gathering": 1500})
+        self.assertIn("素材可撐 1,500 小時", embed.description)
+        self.assertRegex(embed.description, r"<t:\d+:R>")
+
+    def test_manager_embed_formats_materials_and_risky(self):
+        from cogs.ui_renderer import build_manager_embed
+
+        player = {"materials_gathering": 12345, "risky_failed_levels": 150000}
+        embed = build_manager_embed("Alice", player)
+        values = {f.name: f.value for f in embed.fields}
+        self.assertIn("12,345", values["素材數量"])
+        self.assertEqual(values["鐵齒失敗累積"], "150,000")
+
+    def test_admin_embed_and_delta_buttons_format_numbers(self):
+        from cogs.ui_renderer import build_admin_components, build_admin_embed
+
+        self.assertIn("1,234,567", build_admin_embed("food", 1234567).description)
+        rows = build_admin_components("food")
+        labels = [c.label for c in rows[1].children]
+        self.assertIn("+1,000", labels)
+        self.assertIn("-1,000", labels)
+        ids = [c.custom_id for c in rows[1].children]
+        self.assertIn("resource_add_large:food", ids)
+
+    def test_ranking_text_formats_level(self):
+        from cogs.ui_renderer import build_ranking_text
+
+        text = build_ranking_text({"gathering": [("u1", 1024)]}, {"u1": "Alice"})
+        self.assertIn("- Lv1,024: Alice", text)
+        unresolved = build_ranking_text({"gathering": [("1234567", 3)]}, {})
+        self.assertIn("- Lv3: 1234567", unresolved)
+
+
 class TestRendererMainEmbed(unittest.TestCase):
     """build_main_embed includes player status section."""
 

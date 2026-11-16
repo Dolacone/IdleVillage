@@ -117,7 +117,7 @@ Tasks 2、3、4 互相獨立，可平行執行。
     - Existing assertions on these displays in `tests/test_discord_commands.py` and `tests/test_discord_notifications.py` expect comma-formatted values, for example `1,200 / 5,000`; the trial target option assertion checks label `fmt_num(int(value))`.
     - Personal section with tool level `1500`, materials `12345`, universal `2000`, trial contribution `156618` contains `1,500`, `12,345`, `🌟 2,000`, `🏆 試煉貢獻：156,618`; with stage and facility bonus 0 in the test env (`BASE_OUTPUT=20`, `GEAR_BONUS_PER_LEVEL=0.05`), the efficiency part for tool level `1500` is `1,520(+7,500%)`.
     - `uv run python -m pytest` passes.
-- [ ] Task 2: Format gear, affix, auto-affix, auto-tool, admin, and ranking displays
+- [x] Task 2: Format gear, affix, auto-affix, auto-tool, admin, and ranking displays
   - Files: `src/cogs/ui_renderer.py`, `tests/test_discord_commands.py`.
   - Depends on: Task 1.
   - Parallel: with Task 3 and Task 4.
