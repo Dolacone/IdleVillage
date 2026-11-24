@@ -167,7 +167,7 @@ Task 2 (auto-tool target keeps delta)
   - Scope: `build_gear_components` (`open_affix_mgmt`), `build_affix_components` (all six custom_ids), `_render_affix`, routes `open_affix_mgmt:`, `affix_gear_select:`, `affix_slot_select:`, `affix_extract:`, `affix_clear:`, `back_to_gear:`; route `open_auto_affix:` accepts `open_auto_affix:{gear_type}:{mode}:{count}`.
   - Acceptance criteria:
     - `build_affix_components("gathering", ..., mode="risky", count="inf")` renders `affix_gear_select:risky:inf`, `affix_slot_select:gathering:risky:inf` (when affixes exist), `affix_clear:gathering:none:none:risky:inf`, `affix_extract:gathering:risky:inf`, `open_auto_affix:gathering:risky:inf`, `back_to_gear:gathering:risky:inf`.
-    - Round trip: `open_affix_mgmt:building:risky:inf` → `affix_gear_select:risky:inf` value `gathering` → `affix_extract:gathering:risky:inf` → `back_to_gear:gathering:risky:inf`, each step dispatched with the custom_id rendered by the previous step, ends on a gear screen with the 鐵齒 and 無限 options as default and `attempt_upgrade:gathering:risky:inf`.
+    - Round trip: starting from the `open_affix_mgmt:building:risky:inf` rendered by `build_gear_components("building", "risky", ..., count="inf")` → `affix_gear_select:risky:inf` value `gathering` → `affix_extract:gathering:risky:inf` → `back_to_gear:gathering:risky:inf`, each step dispatched with the custom_id rendered by the previous step, ends on a gear screen with the 鐵齒 and 無限 options as default and `attempt_upgrade:gathering:risky:inf`.
     - `back_to_gear:none:risky:inf` renders a gear screen with no tool type selected and the 鐵齒 and 無限 options as default.
     - `on_dropdown` with `affix_slot_select:gathering:risky:inf` and value `efficiency:3` renders `affix_clear:gathering:efficiency:3:risky:inf`; dispatching that ID clears the highest slot of that group and renders `back_to_gear:gathering:risky:inf`.
     - `back_to_gear:gathering:bogus:inf` does not render.
@@ -227,5 +227,10 @@ Task 2 (auto-tool target keeps delta)
   - 證據：AC（本檔 :181）只驗證完成後的詞條管理畫面。
   - 證據：`src/cogs/actions.py:731-735` 的失敗路徑另行呼叫 `_render_auto_affix`；素材在渲染後被消耗時進入此路徑，之後「返回詞條管理 → ← 返回」清掉模式與次數。
   - 修正：Task 4 加 AC：`auto_affix_run` 帶 `:risky:inf` 且第一格抽取 raise 時，渲染 `back_to_affix:gathering:risky:inf`。
+- [x] Plan Issue 9: `build_gear_components` 漏改 `open_affix_mgmt` 的 custom_id 時，所有 AC 仍通過；玩家在工具強化畫面點 🔮 詞條管理，送出的仍是 `open_affix_mgmt:{gear_type}`，模式與次數進不了詞條管理畫面。
+  - 證據：`src/cogs/ui_renderer.py:748` 目前渲染 `open_affix_mgmt:{_gt}`，Task 3 Scope（本檔 :167）列入此改動。
+  - 證據：Task 1 AC（本檔 :142）只驗證 `gear_type_select` 與 `sacrifice_material`；Task 3 round trip（:170）的第一步是手寫的 `open_affix_mgmt:building:risky:inf`，不是 renderer 輸出。
+  - 證據：既有測試 `tests/test_discord_commands.py:1346`、`:1678`、`:1704` 斷言 `open_affix_mgmt:gathering`；renderer 未改時這些測試照常通過，`uv run python -m pytest` 不會失敗。
+  - 修正：Task 3 round trip AC 的第一步改為「從 `build_gear_components("building", "risky", ..., count="inf")` 渲染出的 `open_affix_mgmt:building:risky:inf` 開始」。
 
 ## Review Issues
