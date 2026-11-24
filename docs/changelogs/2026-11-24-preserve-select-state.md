@@ -10,6 +10,7 @@ source_paths:
   - "docs/discord/ui-renderer.md"
   - "src/cogs/ui_renderer.py"
   - "src/cogs/actions.py"
+  - "tests/test_discord_commands.py"
 scope: "Tracks this change from design through review."
 ---
 
@@ -135,7 +136,7 @@ Task 2 (auto-tool target keeps delta)
 
 所有 Task 都改 `src/cogs/ui_renderer.py` 與 `src/cogs/actions.py`，依序執行。Task 2 邏輯上與其他 Task 獨立。
 
-- [ ] Task 1: Keep mode and count when changing tool type or sacrificing
+- [x] Task 1: Keep mode and count when changing tool type or sacrificing
   - Files: `src/cogs/ui_renderer.py`, `src/cogs/actions.py`, `tests/test_discord_commands.py`.
   - Scope: `build_gear_components` (`gear_type_select`, `sacrifice_material`), `_render_gear` (`gear_type is None` path passes `mode` and `count`), `upgrade_mode_select:` and `upgrade_count_select:` routes accept `{gear_type} == none`, `_OWN_DROPDOWNS`/`_OWN_DROPDOWN_PREFIXES`, the `{mode}:{count}` parser, `gear_type_select:` dropdown route, `sacrifice_material:` button route, `modal_sacrifice:` modal route.
   - Acceptance criteria:

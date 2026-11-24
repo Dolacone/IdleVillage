@@ -33,8 +33,8 @@ from managers import affix_manager, auto_tool_manager, building_manager, gear_ma
 
 _OWN_BUTTONS = frozenset({"burst_execute", "open_gear_upgrade", "open_trial_start", "open_auto_tool", "back_to_main"})
 _OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:", "clear_affix:", "sacrifice_material:", "open_affix_mgmt:", "affix_extract:", "affix_clear:", "back_to_gear:", "auto_tool_confirm:", "trial_target_page:", "open_auto_affix:", "back_to_affix:", "auto_affix_run:")
-_OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "gear_type_select", "affix_gear_select", "auto_tool_type_select", "trial_target_select"})
-_OWN_DROPDOWN_PREFIXES = ("upgrade_mode_select:", "upgrade_count_select:", "affix_slot_select:", "auto_tool_target_select:", "auto_tool_add_select:", "auto_tool_sub_select:", "auto_affix_target:", "auto_affix_value:", "auto_affix_material:", "auto_affix_scope:")
+_OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "affix_gear_select", "auto_tool_type_select", "trial_target_select"})
+_OWN_DROPDOWN_PREFIXES = ("gear_type_select:", "upgrade_mode_select:", "upgrade_count_select:", "affix_slot_select:", "auto_tool_target_select:", "auto_tool_add_select:", "auto_tool_sub_select:", "auto_affix_target:", "auto_affix_value:", "auto_affix_material:", "auto_affix_scope:")
 _OWN_MODAL_PREFIXES = ("modal_sacrifice:",)
 _VALID_GEAR_TYPES = frozenset({"gathering", "building", "combat", "research"})
 _VALID_ACTIONS = frozenset({"gathering", "building", "combat", "research"})
@@ -44,6 +44,12 @@ _VALID_AFFIX_TYPES = frozenset(affix_manager.AFFIX_TYPES)
 _VALID_AUTO_AFFIX_VALUES = frozenset({"1", "2", "3", "4", "5"})
 _VALID_AUTO_AFFIX_SOURCES = frozenset({"none", "tool", "universal"})
 _VALID_AUTO_AFFIX_SCOPES = frozenset({"none", "one", "all"})
+
+
+def _parse_mode_count(mode: str, count: str) -> tuple[str | None, str | None] | None:
+    if mode not in _VALID_UPGRADE_MODES | {"none"} or count not in _VALID_UPGRADE_COUNTS | {"none"}:
+        return None
+    return (None if mode == "none" else mode, None if count == "none" else count)
 
 
 def _parse_auto_affix_state(parts: list[str]) -> tuple[str, str, str, str, str] | None:
@@ -209,7 +215,7 @@ class ActionsCog(commands.Cog):
                 gear_cap = await building_manager.get_level(db, "research_lab")
                 player_gear = _make_player_gear(row)
                 embed = build_gear_embed({}, None, result)
-                components = build_gear_components(None, None, False, player_gear, gear_cap, materials=0)
+                components = build_gear_components(None, mode, False, player_gear, gear_cap, materials=0, count=count)
                 if respond is not None:
                     await respond(embed=embed, components=components)
                 else:
@@ -810,8 +816,10 @@ class ActionsCog(commands.Cog):
 
         elif cid.startswith("sacrifice_material:"):
             parts = cid.split(":")
-            gear_type = parts[1] if len(parts) > 1 else ""
-            if gear_type not in _VALID_GEAR_TYPES:
+            if len(parts) != 4:
+                return
+            gear_type = parts[1]
+            if gear_type not in _VALID_GEAR_TYPES or _parse_mode_count(parts[2], parts[3]) is None:
                 return
             mat_col = ACTION_MATERIAL_COL[gear_type]
             async with get_connection() as db:
@@ -824,7 +832,7 @@ class ActionsCog(commands.Cog):
             await inter.response.send_modal(
                 disnake.ui.Modal(
                     title="🩸 獻祭素材",
-                    custom_id=f"modal_sacrifice:{gear_type}",
+                    custom_id=f"modal_sacrifice:{gear_type}:{parts[2]}:{parts[3]}",
                     components=[
                         disnake.ui.TextInput(
                             label=f"投入 {mat_label}（持有：{fmt_num(holdings)}）",
@@ -848,9 +856,14 @@ class ActionsCog(commands.Cog):
         self._auto_affix_confirmations.pop(str(inter.user.id), None)
 
         if cid.startswith("modal_sacrifice:"):
-            gear_type = cid.split(":", 1)[1]
-            if gear_type not in _VALID_GEAR_TYPES:
+            parts = cid.split(":")
+            if len(parts) != 4:
                 return
+            gear_type = parts[1]
+            state = _parse_mode_count(parts[2], parts[3])
+            if gear_type not in _VALID_GEAR_TYPES or state is None:
+                return
+            mode, count = state
             raw = inter.text_values.get("sacrifice_amount", "").strip()
             now = datetime.now(timezone.utc)
             result: dict | None = None
@@ -862,7 +875,7 @@ class ActionsCog(commands.Cog):
             except (ValueError, KeyError) as exc:
                 result = {"error": str(exc) or "無效輸入"}
             await self._render_gear(
-                inter, gear_type, result=result,
+                inter, gear_type, mode=mode, count=count, result=result,
                 respond=lambda **kw: inter.response.edit_message(**kw),
             )
 
@@ -883,9 +896,11 @@ class ActionsCog(commands.Cog):
             await self._render_main(inter, pending_action=value)
         elif cid == "building_target_select":
             await self._render_main(inter, pending_action="building", pending_target=value)
-        elif cid == "gear_type_select":
-            if value in _VALID_GEAR_TYPES:
-                await self._render_gear(inter, value)
+        elif cid.startswith("gear_type_select:"):
+            parts = cid.split(":")
+            state = _parse_mode_count(parts[1], parts[2]) if len(parts) == 3 else None
+            if state is not None and value in _VALID_GEAR_TYPES:
+                await self._render_gear(inter, value, mode=state[0], count=state[1])
         elif cid.startswith("upgrade_mode_select:"):
             parts = cid.split(":")
             if len(parts) != 3:
@@ -893,10 +908,13 @@ class ActionsCog(commands.Cog):
             gear_type, count = parts[1], parts[2]
             if (
                 value in _VALID_UPGRADE_MODES
-                and gear_type in _VALID_GEAR_TYPES
+                and gear_type in (*_VALID_GEAR_TYPES, "none")
                 and count in _VALID_UPGRADE_COUNTS | {"none"}
             ):
-                await self._render_gear(inter, gear_type, mode=value, count=None if count == "none" else count)
+                await self._render_gear(
+                    inter, None if gear_type == "none" else gear_type, mode=value,
+                    count=None if count == "none" else count,
+                )
         elif cid.startswith("upgrade_count_select:"):
             parts = cid.split(":")
             if len(parts) != 3:
@@ -904,10 +922,13 @@ class ActionsCog(commands.Cog):
             gear_type, mode = parts[1], parts[2]
             if (
                 value in _VALID_UPGRADE_COUNTS
-                and gear_type in _VALID_GEAR_TYPES
+                and gear_type in (*_VALID_GEAR_TYPES, "none")
                 and mode in _VALID_UPGRADE_MODES | {"none"}
             ):
-                await self._render_gear(inter, gear_type, mode=None if mode == "none" else mode, count=value)
+                await self._render_gear(
+                    inter, None if gear_type == "none" else gear_type,
+                    mode=None if mode == "none" else mode, count=value,
+                )
         elif cid == "affix_gear_select":
             if value in _VALID_GEAR_TYPES:
                 await self._render_affix(inter, value)

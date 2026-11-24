@@ -710,7 +710,7 @@ def build_gear_components(
     rows = [
         disnake.ui.ActionRow(
             disnake.ui.StringSelect(
-                custom_id="gear_type_select",
+                custom_id=f"gear_type_select:{_m}:{_c}",
                 placeholder="選擇工具類型...",
                 options=gear_options,
             )
@@ -739,7 +739,7 @@ def build_gear_components(
             disnake.ui.Button(
                 label="🩸 獻祭素材",
                 style=disnake.ButtonStyle.danger,
-                custom_id=f"sacrifice_material:{_gt}",
+                custom_id=f"sacrifice_material:{_gt}:{_m}:{_c}",
                 disabled=(materials == 0),
             ),
             disnake.ui.Button(

@@ -847,12 +847,12 @@ class TestRendererGearAdminThousandsSeparators(unittest.TestCase):
         player_gear = {"gathering": 1024}
         gear_rows = build_gear_components("gathering", "normal", True, player_gear, 5000)
         affix_rows = build_affix_components("gathering", player_gear, 5000, [], 1)
-        for rows, select_id in ((gear_rows, "gear_type_select"), (affix_rows, "affix_gear_select")):
+        for rows, select_id in ((gear_rows, "gear_type_select:normal:none"), (affix_rows, "affix_gear_select")):
             desc = self._description_for_tool(rows, select_id)
             self.assertIn("Lv1,024 → Lv1,025", desc)
             self.assertIn("+5,120% → +5,125%", desc)
         capped = build_gear_components("gathering", "normal", True, {"gathering": 5000}, 5000)
-        self.assertEqual(self._description_for_tool(capped, "gear_type_select"), "已達等級上限 Lv5,000")
+        self.assertEqual(self._description_for_tool(capped, "gear_type_select:normal:none"), "已達等級上限 Lv5,000")
 
     def test_affix_embed_and_auto_affix_embed_format_holdings(self):
         from cogs.ui_renderer import build_affix_embed, build_auto_affix_embed
@@ -1342,14 +1342,14 @@ class TestRendererGearComponents(unittest.TestCase):
             if getattr(component, "custom_id", None)
             in {
                 "attempt_upgrade:gathering:normal:1",
-                "sacrifice_material:gathering",
+                "sacrifice_material:gathering:normal:1",
                 "open_affix_mgmt:gathering",
             }
         }
 
         self.assertTrue(buttons["attempt_upgrade:gathering:normal:1"].disabled)
         self.assertFalse(
-            buttons["sacrifice_material:gathering"].disabled,
+            buttons["sacrifice_material:gathering:normal:1"].disabled,
             "Max-level players must still reach affix management and material sacrifice",
         )
         self.assertFalse(
@@ -1700,7 +1700,7 @@ class TestAffixComponents(unittest.TestCase):
             if hasattr(c, "custom_id") and hasattr(c, "label") and c.label
         }
         self.assertEqual(labels.get("attempt_upgrade:gathering:normal:1"), "🎲 強化工具")
-        self.assertEqual(labels.get("sacrifice_material:gathering"), "🩸 獻祭素材")
+        self.assertEqual(labels.get("sacrifice_material:gathering:normal:1"), "🩸 獻祭素材")
         self.assertEqual(labels.get("open_affix_mgmt:gathering"), "🔮 詞條管理")
 
     def test_affix_components_gear_type_dropdown(self):
@@ -3015,7 +3015,7 @@ class TestAffixClearByGroup(DatabaseTestCase):
 
 
 class TestSacrificeModalOpen(unittest.IsolatedAsyncioTestCase):
-    """sacrifice_material:{gear_type} button opens a modal with comma-formatted holdings."""
+    """sacrifice_material:{gear_type}:{mode}:{count} button opens a modal with comma-formatted holdings."""
 
     def setUp(self):
         for k, v in ALL_TEST_ENV.items():
@@ -3038,7 +3038,7 @@ class TestSacrificeModalOpen(unittest.IsolatedAsyncioTestCase):
         inter = MagicMock()
         inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
         inter.user.id = 12345
-        inter.component.custom_id = "sacrifice_material:gathering"
+        inter.component.custom_id = "sacrifice_material:gathering:normal:1"
         inter.response.send_modal = AsyncMock()
         with patch("cogs.actions.get_connection", return_value=conn_cm):
             await ActionsCog(bot=MagicMock()).on_button_click(inter)
@@ -3050,7 +3050,7 @@ class TestSacrificeModalOpen(unittest.IsolatedAsyncioTestCase):
 
 
 class TestSacrificeModalSubmit(unittest.IsolatedAsyncioTestCase):
-    """on_modal_submit handles modal_sacrifice:{gear_type} correctly."""
+    """on_modal_submit handles modal_sacrifice:{gear_type}:{mode}:{count} correctly."""
 
     def setUp(self):
         for k, v in ALL_TEST_ENV.items():
@@ -3077,7 +3077,7 @@ class TestSacrificeModalSubmit(unittest.IsolatedAsyncioTestCase):
     async def test_modal_submit_calls_sacrifice_and_renders(self):
         from cogs.actions import ActionsCog
 
-        inter = self._make_modal_inter("modal_sacrifice:gathering", "3")
+        inter = self._make_modal_inter("modal_sacrifice:gathering:normal:1", "3")
         sacrifice_result = {"type": "sacrifice", "sacrificed": 3, "gear_type": "gathering", "risky_failed_levels_after": 3}
         with (
             patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
@@ -3094,7 +3094,7 @@ class TestSacrificeModalSubmit(unittest.IsolatedAsyncioTestCase):
     async def test_modal_submit_invalid_input_returns_error_result(self):
         from cogs.actions import ActionsCog
 
-        inter = self._make_modal_inter("modal_sacrifice:gathering", "not_a_number")
+        inter = self._make_modal_inter("modal_sacrifice:gathering:normal:1", "not_a_number")
         with (
             patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
             patch("cogs.actions.gear_manager.sacrifice_material", new=AsyncMock()),
@@ -3110,7 +3110,7 @@ class TestSacrificeModalSubmit(unittest.IsolatedAsyncioTestCase):
     async def test_modal_submit_does_not_dispatch_notification(self):
         from cogs.actions import ActionsCog
 
-        inter = self._make_modal_inter("modal_sacrifice:gathering", "5")
+        inter = self._make_modal_inter("modal_sacrifice:gathering:normal:1", "5")
         sacrifice_result = {"type": "sacrifice", "sacrificed": 5, "gear_type": "gathering", "risky_failed_levels_after": 5}
         with (
             patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
@@ -3122,6 +3122,155 @@ class TestSacrificeModalSubmit(unittest.IsolatedAsyncioTestCase):
             await cog.on_modal_submit(inter)
 
         mock_dispatch.assert_not_awaited()
+
+
+class TestPreserveGearSelectState(DatabaseTestCase):
+    """Changing tool type or sacrificing keeps the selected upgrade mode and count."""
+
+    def _player_gear(self):
+        return {"gathering": 1, "building": 0, "combat": 0, "research": 0}
+
+    def _make_dropdown_inter(self, cid, value):
+        inter = MagicMock()
+        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+        inter.user.id = 12345
+        inter.component.custom_id = cid
+        inter.values = [value]
+        inter.response.defer = AsyncMock()
+        inter.edit_original_response = AsyncMock()
+        return inter
+
+    def _ids(self, components):
+        return {c.custom_id: c for row in components for c in row.children if hasattr(c, "custom_id")}
+
+    def _defaults(self, components):
+        return {
+            row.children[0].custom_id.split(":")[0]: [o.value for o in row.children[0].options if o.default]
+            for row in components[:3]
+        }
+
+    async def _dispatch_dropdown(self, cid, value):
+        from cogs.actions import ActionsCog
+
+        inter = self._make_dropdown_inter(cid, value)
+        await ActionsCog(bot=MagicMock()).on_dropdown(inter)
+        return inter
+
+    def _rendered(self, inter):
+        return inter.edit_original_response.call_args.kwargs["components"]
+
+    def test_renderer_embeds_mode_and_count_in_tool_type_and_sacrifice_ids(self):
+        from cogs.ui_renderer import build_gear_components
+
+        rows = build_gear_components("building", "risky", True, self._player_gear(), 5, materials=3, count="inf")
+        ids = self._ids(rows)
+        self.assertIn("gear_type_select:risky:inf", ids)
+        self.assertIn("sacrifice_material:building:risky:inf", ids)
+
+    def test_renderer_uses_none_sentinels_without_mode_and_count(self):
+        from cogs.ui_renderer import build_gear_components
+
+        rows = build_gear_components(None, None, False, self._player_gear(), 5)
+        self.assertIn("gear_type_select:none:none", self._ids(rows))
+
+    async def test_tool_type_change_keeps_mode_and_count(self):
+        inter = await self._dispatch_dropdown("gear_type_select:risky:inf", "gathering")
+
+        components = self._rendered(inter)
+        defaults = self._defaults(components)
+        self.assertEqual(defaults["upgrade_mode_select"], ["risky"])
+        self.assertEqual(defaults["upgrade_count_select"], ["inf"])
+        self.assertIn("attempt_upgrade:gathering:risky:inf", self._ids(components))
+
+    async def test_tool_type_change_without_mode_and_count_has_no_defaults(self):
+        inter = await self._dispatch_dropdown("gear_type_select:none:none", "gathering")
+
+        defaults = self._defaults(self._rendered(inter))
+        self.assertEqual(defaults["upgrade_mode_select"], [])
+        self.assertEqual(defaults["upgrade_count_select"], [])
+
+    async def test_tool_type_select_with_invalid_state_does_not_render(self):
+        for cid in ("gear_type_select:bogus:inf", "gear_type_select:risky:bogus", "gear_type_select", "gear_type_select:risky"):
+            inter = await self._dispatch_dropdown(cid, "gathering")
+            inter.edit_original_response.assert_not_awaited()
+
+    async def test_mode_chosen_before_tool_type_survives_tool_type_choice(self):
+        inter = await self._dispatch_dropdown("upgrade_mode_select:none:none", "risky")
+
+        components = self._rendered(inter)
+        self.assertEqual(self._defaults(components)["upgrade_mode_select"], ["risky"])
+        self.assertIn("gear_type_select:risky:none", self._ids(components))
+
+        inter = await self._dispatch_dropdown("gear_type_select:risky:none", "building")
+        components = self._rendered(inter)
+        self.assertEqual(self._defaults(components)["upgrade_mode_select"], ["risky"])
+        self.assertIn("attempt_upgrade:building:risky:none", self._ids(components))
+
+    async def test_count_chosen_before_tool_type_survives_tool_type_choice(self):
+        inter = await self._dispatch_dropdown("upgrade_count_select:none:none", "inf")
+
+        components = self._rendered(inter)
+        self.assertEqual(self._defaults(components)["upgrade_count_select"], ["inf"])
+        self.assertIn("gear_type_select:none:inf", self._ids(components))
+
+    async def test_sacrifice_button_opens_modal_carrying_mode_and_count(self):
+        from cogs.actions import ActionsCog
+
+        inter = MagicMock()
+        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+        inter.user.id = 12345
+        inter.component.custom_id = "sacrifice_material:building:risky:inf"
+        inter.response.send_modal = AsyncMock()
+        await ActionsCog(bot=MagicMock()).on_button_click(inter)
+
+        modal = inter.response.send_modal.call_args.args[0]
+        self.assertEqual(modal.custom_id, "modal_sacrifice:building:risky:inf")
+
+    async def test_sacrifice_button_ignores_old_and_invalid_formats(self):
+        from cogs.actions import ActionsCog
+
+        for cid in ("sacrifice_material:building", "sacrifice_material:building:bogus:inf"):
+            inter = MagicMock()
+            inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+            inter.user.id = 12345
+            inter.component.custom_id = cid
+            inter.response.send_modal = AsyncMock()
+            await ActionsCog(bot=MagicMock()).on_button_click(inter)
+            inter.response.send_modal.assert_not_awaited()
+
+    async def test_sacrifice_submit_renders_gear_screen_keeping_mode_and_count(self):
+        from cogs.actions import ActionsCog
+
+        inter = MagicMock()
+        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+        inter.user.id = 12345
+        inter.custom_id = "modal_sacrifice:building:risky:inf"
+        inter.text_values = {"sacrifice_amount": "2"}
+        inter.response.edit_message = AsyncMock()
+        result = {"type": "sacrifice", "sacrificed": 2, "gear_type": "building", "risky_failed_levels_after": 2}
+        with patch("cogs.actions.gear_manager.sacrifice_material", new=AsyncMock(return_value=result)):
+            await ActionsCog(bot=MagicMock()).on_modal_submit(inter)
+
+        components = inter.response.edit_message.call_args.kwargs["components"]
+        defaults = self._defaults(components)
+        self.assertEqual(defaults["upgrade_mode_select"], ["risky"])
+        self.assertEqual(defaults["upgrade_count_select"], ["inf"])
+        self.assertIn("attempt_upgrade:building:risky:inf", self._ids(components))
+
+    async def test_sacrifice_submit_ignores_old_and_invalid_formats(self):
+        from cogs.actions import ActionsCog
+
+        for cid in ("modal_sacrifice:building", "modal_sacrifice:building:bogus:inf"):
+            inter = MagicMock()
+            inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+            inter.user.id = 12345
+            inter.custom_id = cid
+            inter.text_values = {"sacrifice_amount": "2"}
+            inter.response.edit_message = AsyncMock()
+            with patch("cogs.actions.gear_manager.sacrifice_material", new=AsyncMock()) as sacrifice:
+                await ActionsCog(bot=MagicMock()).on_modal_submit(inter)
+            sacrifice.assert_not_awaited()
+            inter.response.edit_message.assert_not_awaited()
 
 
 class TestSacrificeButton(unittest.TestCase):
@@ -3138,19 +3287,19 @@ class TestSacrificeButton(unittest.TestCase):
         from cogs.ui_renderer import build_gear_components
         rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, materials=5)
         custom_ids = [c.custom_id for row in rows for c in row.children]
-        self.assertIn("sacrifice_material:gathering", custom_ids)
+        self.assertIn("sacrifice_material:gathering:normal:none", custom_ids)
 
     def test_sacrifice_button_disabled_when_no_materials(self):
         from cogs.ui_renderer import build_gear_components
         rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, materials=0)
         buttons = {c.custom_id: c for row in rows for c in row.children}
-        self.assertTrue(buttons["sacrifice_material:gathering"].disabled)
+        self.assertTrue(buttons["sacrifice_material:gathering:normal:none"].disabled)
 
     def test_sacrifice_button_enabled_when_materials_available(self):
         from cogs.ui_renderer import build_gear_components
         rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, materials=3)
         buttons = {c.custom_id: c for row in rows for c in row.children}
-        self.assertFalse(buttons["sacrifice_material:gathering"].disabled)
+        self.assertFalse(buttons["sacrifice_material:gathering:normal:none"].disabled)
 
     def test_sacrifice_result_shown_in_embed(self):
         from cogs.ui_renderer import build_gear_embed
