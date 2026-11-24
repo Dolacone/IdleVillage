@@ -56,8 +56,8 @@ source_paths:
 | 元件 ID | 觸發條件 | 處理邏輯 |
 | :--- | :--- | :--- |
 | `gear_type_select:{mode}:{count}` | 選擇工具類型 | 更新強化預覽資訊，保留強化模式與執行次數 |
-| `upgrade_mode_select:{gear_type}:{count}` | 選擇強化模式（標準 / 墊檔 / 鐵齒） | 更新成本預覽與成功率顯示，保留執行次數 |
-| `upgrade_count_select:{gear_type}:{mode}` | 選擇執行次數（1 / 5 / 10 / 20 / 無限） | 重繪子選單，保留強化模式 |
+| `upgrade_mode_select:{gear_type}:{count}` | 選擇強化模式（標準 / 墊檔 / 鐵齒） | 更新成本預覽與成功率顯示，保留執行次數；`{gear_type}` 為 `none` 時重繪未選工具類型的子選單 |
+| `upgrade_count_select:{gear_type}:{mode}` | 選擇執行次數（1 / 5 / 10 / 20 / 無限） | 重繪子選單，保留強化模式；`{gear_type}` 為 `none` 時重繪未選工具類型的子選單 |
 | `attempt_upgrade:{gear_type}:{mode}:{count}` | 點擊強化 | 重複呼叫 `gear-manager.attempt_upgrade(db, user_id, gear_type, now, mode)`，每次獨立 commit；達到次數或 raise 任何例外時停止，強化失敗不中斷，`inf` 只在 raise 時停止。次數 1 發送 `gear_success`/`gear_fail`，其他次數在至少一次 commit 後發送一則 `gear_batch`。顯示最後一次成功執行的結果；第一次就 raise 時顯示錯誤 |
 | `sacrifice_material:{gear_type}:{mode}:{count}` | 點擊獻祭素材 | 開啟獻祭 Modal（`modal_sacrifice:{gear_type}:{mode}:{count}`） |
 | `modal_sacrifice:{gear_type}:{mode}:{count}` | 送出獻祭數量 | 呼叫 `gear-manager.sacrifice_material`，重繪子選單並保留強化模式與執行次數 |

@@ -137,12 +137,13 @@ Task 2 (auto-tool target keeps delta)
 
 - [ ] Task 1: Keep mode and count when changing tool type or sacrificing
   - Files: `src/cogs/ui_renderer.py`, `src/cogs/actions.py`, `tests/test_discord_commands.py`.
-  - Scope: `build_gear_components` (`gear_type_select`, `sacrifice_material`), `_OWN_DROPDOWNS`/`_OWN_DROPDOWN_PREFIXES`, the `{mode}:{count}` parser, `gear_type_select:` dropdown route, `sacrifice_material:` button route, `modal_sacrifice:` modal route.
+  - Scope: `build_gear_components` (`gear_type_select`, `sacrifice_material`), `_render_gear` (`gear_type is None` path passes `mode` and `count`), `upgrade_mode_select:` and `upgrade_count_select:` routes accept `{gear_type} == none`, `_OWN_DROPDOWNS`/`_OWN_DROPDOWN_PREFIXES`, the `{mode}:{count}` parser, `gear_type_select:` dropdown route, `sacrifice_material:` button route, `modal_sacrifice:` modal route.
   - Acceptance criteria:
     - `build_gear_components("building", "risky", ..., count="inf")` renders `gear_type_select:risky:inf` and `sacrifice_material:building:risky:inf`; with no mode and count it renders `gear_type_select:none:none`.
     - `on_dropdown` with `gear_type_select:risky:inf` and value `gathering` renders the 鐵齒 option and the 無限 option as default and renders `attempt_upgrade:gathering:risky:inf`.
     - `on_dropdown` with `gear_type_select:none:none` and value `gathering` renders no default mode or count option.
     - `on_dropdown` with `gear_type_select:bogus:inf` does not render.
+    - Mode before tool type: `on_dropdown` with `upgrade_mode_select:none:none` and value `risky` renders the 鐵齒 option as default and `gear_type_select:risky:none`; dispatching that `gear_type_select:risky:none` with value `building` renders the 鐵齒 option as default and `attempt_upgrade:building:risky:none`.
     - Clicking `sacrifice_material:building:risky:inf` opens a modal with custom_id `modal_sacrifice:building:risky:inf`.
     - Submitting `modal_sacrifice:building:risky:inf` with a valid amount renders `attempt_upgrade:building:risky:inf` and the 鐵齒 and 無限 options as default.
     - `uv run python -m pytest` passes.
@@ -162,7 +163,7 @@ Task 2 (auto-tool target keeps delta)
 - [ ] Task 3: Carry mode and count through the affix management screen
   - Files: `src/cogs/ui_renderer.py`, `src/cogs/actions.py`, `tests/test_discord_commands.py`.
   - Depends on: Task 1.
-  - Scope: `build_gear_components` (`open_affix_mgmt`), `build_affix_components` (all six custom_ids), `_render_gear` (`gear_type is None` path passes `mode` and `count`), `_render_affix`, routes `open_affix_mgmt:`, `affix_gear_select:`, `affix_slot_select:`, `affix_extract:`, `affix_clear:`, `back_to_gear:`; route `open_auto_affix:` accepts `open_auto_affix:{gear_type}:{mode}:{count}`.
+  - Scope: `build_gear_components` (`open_affix_mgmt`), `build_affix_components` (all six custom_ids), `_render_affix`, routes `open_affix_mgmt:`, `affix_gear_select:`, `affix_slot_select:`, `affix_extract:`, `affix_clear:`, `back_to_gear:`; route `open_auto_affix:` accepts `open_auto_affix:{gear_type}:{mode}:{count}`.
   - Acceptance criteria:
     - `build_affix_components("gathering", ..., mode="risky", count="inf")` renders `affix_gear_select:risky:inf`, `affix_slot_select:gathering:risky:inf` (when affixes exist), `affix_clear:gathering:none:none:risky:inf`, `affix_extract:gathering:risky:inf`, `open_auto_affix:gathering:risky:inf`, `back_to_gear:gathering:risky:inf`.
     - Round trip: `open_affix_mgmt:building:risky:inf` → `affix_gear_select:risky:inf` value `gathering` → `affix_extract:gathering:risky:inf` → `back_to_gear:gathering:risky:inf`, each step dispatched with the custom_id rendered by the previous step, ends on a gear screen with the 鐵齒 and 無限 options as default and `attempt_upgrade:gathering:risky:inf`.
@@ -203,5 +204,14 @@ Task 2 (auto-tool target keeps delta)
   - 修正：保留規則只放在 `docs/discord/command-handler.md` 的路由表。
   - 修正：刪除 `docs/discord/ui-renderer.md:265` 整段與 `:209` 的「改目標時保留已選時數。」。
   - 修正：刪除 `docs/discord/command-handler.md:69` 的「`back_to_gear` 以它還原強化模式與執行次數；」。
+- [x] Plan Issue 5: 從主介面開啟工具強化後，先選強化模式或執行次數、再選工具類型，模式與次數仍被清掉；計畫沒有處理這條路徑。
+  - 證據：`src/cogs/ui_renderer.py:717-729` 的強化模式與執行次數選單沒有 `disabled`，工具類型未選時 custom_id 為 `upgrade_mode_select:none:none`（`tests/test_discord_commands.py:1461-1465`）。
+  - 證據：`src/cogs/actions.py:894-910` 要求 `gear_type in _VALID_GEAR_TYPES`，`none` 時不重繪，所選模式或次數沒有進入任何 custom_id。
+  - 證據：`src/cogs/actions.py:208-216` 的 `gear_type is None` 路徑以 `mode=None` 呼叫 `build_gear_components`，因此 `gear_type_select` 只能攜帶 `none:none`。
+  - 證據：Task 1 AC「`gear_type_select:none:none` and value `gathering` renders no default mode or count option」把這條路徑的重設寫成預期行為，違反「改動工具類型的時候，`鐵齒`與`無限`選項應該維持不變」。
+  - 修正：Task 1 的 `upgrade_mode_select:`、`upgrade_count_select:` 路由接受 `gear_type == "none"`，呼叫 `_render_gear(inter, None, mode=..., count=...)`。
+  - 修正：把 `_render_gear` (`gear_type is None` path passes `mode` and `count`) 從 Task 3 Scope 移回 Task 1 Scope。
+  - 修正：Task 1 加 AC：`on_dropdown` 以 `upgrade_mode_select:none:none` 選 `risky`，渲染 `gear_type_select:risky:none` 且 鐵齒 為 default；再以該 `gear_type_select:risky:none` 選 `building`，渲染 鐵齒 為 default 與 `attempt_upgrade:building:risky:none`。
+  - 修正：`docs/discord/command-handler.md` 的 `upgrade_mode_select`、`upgrade_count_select` 列註明 `{gear_type}` 未選為 `none` 時重繪無工具類型的子選單。
 
 ## Review Issues
