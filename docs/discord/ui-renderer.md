@@ -1,14 +1,30 @@
 ---
 title: "Module: ui-renderer"
 doc_type: module
-last_reviewed: 2026-10-27
+last_reviewed: 2026-11-16
 source_paths:
   - src/cogs/ui_renderer.py
+  - src/cogs/actions.py
 ---
 
 # Module: ui-renderer
 
 負責建構所有 Discord Embed 與互動元件（Button、Dropdown）。不包含業務邏輯，只負責呈現。
+
+## 數字格式
+
+所有玩家可見的數字，整數部分每三位加 `,`。
+
+- 範圍：Embed 文字、元件 label/description/placeholder、Modal label/placeholder、Public 通知、排行榜文字。
+- 等級也套用，例如 `Lv1,024`。
+- 整數：`1234567` -> `1,234,567`。
+- 小數：去除尾隨零後套用，例如 `10.0` -> `10`、`0.05` -> `0.05`、`1234.5` -> `1,234.5`。
+- 以下值維持原樣，不加 `,`：
+  - Discord 時間戳記 `<t:{unix}:R>`、`<t:{unix}:t>` 的 unix 秒數。
+  - custom_id 內的數字。
+  - Select option 的 value。
+  - 找不到玩家名稱時 fallback 顯示的 `user_id`。
+  - 例外訊息與錯誤回覆中的數字：`⚠️ 操作失敗：` 後的 manager 錯誤文字、管理員輸入錯誤回覆。
 
 ## 村莊 Dashboard Embed（Public，由 Watcher 持續更新）
 
@@ -145,7 +161,7 @@ Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
   - 通過檢查後顯示第 0 頁 Ephemeral 目標選單，不扣除資源
 - Dropdown：custom_id 為 `trial_target_select`
   - 合法值為 `250000` 到 `max_target` 的每個 `250000` 倍數
-  - label 與 value 都顯示十進位 target
+  - label 顯示加 `,` 的 target（例如 `250,000`），value 為十進位 target（例如 `250000`）
   - 每頁最多 25 個選項，只建立當頁選項
   - 選取後立即提交，不增加第二個確認按鈕
 - 分頁按鈕：custom_id 為 `trial_target_page:{page}`
@@ -375,6 +391,7 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
 
 ## Changelog
 
+- 2026-11-16: 新增「數字格式」：所有玩家可見數字加千分位 `,`；試煉目標選單 label 加 `,`，value 不變。
 - 2026-10-27: 試煉目標選單級距改為 `250000`。
 - 2026-10-27: 工具強化新增執行次數選單；自動抽取設定畫面合併目標種類與目標效果，新增抽取數量選單。
 - 2026-10-08: 詞條名稱對照表移除 素材減免 與 ＡＰ退還；自動抽取特定效果選單改為五種。

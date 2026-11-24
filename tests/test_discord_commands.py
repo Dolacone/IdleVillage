@@ -167,7 +167,7 @@ class TestRenderMainTrialWiring(DatabaseTestCase):
 
         embed = inter.edit_original_response.call_args.kwargs["embed"]
         self.assertIn("🏆 試煉", embed.description)
-        self.assertIn("300 / 1000", embed.description)
+        self.assertIn("300 / 1,000", embed.description)
         self.assertIn("🏆 試煉貢獻：77", embed.description)
 
 
@@ -378,7 +378,7 @@ class TestAnnouncementCommand(DatabaseTestCase):
 
         embed = inter.channel.send.call_args.kwargs["embed"]
         self.assertIn("🏆 試煉", embed.description)
-        self.assertIn("500 / 2000", embed.description)
+        self.assertIn("500 / 2,000", embed.description)
 
 
 class TestManageCommand(DatabaseTestCase):
@@ -556,7 +556,7 @@ class TestRendererVillageEmbed(unittest.TestCase):
             self._make_stage_data(), {}, {}, [], self._make_trial_data()
         )
         desc = embed.description
-        self.assertIn("🏆 試煉 2000 / 5000 (40%)", desc)
+        self.assertIn("🏆 試煉 2,000 / 5,000 (40%)", desc)
         self.assertNotIn("木頭", desc)
 
     def test_embed_shows_insufficient_resources_when_inactive_and_no_resource_enough(self):
@@ -632,12 +632,25 @@ class TestRendererTrialTargets(unittest.TestCase):
         return build_trial_target_components(resources, page)
 
     def test_example_resources_render_twelve_targets_with_matching_values(self):
+        from cogs.ui_renderer import fmt_num
+
         rows = self._components({"food": 51000, "wood": 310000, "knowledge": 220000})
         options = rows[0].children[0].options
         self.assertEqual(len(options), 12)
-        self.assertEqual(options[0].label, "25000")
-        self.assertEqual(options[-1].label, "300000")
-        self.assertTrue(all(option.label == option.value for option in options))
+        self.assertEqual(options[0].label, "25,000")
+        self.assertEqual(options[-1].label, "300,000")
+        self.assertTrue(all(option.label == fmt_num(int(option.value)) for option in options))
+
+    def test_option_label_has_comma_and_value_is_plain(self):
+        rows = self._components(self._resources(300000))
+        option = next(o for o in rows[0].children[0].options if o.value == "250000")
+        self.assertEqual(option.label, "250,000")
+
+    def test_embed_shows_comma_max_target(self):
+        from cogs.ui_renderer import build_trial_target_embed
+
+        embed = build_trial_target_embed(self._resources(1025000))
+        self.assertIn("最大目標：1,000,000", embed.description)
 
     def test_six_hundred_twenty_five_thousand_fits_one_page(self):
         rows = self._components(self._resources(635000))
@@ -675,7 +688,216 @@ class TestRendererTrialTargets(unittest.TestCase):
 
         embed = build_trial_target_embed(self._resources(660000), page=999)
         self.assertIn("第 2/2 頁", embed.description)
-        self.assertIn("650000", embed.description)
+        self.assertIn("650,000", embed.description)
+
+
+class TestFmtNum(unittest.TestCase):
+    def test_formats_int_and_float(self):
+        from cogs.ui_renderer import fmt_num
+
+        self.assertEqual(fmt_num(999), "999")
+        self.assertEqual(fmt_num(1234567), "1,234,567")
+        self.assertEqual(fmt_num(10.0), "10")
+        self.assertEqual(fmt_num(0.05), "0.05")
+        self.assertEqual(fmt_num(1234.5), "1,234.5")
+
+
+class TestRendererThousandsSeparators(unittest.TestCase):
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def _stage_data(self, **overrides):
+        now = datetime.now(timezone.utc).isoformat()
+        data = {
+            "stages_cleared": 5000,
+            "current_stage_type": "gathering",
+            "current_stage_progress": 156618,
+            "current_stage_target": 750000,
+            "stage_started_at": now,
+            "updated_at": now,
+            "overtime_notified": 0,
+        }
+        data.update(overrides)
+        return data
+
+    def test_village_embed_formats_numbers_but_not_timestamps(self):
+        import re
+        from cogs.ui_renderer import build_village_embed
+
+        resources = {"food": 12345, "wood": 0, "knowledge": 0}
+        embed = build_village_embed(self._stage_data(stages_cleared=4995), resources, {}, [])
+        desc = embed.description
+        self.assertIn("156,618 / 750,000", desc)
+        self.assertIn("🌾 12,345", desc)
+        self.assertIn("等級上限：Lv1,000", desc)
+        self.assertRegex(desc, r"<t:\d+:R>")
+        self.assertNotRegex(desc, r"<t:\d*,")
+
+    def test_active_trial_line_formats_progress_and_target(self):
+        from cogs.ui_renderer import build_village_embed
+
+        trial = {
+            "is_active": 1,
+            "progress": 156618,
+            "target": 750000,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+        }
+        embed = build_village_embed(self._stage_data(), {}, {}, [], trial)
+        self.assertIn("🏆 試煉 156,618 / 750,000", embed.description)
+
+    def test_village_formats_building_level_and_action_counts(self):
+        from cogs.ui_renderer import build_village_embed
+
+        buildings = {"workshop": {"level": 1024, "xp_progress": 0}}
+        embed = build_village_embed(self._stage_data(), {}, buildings, [("gathering", None, 1500)])
+        self.assertIn("🔨 加工廠 Lv1,024", embed.description)
+        self.assertIn("採集: 1,500", embed.description)
+
+    def test_main_embed_personal_section_formats_numbers(self):
+        from cogs.ui_renderer import build_main_embed
+
+        player = {
+            "gear_gathering": 1500,
+            "gear_building": 0,
+            "gear_combat": 0,
+            "gear_research": 0,
+            "materials_gathering": 12345,
+            "materials_universal": 2000,
+            "_ap": 1500,
+        }
+        trial = {"is_active": 1, "progress": 1, "target": 2, "started_at": datetime.now(timezone.utc).isoformat()}
+        embed = build_main_embed(
+            self._stage_data(stages_cleared=0), {}, {}, [], player,
+            trial_data=trial, trial_contribution=156618,
+        )
+        desc = embed.description
+        tool_line = next(l for l in desc.split("\n") if l.startswith("🏅 工具"))
+        self.assertIn("🌾 1,500", tool_line)
+        self.assertIn("12,345", desc)
+        self.assertIn("🌟 2,000", desc)
+        self.assertIn("🏆 試煉貢獻：156,618", desc)
+        self.assertIn("1,520(+7,500%)", desc)
+
+    def test_building_target_option_formats_level_and_xp(self):
+        from cogs.ui_renderer import build_main_components
+
+        player = {"_ap": 1, "action": "building"}
+        buildings = {"workshop": {"level": 1024, "xp_progress": 1234}}
+        rows = build_main_components(player, buildings, pending_action="building")
+        select = next(c for r in rows for c in r.children if getattr(c, "custom_id", None) == "building_target_select")
+        option = next(o for o in select.options if o.value == "workshop")
+        self.assertIn("Lv1,024", option.label)
+        self.assertEqual(option.description, "XP: 1,234/1,025,000")
+
+
+class TestRendererGearAdminThousandsSeparators(unittest.TestCase):
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    def test_gear_embed_formats_levels_cost_holdings_and_risky_rate(self):
+        from cogs.ui_renderer import build_gear_embed
+
+        info = {
+            "gear_level": 1024,
+            "target_level": 1025,
+            "material_cost": 1025,
+            "rate": 0.5,
+            "pity": 0,
+            "ap": 3,
+            "gear_cap": 2000,
+            "materials": 12345,
+            "universal_materials": 2000,
+            "mode": "risky",
+            "risky_failed_levels": 150000,
+            "risky_bonus_pct": 1500.0,
+        }
+        desc = build_gear_embed(info, "gathering").description
+        self.assertIn("Lv1,024 → Lv1,025", desc)
+        self.assertIn("+ 1,025 個", desc)
+        self.assertIn("持有素材：12,345 個 ｜ 🌟 萬能素材：2,000 個", desc)
+        self.assertIn("鐵齒率：150,000 x 0.01% = 1,500%", desc)
+        self.assertIn("工具等級上限：Lv2,000（研究所 Lv2,000）", desc)
+
+    def test_gear_embed_formats_sacrifice_and_result_lines(self):
+        from cogs.ui_renderer import build_gear_embed
+
+        info = {"gear_level": 1, "target_level": 2, "gear_cap": 5000}
+        sacrifice = build_gear_embed(info, "gathering", {"type": "sacrifice", "sacrificed": 12345}).description
+        self.assertIn("消耗 12,345 個", sacrifice)
+        self.assertIn("鐵齒加成 +123.45%", sacrifice)
+        success = build_gear_embed(info, "gathering", {"success": True, "new_level": 1025}).description
+        self.assertIn("升至 Lv1,025", success)
+
+    def test_gear_embed_error_text_stays_unformatted(self):
+        from cogs.ui_renderer import build_gear_embed
+
+        info = {"gear_level": 1, "target_level": 2}
+        desc = build_gear_embed(info, "gathering", {"error": "need 20000, have 12345"}).description
+        self.assertIn("⚠️ 操作失敗：need 20000, have 12345", desc)
+
+    def _description_for_tool(self, rows, select_id, tool="gathering"):
+        select = next(c for r in rows for c in r.children if getattr(c, "custom_id", None) == select_id)
+        return next(o for o in select.options if o.value == tool).description
+
+    def test_gear_and_affix_tool_dropdown_descriptions_format_bonus(self):
+        from cogs.ui_renderer import build_affix_components, build_gear_components
+
+        player_gear = {"gathering": 1024}
+        gear_rows = build_gear_components("gathering", "normal", True, player_gear, 5000)
+        affix_rows = build_affix_components("gathering", player_gear, 5000, [], 1)
+        for rows, select_id in ((gear_rows, "gear_type_select"), (affix_rows, "affix_gear_select")):
+            desc = self._description_for_tool(rows, select_id)
+            self.assertIn("Lv1,024 → Lv1,025", desc)
+            self.assertIn("+5,120% → +5,125%", desc)
+        capped = build_gear_components("gathering", "normal", True, {"gathering": 5000}, 5000)
+        self.assertEqual(self._description_for_tool(capped, "gear_type_select"), "已達等級上限 Lv5,000")
+
+    def test_affix_embed_and_auto_affix_embed_format_holdings(self):
+        from cogs.ui_renderer import build_affix_embed, build_auto_affix_embed
+
+        affix = build_affix_embed("gathering", {"gathering": 1}, [], 1, materials=12345)
+        self.assertIn("持有素材：12,345 個", affix.description)
+        auto = build_auto_affix_embed("gathering", 12345, 2000, 1, [])
+        self.assertIn("持有素材：12,345 個 ｜ 🌟 萬能素材：2,000 個", auto.description)
+
+    def test_auto_tool_embed_formats_runway_hours(self):
+        from cogs.ui_renderer import build_auto_tool_embed
+
+        expires = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+        rows = [{"tool_type": "gathering", "expires_at": expires}]
+        embed = build_auto_tool_embed(rows, 24, materials={"gathering": 1500})
+        self.assertIn("素材可撐 1,500 小時", embed.description)
+        self.assertRegex(embed.description, r"<t:\d+:R>")
+
+    def test_manager_embed_formats_materials_and_risky(self):
+        from cogs.ui_renderer import build_manager_embed
+
+        player = {"materials_gathering": 12345, "risky_failed_levels": 150000}
+        embed = build_manager_embed("Alice", player)
+        values = {f.name: f.value for f in embed.fields}
+        self.assertIn("12,345", values["素材數量"])
+        self.assertEqual(values["鐵齒失敗累積"], "150,000")
+
+    def test_admin_embed_and_delta_buttons_format_numbers(self):
+        from cogs.ui_renderer import build_admin_components, build_admin_embed
+
+        self.assertIn("1,234,567", build_admin_embed("food", 1234567).description)
+        rows = build_admin_components("food")
+        labels = [c.label for c in rows[1].children]
+        self.assertIn("+1,000", labels)
+        self.assertIn("-1,000", labels)
+        ids = [c.custom_id for c in rows[1].children]
+        self.assertIn("resource_add_large:food", ids)
+
+    def test_ranking_text_formats_level(self):
+        from cogs.ui_renderer import build_ranking_text
+
+        text = build_ranking_text({"gathering": [("u1", 1024)]}, {"u1": "Alice"})
+        self.assertIn("- Lv1,024: Alice", text)
+        unresolved = build_ranking_text({"gathering": [("1234567", 3)]}, {})
+        self.assertIn("- Lv3: 1234567", unresolved)
 
 
 class TestRendererMainEmbed(unittest.TestCase):
@@ -2790,6 +3012,41 @@ class TestAffixClearByGroup(DatabaseTestCase):
             render.assert_not_awaited()
         slots, mats = await self._state()
         self.assertEqual((slots, mats), ([0], 10))
+
+
+class TestSacrificeModalOpen(unittest.IsolatedAsyncioTestCase):
+    """sacrifice_material:{gear_type} button opens a modal with comma-formatted holdings."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ[k] = v
+
+    async def test_modal_label_and_placeholder_use_thousands_separators(self):
+        from cogs.actions import ActionsCog
+
+        cursor = MagicMock()
+        cursor.fetchone = AsyncMock(return_value=(12345,))
+        execute_cm = MagicMock()
+        execute_cm.__aenter__ = AsyncMock(return_value=cursor)
+        execute_cm.__aexit__ = AsyncMock(return_value=False)
+        db = MagicMock()
+        db.execute = MagicMock(return_value=execute_cm)
+        conn_cm = MagicMock()
+        conn_cm.__aenter__ = AsyncMock(return_value=db)
+        conn_cm.__aexit__ = AsyncMock(return_value=False)
+
+        inter = MagicMock()
+        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+        inter.user.id = 12345
+        inter.component.custom_id = "sacrifice_material:gathering"
+        inter.response.send_modal = AsyncMock()
+        with patch("cogs.actions.get_connection", return_value=conn_cm):
+            await ActionsCog(bot=MagicMock()).on_button_click(inter)
+
+        modal = inter.response.send_modal.call_args.args[0]
+        text_input = modal.components[0].children[0] if hasattr(modal.components[0], "children") else modal.components[0]
+        self.assertIn("（持有：12,345）", text_input.label)
+        self.assertEqual(text_input.placeholder, "1 ~ 12,345")
 
 
 class TestSacrificeModalSubmit(unittest.IsolatedAsyncioTestCase):

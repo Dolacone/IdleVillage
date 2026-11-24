@@ -427,12 +427,12 @@ class TestNotificationFormatting(unittest.TestCase):
         }
         text = _format_event(ev)
         self.assertNotIn("<@", text)
-        self.assertIn("花費 150000 個 🪵木頭", text)
-        self.assertIn("目標：全服玩家共同累積 150000 點行動產出", text)
+        self.assertIn("花費 150,000 個 🪵木頭", text)
+        self.assertIn("目標：全服玩家共同累積 150,000 點行動產出", text)
         self.assertIn("<t:1234567890:R>", text)
         self.assertEqual(
             text.split("\n")[-1],
-            "達成後共 1500 個 🌟萬能素材：25% 由參與者平均分配，75% 依貢獻度分配",
+            "達成後共 1,500 個 🌟萬能素材：25% 由參與者平均分配，75% 依貢獻度分配",
         )
 
     def test_format_trial_messages_read_equal_share_percent_at_call_time(self):
@@ -455,7 +455,7 @@ class TestNotificationFormatting(unittest.TestCase):
             success_text = _format_event(success)
         self.assertEqual(
             start_text.split("\n")[-1],
-            "達成後共 1500 個 🌟萬能素材：30% 由參與者平均分配，70% 依貢獻度分配",
+            "達成後共 1,500 個 🌟萬能素材：30% 由參與者平均分配，70% 依貢獻度分配",
         )
         self.assertEqual(
             success_text.split("\n")[1],
@@ -476,15 +476,15 @@ class TestNotificationFormatting(unittest.TestCase):
         }
         text = _format_event(ev, name_map={"111": "Alice", "222": "Bob"})
         self.assertIn("🎉 村莊試煉達成", text)
-        self.assertIn("5000", text)
+        self.assertIn("5,000", text)
         self.assertNotIn("食物", text)
         self.assertEqual(
             text.split("\n")[1],
             "共 2 位玩家瓜分了 50 個 🌟萬能素材（25% 平均分配、75% 依貢獻度）：",
         )
         self.assertNotIn("<@", text)
-        self.assertIn("貢獻 3000 (25 素材)：Alice", text)
-        self.assertIn("貢獻 2000 (25 素材)：Bob", text)
+        self.assertIn("貢獻 3,000 (25 素材)：Alice", text)
+        self.assertIn("貢獻 2,000 (25 素材)：Bob", text)
 
     def test_format_trial_success_without_name_map_falls_back_to_user_id(self):
         from core.notification import _format_event
@@ -499,7 +499,7 @@ class TestNotificationFormatting(unittest.TestCase):
         }
         text = _format_event(ev)
         self.assertNotIn("<@", text)
-        self.assertIn("貢獻 3000 (25 素材)：111", text)
+        self.assertIn("貢獻 3,000 (25 素材)：111", text)
 
     def test_format_trial_success_truncates_long_participant_list(self):
         from core.notification import _format_event
@@ -529,7 +529,7 @@ class TestNotificationFormatting(unittest.TestCase):
         text = _format_event(ev)
         self.assertIn("⌛ 村莊試煉逾時失敗", text)
         self.assertNotIn("知識", text)
-        self.assertIn("3200/5000", text)
+        self.assertIn("3,200/5,000", text)
         self.assertIn("資源不予退還", text)
         self.assertIn("12 小時內無法開啟新試煉", text)
 
@@ -855,7 +855,7 @@ class TestDashboardUpdate(DatabaseTestCase):
 
         embed = message.edit.call_args.kwargs["embed"]
         self.assertIn("🏆 試煉", embed.description)
-        self.assertIn("1200 / 5000", embed.description)
+        self.assertIn("1,200 / 5,000", embed.description)
 
     async def test_update_dashboard_clears_deleted_message_reference(self):
         from core import notification
@@ -921,7 +921,7 @@ class TestDispatchEventsTrialSuccessNames(DatabaseTestCase):
 
         guild.fetch_member.assert_not_awaited()
         text = channel.send.call_args.args[0]
-        self.assertIn("貢獻 3000 (25 素材)：Alice", text)
+        self.assertIn("貢獻 3,000 (25 素材)：Alice", text)
 
     async def test_dispatch_events_resolves_trial_success_participant_names(self):
         from core import notification
@@ -957,8 +957,8 @@ class TestDispatchEventsTrialSuccessNames(DatabaseTestCase):
 
         channel.send.assert_awaited_once()
         text = channel.send.call_args.args[0]
-        self.assertIn("貢獻 3000 (25 素材)：Alice", text)
-        self.assertIn("貢獻 2000 (25 素材)：Bob", text)
+        self.assertIn("貢獻 3,000 (25 素材)：Alice", text)
+        self.assertIn("貢獻 2,000 (25 素材)：Bob", text)
         self.assertNotIn("<@", text)
         allowed_mentions = channel.send.call_args.kwargs.get("allowed_mentions")
         self.assertFalse(allowed_mentions.everyone)
@@ -1023,8 +1023,8 @@ class TestDispatchEventsTrialSuccessNames(DatabaseTestCase):
         await notification.dispatch_events(bot, [event])
 
         text = channel.send.call_args.args[0]
-        self.assertIn("貢獻 3000 (25 素材)：111", text)
-        self.assertIn("貢獻 2000 (25 素材)：Bob", text)
+        self.assertIn("貢獻 3,000 (25 素材)：111", text)
+        self.assertIn("貢獻 2,000 (25 素材)：Bob", text)
 
     async def test_dispatch_events_trial_success_transport_error_falls_back_without_aborting_batch(self):
         """A non-disnake exception (e.g. a transport error) from fetch_member must not
@@ -1059,8 +1059,8 @@ class TestDispatchEventsTrialSuccessNames(DatabaseTestCase):
 
         channel.send.assert_awaited_once()
         text = channel.send.call_args.args[0]
-        self.assertIn("貢獻 3000 (25 素材)：111", text)
-        self.assertIn("貢獻 2000 (25 素材)：Bob", text)
+        self.assertIn("貢獻 3,000 (25 素材)：111", text)
+        self.assertIn("貢獻 2,000 (25 素材)：Bob", text)
 
     async def test_dispatch_events_mixed_batch_only_resolves_trial_success_names(self):
         from core import notification
@@ -1096,7 +1096,7 @@ class TestDispatchEventsTrialSuccessNames(DatabaseTestCase):
         guild.fetch_member.assert_awaited_once_with(int("111"))
         self.assertEqual(channel.send.await_count, 2)
         texts = [call.args[0] for call in channel.send.await_args_list]
-        self.assertTrue(any("貢獻 5000 (50 素材)：Alice" in t for t in texts))
+        self.assertTrue(any("貢獻 5,000 (50 素材)：Alice" in t for t in texts))
         self.assertTrue(any("目前進度：100 / 500" in t for t in texts))
 
 
@@ -1359,6 +1359,95 @@ class TestBatchNotifications(DatabaseTestCase):
         self.assertTrue(all(len(m) <= 2000 for m in sent))
         full = notification._format_event(event(120))
         self.assertEqual("\n".join(sent), full)
+
+
+class TestNotificationThousandsSeparators(unittest.TestCase):
+    """Public notification numbers carry thousands separators; unix and user_id do not."""
+
+    def setUp(self):
+        for k, v in ALL_TEST_ENV.items():
+            os.environ.setdefault(k, str(v))
+
+    def test_trial_success_exact_lines(self):
+        from core.notification import _format_event
+        text = _format_event(
+            {
+                "type": "trial_success",
+                "target": 750000,
+                "total_awarded": 7505,
+                "participants": [{"user_id": "111", "contribution": 156618, "reward": 1331}]
+                + [{"user_id": str(i), "contribution": 1, "reward": 1} for i in range(11)],
+            },
+            name_map={"111": "𝕯𝖔𝖑𝖆"},
+        )
+        lines = text.split("\n")
+        self.assertEqual(lines[0], "🎉 村莊試煉達成！目標 750,000 點行動產出已完成")
+        self.assertEqual(lines[1], "共 12 位玩家瓜分了 7,505 個 🌟萬能素材（25% 平均分配、75% 依貢獻度）：")
+        self.assertEqual(lines[2], "貢獻 156,618 (1,331 素材)：𝕯𝖔𝖑𝖆")
+
+    def test_trial_start_numbers_and_unix_untouched(self):
+        from core.notification import _format_event
+        text = _format_event({
+            "type": "trial_start", "resource_type": "wood", "target": 750000,
+            "reward_pool": 7500, "deadline_unix": 1234567890,
+        })
+        self.assertIn("花費 750,000 個", text)
+        self.assertIn("累積 750,000 點", text)
+        self.assertIn("共 7,500 個", text)
+        self.assertIn("<t:1234567890:R>", text)
+
+    def test_trial_fail_progress(self):
+        from core.notification import _format_event
+        text = _format_event({"type": "trial_fail", "target": 750000, "progress": 123456})
+        self.assertIn("（進度：123,456/750,000）", text)
+
+    def test_overtime_seconds_and_progress(self):
+        from core.notification import _format_event
+        text = _format_event(
+            {"type": "overtime", "stages_cleared": 5000, "progress": 156618, "target": 750000}
+        )
+        self.assertIn("第 5,001 關已超過 86,400 秒", text)
+        self.assertIn("目前進度：156,618 / 750,000", text)
+
+    def test_upgrade_stage_clear_caps_and_target(self):
+        from core.notification import _format_event
+        text = _format_event({
+            "type": "upgrade_stage_clear", "round": 1000, "old_cap": 1000, "new_cap": 1005,
+            "next_stage_type": "gathering", "next_target": 1250000,
+        })
+        self.assertIn("第 1,000 輪完成", text)
+        self.assertIn("Lv1,000 變成 Lv1,005", text)
+        self.assertIn("目標需求：1,250,000", text)
+
+    def test_gear_events_level_and_failure_count(self):
+        from core.notification import _format_event
+        base = {
+            "user_display_name": "A", "gear_type": "combat",
+            "current_level": 1024, "target_level": 1025, "failure_count": 1203,
+        }
+        expected = "Lv1,024 -> Lv1,025（總失敗次數：1,203）"
+        self.assertIn(expected, _format_event({"type": "gear_success", **base}))
+        self.assertIn(expected, _format_event({"type": "gear_fail", **base}))
+        batch = _format_event({
+            "type": "gear_batch", "user_display_name": "A", "gear_type": "combat",
+            "results": [{"success": True, "current_level": 1024, "target_level": 1025, "failure_count": 1203}],
+        })
+        self.assertIn(expected, batch)
+
+    def test_affix_auto_events_attempts_and_spent(self):
+        from core.notification import _format_event
+        expected = "抽選次數1,500 (3,000工具素材)"
+        single = _format_event({
+            "type": "affix_auto_extracted", "user_display_name": "A", "gear_type": "combat",
+            "affix": None, "attempts": 1500, "material_spent": 3000, "material_source": "tool",
+        })
+        batch = _format_event({
+            "type": "affix_auto_batch", "user_display_name": "A", "gear_type": "combat",
+            "material_source": "tool",
+            "results": [{"affix": None, "attempts": 1500, "material_spent": 3000}],
+        })
+        self.assertIn(expected, single)
+        self.assertIn(expected, batch)
 
 
 if __name__ == "__main__":
