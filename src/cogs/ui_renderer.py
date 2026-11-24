@@ -1051,6 +1051,7 @@ def build_auto_tool_components(
     active_types = [r["tool_type"] for r in active_rows]
     selectable = [t for t in _AUTO_TOOL_ORDER if t in idle_tools or t in active_types]
     is_running = selected_tool in active_types
+    delta_suffix = "none" if selected_delta is None else selected_delta
 
     if selectable:
         tool_options = [
@@ -1070,7 +1071,7 @@ def build_auto_tool_components(
     rows = [
         disnake.ui.ActionRow(
             disnake.ui.StringSelect(
-                custom_id="auto_tool_type_select",
+                custom_id=f"auto_tool_type_select:{delta_suffix}",
                 placeholder="選擇工具...",
                 options=tool_options,
                 disabled=tool_disabled,
@@ -1089,7 +1090,7 @@ def build_auto_tool_components(
         rows.append(
             disnake.ui.ActionRow(
                 disnake.ui.StringSelect(
-                    custom_id=f"auto_tool_target_select:{selected_tool}",
+                    custom_id=f"auto_tool_target_select:{selected_tool}:{delta_suffix}",
                     placeholder="選擇建設目標...",
                     options=target_options,
                 )

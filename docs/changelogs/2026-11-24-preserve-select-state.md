@@ -149,7 +149,7 @@ Task 2 (auto-tool target keeps delta)
     - Clicking `sacrifice_material:building:risky:inf` opens a modal with custom_id `modal_sacrifice:building:risky:inf`.
     - Submitting `modal_sacrifice:building:risky:inf` with a valid amount renders `attempt_upgrade:building:risky:inf` and the 鐵齒 and 無限 options as default.
     - `uv run python -m pytest` passes.
-- [ ] Task 2: Keep the selected hours when changing the auto-tool or its build target
+- [x] Task 2: Keep the selected hours when changing the auto-tool or its build target
   - Files: `src/cogs/ui_renderer.py`, `src/cogs/actions.py`, `tests/test_discord_commands.py`.
   - Parallel: logically independent of Tasks 1, 3, 4; runs sequentially because the files overlap.
   - Scope: `build_auto_tool_components` tool and target select custom_ids, `_OWN_DROPDOWNS`/`_OWN_DROPDOWN_PREFIXES`, `auto_tool_type_select:` and `auto_tool_target_select:` dropdown routes.

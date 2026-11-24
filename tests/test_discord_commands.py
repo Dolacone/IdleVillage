@@ -2648,11 +2648,11 @@ class TestAutoToolRouteRegistration(unittest.TestCase):
 
     def test_auto_tool_type_select_is_own_dropdown(self):
         from cogs.actions import _is_own_dropdown
-        self.assertTrue(_is_own_dropdown("auto_tool_type_select"))
+        self.assertTrue(_is_own_dropdown("auto_tool_type_select:3"))
 
     def test_auto_tool_target_select_is_own_dropdown(self):
         from cogs.actions import _is_own_dropdown
-        self.assertTrue(_is_own_dropdown("auto_tool_target_select:building"))
+        self.assertTrue(_is_own_dropdown("auto_tool_target_select:building:3"))
 
     def test_auto_tool_add_select_is_own_dropdown(self):
         from cogs.actions import _is_own_dropdown
@@ -3671,7 +3671,7 @@ class AutoToolSubInterface(unittest.TestCase):
             ["building", "combat"],
             [{"tool_type": "gathering", "action_target": None, "expires_at": "2025-01-01T13:00:00+00:00"}],
         )
-        select = next(c for c in self._all(rows) if getattr(c, "custom_id", None) == "auto_tool_type_select")
+        select = next(c for c in self._all(rows) if getattr(c, "custom_id", None) == "auto_tool_type_select:none")
         values = {o.value for o in select.options}
         self.assertEqual(values, {"gathering", "building", "combat"})
 
@@ -3833,6 +3833,81 @@ class TestAutoToolConfirmHandler(DatabaseTestCase):
         self.assertIsNone(await self._active())
         embed = inter.edit_original_response.call_args.kwargs["embed"]
         self.assertIn("操作失敗", embed.description)
+
+
+class TestPreserveAutoToolHours(DatabaseTestCase):
+    """Changing the auto-tool or its build target keeps the selected hours."""
+
+    def _all(self, rows):
+        return [c for row in rows for c in row.children]
+
+    def _ids(self, rows):
+        return {c.custom_id: c for c in self._all(rows) if hasattr(c, "custom_id")}
+
+    async def _dispatch(self, cid, value):
+        from cogs.actions import ActionsCog
+
+        inter = MagicMock()
+        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+        inter.user.id = 12345
+        inter.component.custom_id = cid
+        inter.values = [value]
+        inter.response.defer = AsyncMock()
+        inter.edit_original_response = AsyncMock()
+        await ActionsCog(bot=MagicMock()).on_dropdown(inter)
+        return inter
+
+    def _hours_defaults(self, rows):
+        select = next(c for c in self._all(rows) if getattr(c, "custom_id", "").startswith("auto_tool_add_select"))
+        return [o.value for o in select.options if o.default]
+
+    def test_renderer_embeds_delta_in_target_select_id(self):
+        from cogs.ui_renderer import build_auto_tool_components
+
+        rows = build_auto_tool_components(["building"], [], selected_tool="building", selected_delta=3, max_add=24)
+        self.assertIn("auto_tool_target_select:building:3", self._ids(rows))
+        rows = build_auto_tool_components(["building"], [], selected_tool="building", max_add=24)
+        self.assertIn("auto_tool_target_select:building:none", self._ids(rows))
+
+    def test_renderer_embeds_delta_in_type_select_id(self):
+        from cogs.ui_renderer import build_auto_tool_components
+
+        rows = build_auto_tool_components(["building"], [], selected_tool="building", selected_delta=3, max_add=24)
+        self.assertIn("auto_tool_type_select:3", self._ids(rows))
+        rows = build_auto_tool_components(["building"], [])
+        self.assertIn("auto_tool_type_select:none", self._ids(rows))
+
+    async def test_target_change_keeps_hours(self):
+        inter = await self._dispatch("auto_tool_target_select:building:3", "workshop")
+
+        rows = inter.edit_original_response.call_args.kwargs["components"]
+        self.assertEqual(self._hours_defaults(rows), ["3"])
+        confirm = self._ids(rows)["auto_tool_confirm:building:3:workshop"]
+        self.assertFalse(confirm.disabled)
+
+    async def test_target_change_without_hours_has_no_default(self):
+        inter = await self._dispatch("auto_tool_target_select:building:none", "workshop")
+
+        rows = inter.edit_original_response.call_args.kwargs["components"]
+        self.assertEqual(self._hours_defaults(rows), [])
+        self.assertTrue(self._ids(rows)["auto_tool_confirm:none"].disabled)
+
+    async def test_target_select_with_invalid_delta_does_not_render(self):
+        for cid in ("auto_tool_target_select:building:abc", "auto_tool_target_select:building"):
+            inter = await self._dispatch(cid, "workshop")
+            inter.edit_original_response.assert_not_awaited()
+
+    async def test_tool_change_keeps_hours(self):
+        inter = await self._dispatch("auto_tool_type_select:3", "combat")
+
+        rows = inter.edit_original_response.call_args.kwargs["components"]
+        self.assertEqual(self._hours_defaults(rows), ["3"])
+        self.assertFalse(self._ids(rows)["auto_tool_confirm:combat:3:none"].disabled)
+
+    async def test_tool_select_with_invalid_delta_does_not_render(self):
+        for cid in ("auto_tool_type_select:abc", "auto_tool_type_select"):
+            inter = await self._dispatch(cid, "combat")
+            inter.edit_original_response.assert_not_awaited()
 
 
 if __name__ == "__main__":

@@ -33,8 +33,21 @@ from managers import affix_manager, auto_tool_manager, building_manager, gear_ma
 
 _OWN_BUTTONS = frozenset({"burst_execute", "open_gear_upgrade", "open_trial_start", "open_auto_tool", "back_to_main"})
 _OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:", "clear_affix:", "sacrifice_material:", "open_affix_mgmt:", "affix_extract:", "affix_clear:", "back_to_gear:", "auto_tool_confirm:", "trial_target_page:", "open_auto_affix:", "back_to_affix:", "auto_affix_run:")
-_OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "affix_gear_select", "auto_tool_type_select", "trial_target_select"})
-_OWN_DROPDOWN_PREFIXES = ("gear_type_select:", "upgrade_mode_select:", "upgrade_count_select:", "affix_slot_select:", "auto_tool_target_select:", "auto_tool_add_select:", "auto_tool_sub_select:", "auto_affix_target:", "auto_affix_value:", "auto_affix_material:", "auto_affix_scope:")
+_OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "affix_gear_select", "trial_target_select"})
+_INVALID_DELTA = object()
+
+
+def _parse_auto_tool_delta(raw: str):
+    """Parse the signed hours carried in an auto-tool custom_id: int, None for "none", else _INVALID_DELTA."""
+    if raw == "none":
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return _INVALID_DELTA
+
+
+_OWN_DROPDOWN_PREFIXES = ("gear_type_select:", "upgrade_mode_select:", "upgrade_count_select:", "affix_slot_select:", "auto_tool_type_select:", "auto_tool_target_select:", "auto_tool_add_select:", "auto_tool_sub_select:", "auto_affix_target:", "auto_affix_value:", "auto_affix_material:", "auto_affix_scope:")
 _OWN_MODAL_PREFIXES = ("modal_sacrifice:",)
 _VALID_GEAR_TYPES = frozenset({"gathering", "building", "combat", "research"})
 _VALID_ACTIONS = frozenset({"gathering", "building", "combat", "research"})
@@ -941,13 +954,20 @@ class ActionsCog(commands.Cog):
                 return
             await self._render_affix(inter, gear_type, selected_group=(affix_type, int(raw_value)))
 
-        elif cid == "auto_tool_type_select":
-            if value in _VALID_GEAR_TYPES:
-                await self._render_auto_tool(inter, selected_tool=value)
+        elif cid.startswith("auto_tool_type_select:"):
+            delta = _parse_auto_tool_delta(cid.split(":", 1)[1])
+            if value in _VALID_GEAR_TYPES and delta is not _INVALID_DELTA:
+                await self._render_auto_tool(inter, selected_tool=value, selected_delta=delta)
         elif cid.startswith("auto_tool_target_select:"):
-            tool_type = cid.split(":", 1)[1]
-            if tool_type in _VALID_GEAR_TYPES and value in UI_BUILDING_TARGETS:
-                await self._render_auto_tool(inter, selected_tool=tool_type, selected_target=value)
+            parts = cid.split(":")
+            if len(parts) != 3:
+                return
+            tool_type = parts[1]
+            delta = _parse_auto_tool_delta(parts[2])
+            if tool_type in _VALID_GEAR_TYPES and value in UI_BUILDING_TARGETS and delta is not _INVALID_DELTA:
+                await self._render_auto_tool(
+                    inter, selected_tool=tool_type, selected_target=value, selected_delta=delta
+                )
         elif cid.startswith("auto_tool_add_select:") or cid.startswith("auto_tool_sub_select:"):
             parts = cid.split(":")
             if len(parts) < 3 or parts[1] not in _VALID_GEAR_TYPES:
