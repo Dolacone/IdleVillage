@@ -19,7 +19,6 @@ from core.config import get_env_float, get_env_int
 from managers import trial_manager
 from cogs.ui_renderer import (
     AFFIX_TYPE_LABELS,
-    BUILDING_LABELS,
     GEAR_LABELS,
     RESOURCE_EMOJIS,
     RESOURCE_LABELS,
@@ -105,17 +104,6 @@ def _format_event(event: dict, name_map: dict[str, str] | None = None) -> str | 
             f"建築等級上限從 Lv{old_cap} 變成 Lv{new_cap}\n"
             f"下一目標：{next_name}\n"
             f"目標需求：{next_target}"
-        )
-
-    if kind == "building_upgrade":
-        btype = event["building_type"]
-        old_lv = event["old_level"]
-        new_lv = event["new_level"]
-        next_req = event.get("next_xp_req", "?")
-        bname = BUILDING_LABELS.get(btype, btype)
-        return (
-            f"{bname} 從 Lv{old_lv} 變成 Lv{new_lv}\n"
-            f"下一等級需求：{next_req}"
         )
 
     if kind == "overtime":

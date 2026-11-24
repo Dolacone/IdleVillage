@@ -40,6 +40,7 @@ This directory is the v2 design preview. v2 is a fresh restart and replaces v1 g
 | Trial reward equal share change record | [changelogs/2026-10-08-trial-reward-equal-share.md](changelogs/2026-10-08-trial-reward-equal-share.md) |
 | Batch upgrade and auto affix change record | [changelogs/2026-10-27-batch-upgrade-and-auto-affix.md](changelogs/2026-10-27-batch-upgrade-and-auto-affix.md) |
 | Remove stage clear notification change record | [changelogs/2026-11-05-remove-stage-clear-notification.md](changelogs/2026-11-05-remove-stage-clear-notification.md) |
+| Remove building upgrade notification change record | [changelogs/2026-11-05-remove-building-upgrade-notification.md](changelogs/2026-11-05-remove-building-upgrade-notification.md) |
 | Village resources | `managers/resource-manager.md` |
 | SQLite schema | `db-schema.md` |
 | Slash command routing | [discord/command-handler.md](discord/command-handler.md) |
