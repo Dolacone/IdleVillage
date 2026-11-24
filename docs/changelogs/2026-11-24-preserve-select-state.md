@@ -1,6 +1,6 @@
 ---
 title: "選單變動不重設其他選單"
-status: Ready-to-implement
+status: Ready-to-review
 created: 2026-11-24
 doc_type: change
 last_reviewed: 2026-11-24
