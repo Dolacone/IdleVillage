@@ -745,7 +745,7 @@ def build_gear_components(
             disnake.ui.Button(
                 label="🔮 詞條管理",
                 style=disnake.ButtonStyle.primary,
-                custom_id=f"open_affix_mgmt:{_gt}",
+                custom_id=f"open_affix_mgmt:{_gt}:{_m}:{_c}",
                 disabled=(max_slots == 0),
             ),
             disnake.ui.Button(
@@ -794,6 +794,8 @@ def build_affix_components(
     affixes: list,
     max_slots: int,
     selected_group: tuple[str, int] | None = None,
+    mode: str | None = None,
+    count: str | None = None,
 ) -> list:
     bonus_pct = math.floor(get_env_float("GEAR_BONUS_PER_LEVEL") * 100)
 
@@ -820,6 +822,7 @@ def build_affix_components(
 
     is_full = len(affixes) >= max_slots
     _gt = gear_type or "none"
+    _mc = f"{mode or 'none'}:{count or 'none'}"
     has_selected_gear = gear_type is not None and player_gear.get(gear_type, 0) > 0
     occupied_slots = {a.get("slot_index") for a in affixes if 0 <= a.get("slot_index", -1) < max_slots}
     has_empty_slot = any(slot not in occupied_slots for slot in range(max_slots))
@@ -827,7 +830,7 @@ def build_affix_components(
     rows = [
         disnake.ui.ActionRow(
             disnake.ui.StringSelect(
-                custom_id="affix_gear_select",
+                custom_id=f"affix_gear_select:{_mc}",
                 placeholder="選擇工具類型...",
                 options=gear_options,
             )
@@ -854,7 +857,7 @@ def build_affix_components(
         rows.append(
             disnake.ui.ActionRow(
                 disnake.ui.StringSelect(
-                    custom_id=f"affix_slot_select:{_gt}",
+                    custom_id=f"affix_slot_select:{_gt}:{_mc}",
                     placeholder=placeholder,
                     options=affix_options,
                 )
@@ -867,27 +870,27 @@ def build_affix_components(
                 label="🗑️ 清除詞條",
                 style=disnake.ButtonStyle.danger,
                 custom_id=(
-                    f"affix_clear:{_gt}:{selected_group[0]}:{selected_group[1]}"
-                    if selected_group is not None else f"affix_clear:{_gt}:none:none"
+                    f"affix_clear:{_gt}:{selected_group[0]}:{selected_group[1]}:{_mc}"
+                    if selected_group is not None else f"affix_clear:{_gt}:none:none:{_mc}"
                 ),
                 disabled=(selected_group is None),
             ),
             disnake.ui.Button(
                 label="✨ 抽取詞條",
                 style=disnake.ButtonStyle.primary,
-                custom_id=f"affix_extract:{_gt}",
+                custom_id=f"affix_extract:{_gt}:{_mc}",
                 disabled=is_full,
             ),
             disnake.ui.Button(
                 label="✨ 自動抽取",
                 style=disnake.ButtonStyle.success,
-                custom_id=f"open_auto_affix:{_gt}",
+                custom_id=f"open_auto_affix:{_gt}:{_mc}",
                 disabled=not (has_selected_gear and has_empty_slot),
             ),
             disnake.ui.Button(
                 label="← 返回",
                 style=disnake.ButtonStyle.secondary,
-                custom_id=f"back_to_gear:{_gt}",
+                custom_id=f"back_to_gear:{_gt}:{_mc}",
             ),
         )
     )

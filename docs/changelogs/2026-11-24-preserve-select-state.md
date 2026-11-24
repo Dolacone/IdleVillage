@@ -162,7 +162,7 @@ Task 2 (auto-tool target keeps delta)
     - `on_dropdown` with `auto_tool_type_select:3` and value `combat` (idle) renders the `3 小時` option as default and an enabled `auto_tool_confirm:combat:3:none`.
     - `on_dropdown` with `auto_tool_type_select:abc` does not render.
     - `uv run python -m pytest` passes.
-- [ ] Task 3: Carry mode and count through the affix management screen
+- [x] Task 3: Carry mode and count through the affix management screen
   - Files: `src/cogs/ui_renderer.py`, `src/cogs/actions.py`, `tests/test_discord_commands.py`.
   - Depends on: Task 1.
   - Scope: `build_gear_components` (`open_affix_mgmt`), `build_affix_components` (all six custom_ids), `_render_affix`, routes `open_affix_mgmt:`, `affix_gear_select:`, `affix_slot_select:`, `affix_extract:`, `affix_clear:`, `back_to_gear:`; route `open_auto_affix:` accepts `open_auto_affix:{gear_type}:{mode}:{count}`.

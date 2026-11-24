@@ -33,7 +33,7 @@ from managers import affix_manager, auto_tool_manager, building_manager, gear_ma
 
 _OWN_BUTTONS = frozenset({"burst_execute", "open_gear_upgrade", "open_trial_start", "open_auto_tool", "back_to_main"})
 _OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:", "clear_affix:", "sacrifice_material:", "open_affix_mgmt:", "affix_extract:", "affix_clear:", "back_to_gear:", "auto_tool_confirm:", "trial_target_page:", "open_auto_affix:", "back_to_affix:", "auto_affix_run:")
-_OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "affix_gear_select", "trial_target_select"})
+_OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "trial_target_select"})
 _INVALID_DELTA = object()
 
 
@@ -47,7 +47,7 @@ def _parse_auto_tool_delta(raw: str):
         return _INVALID_DELTA
 
 
-_OWN_DROPDOWN_PREFIXES = ("gear_type_select:", "upgrade_mode_select:", "upgrade_count_select:", "affix_slot_select:", "auto_tool_type_select:", "auto_tool_target_select:", "auto_tool_add_select:", "auto_tool_sub_select:", "auto_affix_target:", "auto_affix_value:", "auto_affix_material:", "auto_affix_scope:")
+_OWN_DROPDOWN_PREFIXES = ("gear_type_select:", "affix_gear_select:", "upgrade_mode_select:", "upgrade_count_select:", "affix_slot_select:", "auto_tool_type_select:", "auto_tool_target_select:", "auto_tool_add_select:", "auto_tool_sub_select:", "auto_affix_target:", "auto_affix_value:", "auto_affix_material:", "auto_affix_scope:")
 _OWN_MODAL_PREFIXES = ("modal_sacrifice:",)
 _VALID_GEAR_TYPES = frozenset({"gathering", "building", "combat", "research"})
 _VALID_ACTIONS = frozenset({"gathering", "building", "combat", "research"})
@@ -253,7 +253,10 @@ class ActionsCog(commands.Cog):
         else:
             await inter.edit_original_response(embed=embed, components=components)
 
-    async def _render_affix(self, inter, gear_type: str | None, *, selected_group: tuple[str, int] | None = None) -> None:
+    async def _render_affix(
+        self, inter, gear_type: str | None, *, selected_group: tuple[str, int] | None = None,
+        mode: str | None = None, count: str | None = None,
+    ) -> None:
         user_id = str(inter.user.id)
         now = datetime.now(timezone.utc)
         async with get_connection() as db:
@@ -268,7 +271,7 @@ class ActionsCog(commands.Cog):
                 gear_cap = await building_manager.get_level(db, "research_lab")
                 player_gear = _make_player_gear(row)
                 embed = build_affix_embed(None, player_gear, [], 0)
-                components = build_affix_components(None, player_gear, gear_cap, [], 0)
+                components = build_affix_components(None, player_gear, gear_cap, [], 0, mode=mode, count=count)
                 await inter.edit_original_response(embed=embed, components=components)
                 return
 
@@ -288,7 +291,8 @@ class ActionsCog(commands.Cog):
             universal_materials=upgrade_info.get("universal_materials", 0),
         )
         components = build_affix_components(
-            gear_type, player_gear, upgrade_info["gear_cap"], affixes, max_slots, selected_group=selected_group
+            gear_type, player_gear, upgrade_info["gear_cap"], affixes, max_slots, selected_group=selected_group,
+            mode=mode, count=count,
         )
         await inter.edit_original_response(embed=embed, components=components)
 
@@ -658,15 +662,16 @@ class ActionsCog(commands.Cog):
             await self._render_gear(inter, gear_type)
 
         elif cid.startswith("open_affix_mgmt:"):
-            gear_type = cid.split(":", 1)[1]
-            if gear_type not in _VALID_GEAR_TYPES:
+            parts = cid.split(":")
+            state = _parse_mode_count(parts[2], parts[3]) if len(parts) == 4 else None
+            if parts[1] not in _VALID_GEAR_TYPES or state is None:
                 return
             await inter.response.defer()
-            await self._render_affix(inter, None)
+            await self._render_affix(inter, None, mode=state[0], count=state[1])
 
         elif cid.startswith("open_auto_affix:"):
             parts = cid.split(":")
-            if len(parts) != 2 or parts[1] not in (*_VALID_GEAR_TYPES, "none"):
+            if len(parts) != 4 or parts[1] not in (*_VALID_GEAR_TYPES, "none") or _parse_mode_count(parts[2], parts[3]) is None:
                 return
             await inter.response.defer()
             await self._render_auto_affix(inter, None if parts[1] == "none" else parts[1])
@@ -777,8 +782,10 @@ class ActionsCog(commands.Cog):
             await self._render_affix(inter, gear)
 
         elif cid.startswith("affix_extract:"):
-            gear_type = cid.split(":", 1)[1]
-            if gear_type not in _VALID_GEAR_TYPES:
+            parts = cid.split(":")
+            gear_type = parts[1]
+            state = _parse_mode_count(parts[2], parts[3]) if len(parts) == 4 else None
+            if gear_type not in _VALID_GEAR_TYPES or state is None:
                 return
             await inter.response.defer()
             now = datetime.now(timezone.utc)
@@ -799,11 +806,14 @@ class ActionsCog(commands.Cog):
                     pass
             if affix_event:
                 await notification.dispatch_events(self.bot, [affix_event])
-            await self._render_affix(inter, gear_type)
+            await self._render_affix(inter, gear_type, mode=state[0], count=state[1])
 
         elif cid.startswith("affix_clear:"):
             parts = cid.split(":")
-            if len(parts) != 4:
+            if len(parts) != 6:
+                return
+            state = _parse_mode_count(parts[4], parts[5])
+            if state is None:
                 return
             gear_type, affix_type = parts[1], parts[2]
             if gear_type not in _VALID_GEAR_TYPES or affix_type not in _VALID_AFFIX_TYPES:
@@ -817,15 +827,16 @@ class ActionsCog(commands.Cog):
             slots = [a["slot_index"] for a in affixes if a["affix_type"] == affix_type and a["value"] == value]
             if slots:
                 await self._execute_clear_affix(inter, gear_type, max(slots))
-            await self._render_affix(inter, gear_type)
+            await self._render_affix(inter, gear_type, mode=state[0], count=state[1])
 
         elif cid.startswith("back_to_gear:"):
-            gear_type = cid.split(":", 1)[1]
-            await inter.response.defer()
-            if gear_type not in _VALID_GEAR_TYPES:
-                await self._render_gear(inter, None)
+            parts = cid.split(":")
+            state = _parse_mode_count(parts[2], parts[3]) if len(parts) == 4 else None
+            if state is None or parts[1] not in (*_VALID_GEAR_TYPES, "none"):
                 return
-            await self._render_gear(inter, gear_type)
+            await inter.response.defer()
+            mode, count = state
+            await self._render_gear(inter, None if parts[1] == "none" else parts[1], mode=mode, count=count)
 
         elif cid.startswith("sacrifice_material:"):
             parts = cid.split(":")
@@ -942,17 +953,23 @@ class ActionsCog(commands.Cog):
                     inter, None if gear_type == "none" else gear_type,
                     mode=None if mode == "none" else mode, count=value,
                 )
-        elif cid == "affix_gear_select":
-            if value in _VALID_GEAR_TYPES:
-                await self._render_affix(inter, value)
+        elif cid.startswith("affix_gear_select:"):
+            parts = cid.split(":")
+            state = _parse_mode_count(parts[1], parts[2]) if len(parts) == 3 else None
+            if state is not None and value in _VALID_GEAR_TYPES:
+                await self._render_affix(inter, value, mode=state[0], count=state[1])
         elif cid.startswith("affix_slot_select:"):
-            gear_type = cid.split(":", 1)[1]
-            if gear_type not in _VALID_GEAR_TYPES:
+            parts = cid.split(":")
+            gear_type = parts[1]
+            state = _parse_mode_count(parts[2], parts[3]) if len(parts) == 4 else None
+            if gear_type not in _VALID_GEAR_TYPES or state is None:
                 return
             affix_type, sep, raw_value = value.partition(":")
             if not sep or affix_type not in _VALID_AFFIX_TYPES or raw_value not in _VALID_AUTO_AFFIX_VALUES:
                 return
-            await self._render_affix(inter, gear_type, selected_group=(affix_type, int(raw_value)))
+            await self._render_affix(
+                inter, gear_type, selected_group=(affix_type, int(raw_value)), mode=state[0], count=state[1],
+            )
 
         elif cid.startswith("auto_tool_type_select:"):
             delta = _parse_auto_tool_delta(cid.split(":", 1)[1])
