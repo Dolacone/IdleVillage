@@ -205,8 +205,8 @@ Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
 Embed 顯示標題、運行中自動工具清單（`{工具}：到期 <t:{unix}:R>｜素材可撐 {n} 小時`，建設附目標建築）、以及規則說明（啟動選運行時數、上限 `AUTO_TOOL_MAX_HOURS` 小時、每小時扣 1 素材、素材用完即停、運行中可加/減時間）。無運行中工具時顯示「目前沒有運行中的自動工具」。
 
 元件：
-- **Dropdown**（`auto_tool_type_select`）：可操作工具（閒置＝啟動、運行中＝調整時間；排除手動行動的工具）。皆無可用工具時以停用提示選項顯示。
-- **Dropdown**（`auto_tool_target_select:{tool}:{delta|none}`，僅「啟動建設」時出現；運行中的建設工具目標固定，不出現）：建設目標（採集場/加工廠/狩獵場）。改目標時保留已選時數。
+- **Dropdown**（`auto_tool_type_select:{delta|none}`）：可操作工具（閒置＝啟動、運行中＝調整時間；排除手動行動的工具）。皆無可用工具時以停用提示選項顯示。
+- **Dropdown**（`auto_tool_target_select:{tool}:{delta|none}`，僅「啟動建設」時出現；運行中的建設工具目標固定，不出現）：建設目標（採集場/加工廠/狩獵場）。
 - **Dropdown**（`auto_tool_add_select:{tool}:{target|none}`，選定工具後出現）：閒置工具＝初始運行時數 `1..max_add`；運行中＝加時間 `+1..+max_add`。`max_add == 0`（已達上限）時以停用提示選項顯示。
 - **Dropdown**（`auto_tool_sub_select:{tool}:{target|none}`，僅運行中工具出現）：減時間 `-1..-max_subtract`，最大階標示「停止（清空剩餘時間）」。
 - **Button**：`✅ 確認`（Green，custom_id: `auto_tool_confirm:{tool}:{delta}:{target|none}`，`delta` 為有號時數）；未選齊或超範圍時 disabled。
@@ -261,8 +261,6 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 - 鐵齒：`僅消耗 1 個素材，成功 +1~+3（50/35/15%），失敗則工具等級與 pity 均歸零`
 
 執行次數 Dropdown（custom_id: `upgrade_count_select:{gear_type}:{mode}`）選項為 1 / 5 / 10 / 20 / 無限，value 為 `1`、`5`、`10`、`20`、`inf`。`{mode}` 與 `{count}` 未選定時為 `none`。
-
-改工具類型、強化模式、執行次數任一選單時，其他兩個選單保留已選的值。獻祭素材後、從詞條管理返回後，強化模式與執行次數也保留。
 
 初始狀態：從主介面開啟時，工具類型、強化模式與執行次數 Dropdown 均不預設選中任何選項；
 三個按鈕（🎲 強化工具、🩸 獻祭素材、🔮 詞條管理）在工具類型未選定前均 disabled。
@@ -395,7 +393,7 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
 
 ## Changelog
 
-- 2026-11-24: 工具強化三個選單互相保留已選值，獻祭與詞條管理返回也保留強化模式與執行次數；詞條管理與自動抽取的 custom_id 結尾帶 `:{mode}:{count}`；自動工具改建設目標保留時數。
+- 2026-11-24: 工具強化三個選單互相保留已選值，獻祭與詞條管理返回也保留強化模式與執行次數；詞條管理與自動抽取的 custom_id 結尾帶 `:{mode}:{count}`；自動工具改工具或建設目標保留時數。
 - 2026-11-16: 新增「數字格式」：所有玩家可見數字加千分位 `,`；試煉目標選單 label 加 `,`，value 不變。
 - 2026-10-27: 試煉目標選單級距改為 `250000`。
 - 2026-10-27: 工具強化新增執行次數選單；自動抽取設定畫面合併目標種類與目標效果，新增抽取數量選單。

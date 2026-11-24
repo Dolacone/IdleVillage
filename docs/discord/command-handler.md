@@ -43,7 +43,7 @@ source_paths:
 ### 自動工具子介面
 | 元件 ID | 觸發條件 | 處理邏輯 |
 | :--- | :--- | :--- |
-| `auto_tool_type_select` | 選擇工具 | 重繪子介面，載入該工具可加/可減時數上限（`max_add`／`max_subtract`） |
+| `auto_tool_type_select:{delta}` | 選擇工具 | 重繪子介面，載入該工具可加/可減時數上限（`max_add`／`max_subtract`），保留已選有號 delta（未選為 `none`） |
 | `auto_tool_target_select:{tool}:{delta}` | 選擇建設目標（僅啟動建設） | 重繪子介面並記住目標，保留已選有號 delta（未選為 `none`） |
 | `auto_tool_add_select:{tool}:{target}` | 選擇時數（閒置＝初始時數；運行中＝加時間） | 重繪子介面並記住有號 delta（正） |
 | `auto_tool_sub_select:{tool}:{target}` | 選擇減時數（僅運行中） | 重繪子介面並記住有號 delta（負） |
@@ -66,7 +66,7 @@ source_paths:
 
 ### 詞條管理畫面
 
-詞條管理與自動抽取畫面的元件 ID 結尾都帶工具強化的 `:{mode}:{count}`（未選為 `none`）。handler 原樣傳給下一個畫面，`back_to_gear` 以它還原強化模式與執行次數；值不合法時忽略該互動。下表省略此結尾。
+詞條管理與自動抽取畫面的元件 ID 結尾都帶工具強化的 `:{mode}:{count}`（未選為 `none`）。handler 原樣傳給下一個畫面；值不合法時忽略該互動。下表省略此結尾。
 
 | 元件 ID | 觸發條件 | 處理邏輯 |
 | :--- | :--- | :--- |
@@ -116,7 +116,7 @@ source_paths:
 
 ## Changelog
 
-- 2026-11-24: `gear_type_select`、`auto_tool_target_select`、獻祭與詞條管理路由攜帶其他選單的值；改一個選單或從獻祭、詞條管理返回時保留其他選單。
+- 2026-11-24: `gear_type_select`、`auto_tool_type_select`、`auto_tool_target_select`、獻祭與詞條管理路由攜帶其他選單的值；改一個選單或從獻祭、詞條管理返回時保留其他選單。
 
 - 2026-10-27: 新增 `upgrade_count_select` 與批次強化；自動抽取選單改為 target/value/material/scope，新增所有空格批次。
 
