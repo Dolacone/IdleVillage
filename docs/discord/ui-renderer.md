@@ -1,7 +1,7 @@
 ---
 title: "Module: ui-renderer"
 doc_type: module
-last_reviewed: 2026-11-16
+last_reviewed: 2026-11-24
 source_paths:
   - src/cogs/ui_renderer.py
   - src/cogs/actions.py
@@ -205,8 +205,8 @@ Discord 上限為 5 個 action row。選擇建設時達到 4 rows。
 Embed 顯示標題、運行中自動工具清單（`{工具}：到期 <t:{unix}:R>｜素材可撐 {n} 小時`，建設附目標建築）、以及規則說明（啟動選運行時數、上限 `AUTO_TOOL_MAX_HOURS` 小時、每小時扣 1 素材、素材用完即停、運行中可加/減時間）。無運行中工具時顯示「目前沒有運行中的自動工具」。
 
 元件：
-- **Dropdown**（`auto_tool_type_select`）：可操作工具（閒置＝啟動、運行中＝調整時間；排除手動行動的工具）。皆無可用工具時以停用提示選項顯示。
-- **Dropdown**（`auto_tool_target_select:{tool}`，僅「啟動建設」時出現；運行中的建設工具目標固定，不出現）：建設目標（採集場/加工廠/狩獵場）。
+- **Dropdown**（`auto_tool_type_select:{delta|none}`）：可操作工具（閒置＝啟動、運行中＝調整時間；排除手動行動的工具）。皆無可用工具時以停用提示選項顯示。
+- **Dropdown**（`auto_tool_target_select:{tool}:{delta|none}`，僅「啟動建設」時出現；運行中的建設工具目標固定，不出現）：建設目標（採集場/加工廠/狩獵場）。
 - **Dropdown**（`auto_tool_add_select:{tool}:{target|none}`，選定工具後出現）：閒置工具＝初始運行時數 `1..max_add`；運行中＝加時間 `+1..+max_add`。`max_add == 0`（已達上限）時以停用提示選項顯示。
 - **Dropdown**（`auto_tool_sub_select:{tool}:{target|none}`，僅運行中工具出現）：減時間 `-1..-max_subtract`，最大階標示「停止（清空剩餘時間）」。
 - **Button**：`✅ 確認`（Green，custom_id: `auto_tool_confirm:{tool}:{delta}:{target|none}`，`delta` 為有號時數）；未選齊或超範圍時 disabled。
@@ -251,7 +251,7 @@ Embed 顯示標題、運行中自動工具清單（`{工具}：到期 <t:{unix}:
 UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL=0.10`
 時，Lv6、保底 0、鐵齒 0 的顯示為 `成功率：40%（+保底0% +鐵齒0%）= 40%`。
 
-工具類型 Dropdown 每個選項附帶描述：
+工具類型 Dropdown（custom_id: `gear_type_select:{mode}:{count}`）每個選項附帶描述：
 - 未達上限：`Lv{n} → Lv{n+1}: {action_label}產出 +{n×pct}% → +{(n+1)×pct}%`（pct = floor(GEAR_BONUS_PER_LEVEL × 100)）
 - 已達上限：`已達等級上限 Lv{cap}`
 
@@ -260,18 +260,18 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 - 墊檔：`消耗一半素材，直接獲得一個保底計數，不進行強化`
 - 鐵齒：`僅消耗 1 個素材，成功 +1~+3（50/35/15%），失敗則工具等級與 pity 均歸零`
 
-執行次數 Dropdown（custom_id: `upgrade_count_select:{gear_type}:{mode}`）選項為 1 / 5 / 10 / 20 / 無限，value 為 `1`、`5`、`10`、`20`、`inf`。`{mode}` 與 `{count}` 未選定時為 `none`。選模式保留次數，選次數保留模式。
+執行次數 Dropdown（custom_id: `upgrade_count_select:{gear_type}:{mode}`）選項為 1 / 5 / 10 / 20 / 無限，value 為 `1`、`5`、`10`、`20`、`inf`。`{mode}` 與 `{count}` 未選定時為 `none`。
 
-初始狀態：介面開啟時，工具類型、強化模式與執行次數 Dropdown 均不預設選中任何選項；
+初始狀態：從主介面開啟時，工具類型、強化模式與執行次數 Dropdown 均不預設選中任何選項；
 三個按鈕（🎲 強化工具、🩸 獻祭素材、🔮 詞條管理）在工具類型未選定前均 disabled。
 
 - **Button**：`🎲 強化工具`（Green，custom_id: `attempt_upgrade:{gear_type}:{mode}:{count}`，禁用條件：素材不足 / AP 不足 / 已達上限 / 強化模式或執行次數未選定）
-- **Button**：`🩸 獻祭素材`（Red，禁用條件：所選工具類型素材 == 0）；custom_id: `sacrifice_material:{gear_type}`；與 🎲 強化工具、← 返回 **同一 ActionRow**，不佔新列
+- **Button**：`🩸 獻祭素材`（Red，禁用條件：所選工具類型素材 == 0）；custom_id: `sacrifice_material:{gear_type}:{mode}:{count}`；與 🎲 強化工具、← 返回 **同一 ActionRow**，不佔新列
 - **Button**：`← 返回`（Gray）
 
 ### 詞條管理入口
 
-- **Button**：`🔮 詞條管理`（Blue，custom_id: `open_affix_mgmt:{gear_type}`，禁用條件：`max_slots == 0`）；位於工具強化子選單與 `🎲 強化工具` / `🩸 獻祭素材` / `← 返回` 同一列
+- **Button**：`🔮 詞條管理`（Blue，custom_id: `open_affix_mgmt:{gear_type}:{mode}:{count}`，禁用條件：`max_slots == 0`）；位於工具強化子選單與 `🎲 強化工具` / `🩸 獻祭素材` / `← 返回` 同一列
 - 點擊後切到獨立的詞條管理畫面；開啟時工具類型 Dropdown（`affix_gear_select`）不預設選中任何選項
 
 ### 詞條管理畫面
@@ -294,6 +294,8 @@ UI 不得因二進位浮點誤差少顯示 1%。例如 `GEAR_RATE_LOSS_PER_LEVEL
 ```
 
 `詞條合計` 與分組清單只在 `max_slots > 0` 時顯示。合計與分組規則見「詞條顯示」。畫面不顯示槽號。
+
+詞條管理畫面每個元件的 custom_id 結尾都帶工具強化的 `:{mode}:{count}`（未選為 `none`），下列格式省略此結尾。
 
 - **Dropdown**：工具類型（custom_id: `affix_gear_select`）
   - 選項描述沿用工具強化畫面的等級/效率預覽
@@ -341,9 +343,9 @@ row4 [✅ 開始自動抽取] [← 返回詞條管理]
 ```
 
 - 四個選單都不預設選中。Embed 依序顯示目標效果、目標數值、花費素材、抽取數量，未選定顯示 `未選擇`。
-- 下拉選單與確認按鈕在 custom_id 中攜帶完整狀態 `{gear}:{target}:{value}:{source}:{scope}`。`{target}` 為 `any` 或詞條代碼，`{scope}` 為 `one` 或 `all`，未選定為 `none`。
+- 下拉選單與確認按鈕在 custom_id 中攜帶完整狀態 `{gear}:{target}:{value}:{source}:{scope}`，結尾另帶工具強化的 `:{mode}:{count}`。`{target}` 為 `any` 或詞條代碼，`{scope}` 為 `one` 或 `all`，未選定為 `none`。
 - 確認按鈕在設定不完整、沒有空槽或所選素材不足時停用。
-- `auto_affix_run:{gear}:{target}:{value}:{source}:{scope}:{expected_slot}:{token}` 會執行一次批次。renderer 接收 8 字元 URL-safe token，並將確認 ID 綁定設定頁顯示的第一個空槽；沒有空槽時使用 `none` 並停用按鈕。沒有有效 token 時確認也停用。
+- `auto_affix_run:{gear}:{target}:{value}:{source}:{scope}:{expected_slot}:{token}:{mode}:{count}` 會執行一次批次。renderer 接收 8 字元 URL-safe token，並將確認 ID 綁定設定頁顯示的第一個空槽；沒有空槽時使用 `none` 並停用按鈕。沒有有效 token 時確認也停用。
 - 僅一格：只保存第一條符合條件的詞條；耗盡時保持空槽。
 - 所有空格：從第一個空槽開始逐格以相同條件抽取。某格耗盡仍未抽中時停止，該格與之後的空槽保持空的。
 - 結果由 notification 模組發布一則摘要。
@@ -391,6 +393,7 @@ Row 1 — 四個 `ButtonStyle.secondary` 按鈕：
 
 ## Changelog
 
+- 2026-11-24: 工具強化三個選單互相保留已選值，獻祭與詞條管理返回也保留強化模式與執行次數；詞條管理與自動抽取的 custom_id 結尾帶 `:{mode}:{count}`；自動工具改工具或建設目標保留時數。
 - 2026-11-16: 新增「數字格式」：所有玩家可見數字加千分位 `,`；試煉目標選單 label 加 `,`，value 不變。
 - 2026-10-27: 試煉目標選單級距改為 `250000`。
 - 2026-10-27: 工具強化新增執行次數選單；自動抽取設定畫面合併目標種類與目標效果，新增抽取數量選單。

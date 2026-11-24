@@ -847,12 +847,12 @@ class TestRendererGearAdminThousandsSeparators(unittest.TestCase):
         player_gear = {"gathering": 1024}
         gear_rows = build_gear_components("gathering", "normal", True, player_gear, 5000)
         affix_rows = build_affix_components("gathering", player_gear, 5000, [], 1)
-        for rows, select_id in ((gear_rows, "gear_type_select"), (affix_rows, "affix_gear_select")):
+        for rows, select_id in ((gear_rows, "gear_type_select:normal:none"), (affix_rows, "affix_gear_select:none:none")):
             desc = self._description_for_tool(rows, select_id)
             self.assertIn("Lv1,024 → Lv1,025", desc)
             self.assertIn("+5,120% → +5,125%", desc)
         capped = build_gear_components("gathering", "normal", True, {"gathering": 5000}, 5000)
-        self.assertEqual(self._description_for_tool(capped, "gear_type_select"), "已達等級上限 Lv5,000")
+        self.assertEqual(self._description_for_tool(capped, "gear_type_select:normal:none"), "已達等級上限 Lv5,000")
 
     def test_affix_embed_and_auto_affix_embed_format_holdings(self):
         from cogs.ui_renderer import build_affix_embed, build_auto_affix_embed
@@ -1342,18 +1342,18 @@ class TestRendererGearComponents(unittest.TestCase):
             if getattr(component, "custom_id", None)
             in {
                 "attempt_upgrade:gathering:normal:1",
-                "sacrifice_material:gathering",
-                "open_affix_mgmt:gathering",
+                "sacrifice_material:gathering:normal:1",
+                "open_affix_mgmt:gathering:normal:1",
             }
         }
 
         self.assertTrue(buttons["attempt_upgrade:gathering:normal:1"].disabled)
         self.assertFalse(
-            buttons["sacrifice_material:gathering"].disabled,
+            buttons["sacrifice_material:gathering:normal:1"].disabled,
             "Max-level players must still reach affix management and material sacrifice",
         )
         self.assertFalse(
-            buttons["open_affix_mgmt:gathering"].disabled,
+            buttons["open_affix_mgmt:gathering:normal:1"].disabled,
             "Max-level players must still reach affix management and material sacrifice",
         )
 
@@ -1675,15 +1675,15 @@ class TestAffixComponents(unittest.TestCase):
         from cogs.ui_renderer import build_gear_components
         rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, max_slots=0)
         buttons = {c.custom_id: c for row in rows for c in row.children if hasattr(c, "custom_id")}
-        self.assertIn("open_affix_mgmt:gathering", buttons)
-        self.assertTrue(buttons["open_affix_mgmt:gathering"].disabled)
+        self.assertIn("open_affix_mgmt:gathering:normal:none", buttons)
+        self.assertTrue(buttons["open_affix_mgmt:gathering:normal:none"].disabled)
 
     def test_gear_mgmt_button_enabled_when_slots_unlocked(self):
         from cogs.ui_renderer import build_gear_components
         rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, max_slots=1)
         buttons = {c.custom_id: c for row in rows for c in row.children if hasattr(c, "custom_id")}
-        self.assertIn("open_affix_mgmt:gathering", buttons)
-        self.assertFalse(buttons["open_affix_mgmt:gathering"].disabled)
+        self.assertIn("open_affix_mgmt:gathering:normal:none", buttons)
+        self.assertFalse(buttons["open_affix_mgmt:gathering:normal:none"].disabled)
 
     def test_no_extract_or_clear_buttons_in_gear_components(self):
         from cogs.ui_renderer import build_gear_components
@@ -1700,14 +1700,14 @@ class TestAffixComponents(unittest.TestCase):
             if hasattr(c, "custom_id") and hasattr(c, "label") and c.label
         }
         self.assertEqual(labels.get("attempt_upgrade:gathering:normal:1"), "🎲 強化工具")
-        self.assertEqual(labels.get("sacrifice_material:gathering"), "🩸 獻祭素材")
-        self.assertEqual(labels.get("open_affix_mgmt:gathering"), "🔮 詞條管理")
+        self.assertEqual(labels.get("sacrifice_material:gathering:normal:1"), "🩸 獻祭素材")
+        self.assertEqual(labels.get("open_affix_mgmt:gathering:normal:1"), "🔮 詞條管理")
 
     def test_affix_components_gear_type_dropdown(self):
         from cogs.ui_renderer import build_affix_components
         rows = build_affix_components("gathering", self._player_gear(), gear_cap=10, affixes=[], max_slots=1)
         custom_ids = [c.custom_id for row in rows for c in row.children if hasattr(c, "custom_id")]
-        self.assertIn("affix_gear_select", custom_ids)
+        self.assertIn("affix_gear_select:none:none", custom_ids)
 
     def test_affix_components_no_slot_dropdown_when_empty(self):
         from cogs.ui_renderer import build_affix_components
@@ -1720,13 +1720,13 @@ class TestAffixComponents(unittest.TestCase):
         affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
         rows = build_affix_components("gathering", self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1)
         custom_ids = [c.custom_id for row in rows for c in row.children if hasattr(c, "custom_id")]
-        self.assertIn("affix_slot_select:gathering", custom_ids)
+        self.assertIn("affix_slot_select:gathering:none:none", custom_ids)
 
     def test_affix_group_dropdown_option_uses_positive_value_and_new_label(self):
         from cogs.ui_renderer import build_affix_components
         affixes = [{"slot_index": 0, "affix_type": "cycle_time_reduce", "value": 5}]
         rows = build_affix_components("gathering", self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1)
-        slot_select = next(c for row in rows for c in row.children if c.custom_id == "affix_slot_select:gathering")
+        slot_select = next(c for row in rows for c in row.children if c.custom_id == "affix_slot_select:gathering:none:none")
         self.assertEqual(slot_select.options[0].label, "週期縮短（+5%） x 1")
         self.assertEqual(slot_select.options[0].value, "cycle_time_reduce:5")
         self.assertIsNone(slot_select.options[0].description)
@@ -1738,7 +1738,7 @@ class TestAffixComponents(unittest.TestCase):
         rows = build_affix_components("gathering", self._player_gear(), gear_cap=300, affixes=affixes, max_slots=26)
         option_counts = [len(c.options) for row in rows for c in row.children if hasattr(c, "options")]
         self.assertEqual([n for n in option_counts if n > 25], [])
-        slot_select = next(c for row in rows for c in row.children if c.custom_id == "affix_slot_select:gathering")
+        slot_select = next(c for row in rows for c in row.children if c.custom_id == "affix_slot_select:gathering:none:none")
         self.assertEqual(len(slot_select.options), 1)
         self.assertEqual(slot_select.options[0].label, "行動效率（+1%） x 26")
         self.assertEqual(slot_select.options[0].value, "efficiency:1")
@@ -1751,7 +1751,7 @@ class TestAffixComponents(unittest.TestCase):
             for t in AFFIX_TYPE_LABELS for v in (1, 2, 3, 4, 5, 6)
         ]
         rows = build_affix_components("gathering", self._player_gear(), gear_cap=300, affixes=affixes, max_slots=30)
-        slot_select = next(c for row in rows for c in row.children if c.custom_id == "affix_slot_select:gathering")
+        slot_select = next(c for row in rows for c in row.children if c.custom_id == "affix_slot_select:gathering:none:none")
         values = [o.value for o in slot_select.options]
         self.assertEqual(len(values), 25)
         for t in AFFIX_TYPE_LABELS:
@@ -1774,7 +1774,7 @@ class TestAffixComponents(unittest.TestCase):
             "gathering", self._player_gear(), gear_cap=10, affixes=affixes, max_slots=2,
             selected_group=("efficiency", 2),
         )
-        slot_select = next(c for row in rows for c in row.children if c.custom_id == "affix_slot_select:gathering")
+        slot_select = next(c for row in rows for c in row.children if c.custom_id == "affix_slot_select:gathering:none:none")
         self.assertEqual({o.value: o.default for o in slot_select.options}, {"efficiency:3": False, "efficiency:2": True})
         self.assertEqual(slot_select.placeholder, "選擇要清除的詞條...")
 
@@ -1783,35 +1783,35 @@ class TestAffixComponents(unittest.TestCase):
         affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
         rows = build_affix_components("gathering", self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1)
         buttons = {c.custom_id: c for row in rows for c in row.children if hasattr(c, "custom_id")}
-        self.assertIn("affix_clear:gathering:none:none", buttons)
-        self.assertTrue(buttons["affix_clear:gathering:none:none"].disabled)
+        self.assertIn("affix_clear:gathering:none:none:none:none", buttons)
+        self.assertTrue(buttons["affix_clear:gathering:none:none:none:none"].disabled)
 
     def test_affix_components_clear_enabled_with_selection(self):
         from cogs.ui_renderer import build_affix_components
         affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
         rows = build_affix_components("gathering", self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1, selected_group=("efficiency", 3))
         buttons = {c.custom_id: c for row in rows for c in row.children if hasattr(c, "custom_id")}
-        self.assertIn("affix_clear:gathering:efficiency:3", buttons)
-        self.assertFalse(buttons["affix_clear:gathering:efficiency:3"].disabled)
+        self.assertIn("affix_clear:gathering:efficiency:3:none:none", buttons)
+        self.assertFalse(buttons["affix_clear:gathering:efficiency:3:none:none"].disabled)
 
     def test_affix_components_extract_disabled_when_full(self):
         from cogs.ui_renderer import build_affix_components
         affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
         rows = build_affix_components("gathering", self._player_gear(), gear_cap=10, affixes=affixes, max_slots=1)
         buttons = {c.custom_id: c for row in rows for c in row.children if hasattr(c, "custom_id")}
-        self.assertTrue(buttons["affix_extract:gathering"].disabled)
+        self.assertTrue(buttons["affix_extract:gathering:none:none"].disabled)
 
     def test_affix_components_extract_enabled_when_slot_available(self):
         from cogs.ui_renderer import build_affix_components
         rows = build_affix_components("gathering", self._player_gear(), gear_cap=10, affixes=[], max_slots=2)
         buttons = {c.custom_id: c for row in rows for c in row.children if hasattr(c, "custom_id")}
-        self.assertFalse(buttons["affix_extract:gathering"].disabled)
+        self.assertFalse(buttons["affix_extract:gathering:none:none"].disabled)
 
     def test_affix_components_back_button_routes_to_gear(self):
         from cogs.ui_renderer import build_affix_components
         rows = build_affix_components("gathering", self._player_gear(), gear_cap=10, affixes=[], max_slots=1)
         custom_ids = [c.custom_id for row in rows for c in row.children if hasattr(c, "custom_id")]
-        self.assertIn("back_to_gear:gathering", custom_ids)
+        self.assertIn("back_to_gear:gathering:none:none", custom_ids)
 
 
 class TestAffixComponentsBlankState(unittest.TestCase):
@@ -1846,7 +1846,7 @@ class TestAffixComponentsBlankState(unittest.TestCase):
         from cogs.ui_renderer import build_affix_components
         rows = build_affix_components(None, self._player_gear(), gear_cap=10, affixes=[], max_slots=0)
         custom_ids = [c.custom_id for row in rows for c in row.children if hasattr(c, "custom_id")]
-        self.assertIn("back_to_gear:none", custom_ids)
+        self.assertIn("back_to_gear:none:none:none", custom_ids)
 
 
 class TestAutoAffixComponents(unittest.TestCase):
@@ -1909,9 +1909,9 @@ class TestAutoAffixComponents(unittest.TestCase):
         self.assertTrue(selects[1].options[3].default)
         self.assertTrue(selects[2].options[1].default)
         self.assertTrue(selects[3].options[1].default)
-        suffix = ":research:cycle_time_reduce:4:universal:all"
+        suffix = ":research:cycle_time_reduce:4:universal:all:none:none"
         self.assertTrue(all(c.custom_id.endswith(suffix) for c in selects))
-        self.assertTrue(self._confirm(rows).custom_id.endswith(suffix + ":0:abcdefgh"))
+        self.assertTrue(self._confirm(rows).custom_id.endswith(":research:cycle_time_reduce:4:universal:all:0:abcdefgh:none:none"))
 
     def test_confirm_needs_real_empty_slot_and_valid_gear(self):
         from cogs.ui_renderer import build_auto_affix_components
@@ -1953,7 +1953,7 @@ class TestAutoAffixComponents(unittest.TestCase):
                 for component in row.children:
                     longest = max(longest, len(component.custom_id))
                     self.assertLessEqual(len(component.custom_id), 100)
-        longest_id = "auto_affix_run:research:upgrade_material_refund:5:universal:all:2147483647:abcdefgh"
+        longest_id = "auto_affix_run:research:upgrade_material_refund:5:universal:all:2147483647:abcdefgh:normal:none"
         self.assertLessEqual(len(longest_id), 100)
         self.assertGreater(longest, 0)
 
@@ -1963,12 +1963,12 @@ class TestAutoAffixComponents(unittest.TestCase):
                         scope="all", confirmation_token="abcdefgh")
         rows = build_auto_affix_components("research", 0, 5, 2, [{"slot_index": 0}], **settings)
         confirm = self._confirm(rows)
-        self.assertEqual(confirm.custom_id, "auto_affix_run:research:upgrade_material_refund:5:universal:all:1:abcdefgh")
+        self.assertEqual(confirm.custom_id, "auto_affix_run:research:upgrade_material_refund:5:universal:all:1:abcdefgh:none:none")
         self.assertFalse(confirm.disabled)
         rows = build_auto_affix_components("research", 0, 5, 2, [{"slot_index": 0}, {"slot_index": 1}], **settings)
         confirm = self._confirm(rows)
         self.assertTrue(confirm.disabled)
-        self.assertTrue(confirm.custom_id.endswith(":none:abcdefgh"))
+        self.assertTrue(confirm.custom_id.endswith(":none:abcdefgh:none:none"))
 
 
 class TestAffixRouteRegistration(unittest.TestCase):
@@ -1984,11 +1984,11 @@ class TestAffixRouteRegistration(unittest.TestCase):
 
     def test_open_affix_mgmt_is_own_button(self):
         from cogs.actions import _is_own_button
-        self.assertTrue(_is_own_button("open_affix_mgmt:gathering"))
+        self.assertTrue(_is_own_button("open_affix_mgmt:gathering:normal:none"))
 
     def test_affix_extract_is_own_button(self):
         from cogs.actions import _is_own_button
-        self.assertTrue(_is_own_button("affix_extract:gathering"))
+        self.assertTrue(_is_own_button("affix_extract:gathering:none:none"))
 
     def test_affix_clear_is_own_button(self):
         from cogs.actions import _is_own_button
@@ -1996,7 +1996,7 @@ class TestAffixRouteRegistration(unittest.TestCase):
 
     def test_back_to_gear_is_own_button(self):
         from cogs.actions import _is_own_button
-        self.assertTrue(_is_own_button("back_to_gear:gathering"))
+        self.assertTrue(_is_own_button("back_to_gear:gathering:none:none"))
 
 
 class TestAutoAffixHandlerIntegration(DatabaseTestCase):
@@ -2023,7 +2023,7 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         return inter
 
     async def _select(self, cog, prefix, state, selected):
-        inter = self._inter(f"{prefix}:{state}", selected)
+        inter = self._inter(f"{prefix}:{state}:none:none", selected)
         await cog.on_dropdown(inter)
         return inter
 
@@ -2040,7 +2040,7 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         )
 
     async def _render_confirm(self, cog, *, target="any", threshold=1, source="tool", scope="one", gear="research"):
-        inter = self._inter(f"open_auto_affix:{gear}")
+        inter = self._inter(f"open_auto_affix:{gear}:none:none")
         await cog.on_button_click(inter)
         await cog._render_auto_affix(
             inter, gear, target_affix_type=target,
@@ -2184,7 +2184,7 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         cog = ActionsCog(bot)
         first_id, _ = await self._render_confirm(cog)
         self.assertTrue(first_id.startswith("auto_affix_run:research:any:1:tool:one:0:"))
-        token = first_id.rsplit(":", 1)[1]
+        token = first_id.split(":")[7]
         self.assertEqual(len(token), 8)
         self.assertTrue(all(character.isascii() and (character.isalnum() or character in "-_") for character in token))
         with patch("cogs.actions.affix_manager.random.choice", return_value="efficiency"), patch(
@@ -2201,7 +2201,7 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         self.assertEqual(await self.fetchone("SELECT materials_research FROM players WHERE user_id='12345'"), (3,))
         self.assertEqual(await self.fetchall("SELECT slot_index FROM gear_affixes WHERE user_id='12345' ORDER BY slot_index"), [(0,)])
 
-        reopened = self._inter("open_auto_affix:research")
+        reopened = self._inter("open_auto_affix:research:none:none")
         await cog.on_button_click(reopened)
         await cog._render_auto_affix(reopened, "research", target_affix_type="any", min_value=1, material_source="tool", scope="one")
         second_id = next(
@@ -2431,7 +2431,7 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         bot.get_channel.return_value.send = sent
         cog = ActionsCog(bot)
         current_id, _ = await self._render_confirm(cog)
-        other_page = self._inter("open_auto_affix:research")
+        other_page = self._inter("open_auto_affix:research:none:none")
         other_page.user.id = 67890
         await cog.on_button_click(other_page)
         await cog._render_auto_affix(other_page, "research", target_affix_type="any", min_value=1, material_source="tool", scope="one")
@@ -2484,7 +2484,7 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         from cogs.actions import ActionsCog
         await self._player(tool=0, universal=50)
         cog = ActionsCog(MagicMock())
-        page = self._inter("open_auto_affix:research")
+        page = self._inter("open_auto_affix:research:none:none")
         await cog.on_button_click(page)
         page = await self._select_id(cog, self._component_id(page, "auto_affix_target:"), "cycle_time_reduce")
         page = await self._select_id(cog, self._component_id(page, "auto_affix_value:"), "4")
@@ -2648,11 +2648,11 @@ class TestAutoToolRouteRegistration(unittest.TestCase):
 
     def test_auto_tool_type_select_is_own_dropdown(self):
         from cogs.actions import _is_own_dropdown
-        self.assertTrue(_is_own_dropdown("auto_tool_type_select"))
+        self.assertTrue(_is_own_dropdown("auto_tool_type_select:3"))
 
     def test_auto_tool_target_select_is_own_dropdown(self):
         from cogs.actions import _is_own_dropdown
-        self.assertTrue(_is_own_dropdown("auto_tool_target_select:building"))
+        self.assertTrue(_is_own_dropdown("auto_tool_target_select:building:3"))
 
     def test_auto_tool_add_select_is_own_dropdown(self):
         from cogs.actions import _is_own_dropdown
@@ -2664,11 +2664,11 @@ class TestAutoToolRouteRegistration(unittest.TestCase):
 
     def test_affix_gear_select_is_own_dropdown(self):
         from cogs.actions import _is_own_dropdown
-        self.assertTrue(_is_own_dropdown("affix_gear_select"))
+        self.assertTrue(_is_own_dropdown("affix_gear_select:none:none"))
 
     def test_affix_slot_select_is_own_dropdown(self):
         from cogs.actions import _is_own_dropdown
-        self.assertTrue(_is_own_dropdown("affix_slot_select:gathering"))
+        self.assertTrue(_is_own_dropdown("affix_slot_select:gathering:none:none"))
 
 
 class TestAdminCheck(unittest.TestCase):
@@ -2734,7 +2734,7 @@ class TestAffixHandlerNotification(unittest.IsolatedAsyncioTestCase):
     async def test_render_affix_forwards_selected_group_to_clear_button(self):
         from cogs.actions import ActionsCog
 
-        inter = self._make_inter("affix_gear_select")
+        inter = self._make_inter("affix_gear_select:none:none")
         db_mock = AsyncMock()
         execute_cm = MagicMock()
         execute_cm.__aenter__ = AsyncMock(return_value=AsyncMock(fetchone=AsyncMock(return_value=(5, 0, 0, 0))))
@@ -2754,24 +2754,24 @@ class TestAffixHandlerNotification(unittest.IsolatedAsyncioTestCase):
 
         kwargs = inter.edit_original_response.call_args.kwargs
         buttons = {c.custom_id: c for row in kwargs["components"] for c in row.children if hasattr(c, "custom_id")}
-        self.assertFalse(buttons["affix_clear:gathering:efficiency:3"].disabled)
+        self.assertFalse(buttons["affix_clear:gathering:efficiency:3:none:none"].disabled)
         self.assertIn("即將清除：行動效率（+3%）", kwargs["embed"].description)
 
     async def test_affix_slot_select_passes_parsed_group_to_render(self):
         from cogs.actions import ActionsCog
 
-        inter = self._make_inter("affix_slot_select:gathering")
+        inter = self._make_inter("affix_slot_select:gathering:none:none")
         inter.values = ["efficiency:3"]
         with patch.object(ActionsCog, "_render_affix", new=AsyncMock()) as render:
             await ActionsCog(bot=MagicMock()).on_dropdown(inter)
-        render.assert_awaited_once_with(inter, "gathering", selected_group=("efficiency", 3))
+        render.assert_awaited_once_with(inter, "gathering", selected_group=("efficiency", 3), mode=None, count=None)
 
     async def test_affix_slot_select_ignores_invalid_values(self):
         from cogs.actions import ActionsCog
 
         for value in ("0", "bogus:3", "efficiency:6", "efficiency:x"):
             with self.subTest(value=value):
-                inter = self._make_inter("affix_slot_select:gathering")
+                inter = self._make_inter("affix_slot_select:gathering:none:none")
                 inter.values = [value]
                 with patch.object(ActionsCog, "_render_affix", new=AsyncMock()) as render:
                     await ActionsCog(bot=MagicMock()).on_dropdown(inter)
@@ -2780,7 +2780,7 @@ class TestAffixHandlerNotification(unittest.IsolatedAsyncioTestCase):
     async def test_affix_extract_dispatches_affix_extracted_event(self):
         from cogs.actions import ActionsCog
 
-        inter = self._make_inter("affix_extract:gathering")
+        inter = self._make_inter("affix_extract:gathering:none:none")
         with (
             patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
             patch("cogs.actions.player_manager.get_gear_level", new=AsyncMock(return_value=10)),
@@ -2805,7 +2805,7 @@ class TestAffixHandlerNotification(unittest.IsolatedAsyncioTestCase):
     async def test_affix_extract_no_dispatch_on_failure(self):
         from cogs.actions import ActionsCog
 
-        inter = self._make_inter("affix_extract:gathering")
+        inter = self._make_inter("affix_extract:gathering:none:none")
         with (
             patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
             patch("cogs.actions.player_manager.get_gear_level", new=AsyncMock(return_value=10)),
@@ -2873,7 +2873,7 @@ class TestAffixHandlerNotification(unittest.IsolatedAsyncioTestCase):
     async def test_affix_clear_button_dispatches_affix_cleared_event(self):
         from cogs.actions import ActionsCog
 
-        inter = self._make_inter("affix_clear:gathering:efficiency:3")
+        inter = self._make_inter("affix_clear:gathering:efficiency:3:none:none")
         with (
             patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
             patch("cogs.actions.player_manager.get_gear_level", new=AsyncMock(return_value=10)),
@@ -2900,7 +2900,7 @@ class TestAffixHandlerNotification(unittest.IsolatedAsyncioTestCase):
     async def test_affix_clear_button_no_dispatch_on_failure(self):
         from cogs.actions import ActionsCog
 
-        inter = self._make_inter("affix_clear:gathering:efficiency:3")
+        inter = self._make_inter("affix_clear:gathering:efficiency:3:none:none")
         with (
             patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
             patch("cogs.actions.player_manager.get_gear_level", new=AsyncMock(return_value=10)),
@@ -2967,7 +2967,7 @@ class TestAffixClearByGroup(DatabaseTestCase):
 
     async def test_clears_highest_slot_of_group_and_dispatches_once(self):
         await self._setup([(0, "efficiency", 3), (1, "efficiency", 2), (3, "efficiency", 3), (5, "efficiency", 3)])
-        _, dispatch, render = await self._click("affix_clear:gathering:efficiency:3")
+        _, dispatch, render = await self._click("affix_clear:gathering:efficiency:3:none:none")
         slots, mats = await self._state()
         self.assertEqual(slots, [0, 1, 3])
         self.assertLess(mats, 10)
@@ -2979,7 +2979,7 @@ class TestAffixClearByGroup(DatabaseTestCase):
 
     async def test_missing_group_does_not_clear_spend_or_dispatch(self):
         await self._setup([(0, "efficiency", 2)])
-        _, dispatch, render = await self._click("affix_clear:gathering:efficiency:3")
+        _, dispatch, render = await self._click("affix_clear:gathering:efficiency:3:none:none")
         slots, mats = await self._state()
         self.assertEqual(slots, [0])
         self.assertEqual(mats, 10)
@@ -2989,7 +2989,7 @@ class TestAffixClearByGroup(DatabaseTestCase):
     async def test_removed_type_button_does_not_clear_or_spend(self):
         await self._setup([(0, "efficiency", 3)])
         for removed in ("upgrade_ap_refund", "upgrade_cost_reduce"):
-            inter, dispatch, render = await self._click(f"affix_clear:gathering:{removed}:3")
+            inter, dispatch, render = await self._click(f"affix_clear:gathering:{removed}:3:none:none")
             inter.response.defer.assert_not_awaited()
             dispatch.assert_not_awaited()
             render.assert_not_awaited()
@@ -2999,12 +2999,12 @@ class TestAffixClearByGroup(DatabaseTestCase):
     async def test_invalid_group_is_ignored(self):
         await self._setup([(0, "efficiency", 3)])
         for cid in (
-            "affix_clear:gathering:none:none",
-            "affix_clear:gathering:0",
-            "affix_clear:gathering:bogus:3",
-            "affix_clear:gathering:efficiency:6",
-            "affix_clear:gathering:efficiency:x",
-            "affix_clear:bogus:efficiency:3",
+            "affix_clear:gathering:none:none:none:none",
+            "affix_clear:gathering:0:none:none",
+            "affix_clear:gathering:bogus:3:none:none",
+            "affix_clear:gathering:efficiency:6:none:none",
+            "affix_clear:gathering:efficiency:x:none:none",
+            "affix_clear:bogus:efficiency:3:none:none",
         ):
             inter, dispatch, render = await self._click(cid)
             inter.response.defer.assert_not_awaited()
@@ -3015,7 +3015,7 @@ class TestAffixClearByGroup(DatabaseTestCase):
 
 
 class TestSacrificeModalOpen(unittest.IsolatedAsyncioTestCase):
-    """sacrifice_material:{gear_type} button opens a modal with comma-formatted holdings."""
+    """sacrifice_material:{gear_type}:{mode}:{count} button opens a modal with comma-formatted holdings."""
 
     def setUp(self):
         for k, v in ALL_TEST_ENV.items():
@@ -3038,7 +3038,7 @@ class TestSacrificeModalOpen(unittest.IsolatedAsyncioTestCase):
         inter = MagicMock()
         inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
         inter.user.id = 12345
-        inter.component.custom_id = "sacrifice_material:gathering"
+        inter.component.custom_id = "sacrifice_material:gathering:normal:1"
         inter.response.send_modal = AsyncMock()
         with patch("cogs.actions.get_connection", return_value=conn_cm):
             await ActionsCog(bot=MagicMock()).on_button_click(inter)
@@ -3050,7 +3050,7 @@ class TestSacrificeModalOpen(unittest.IsolatedAsyncioTestCase):
 
 
 class TestSacrificeModalSubmit(unittest.IsolatedAsyncioTestCase):
-    """on_modal_submit handles modal_sacrifice:{gear_type} correctly."""
+    """on_modal_submit handles modal_sacrifice:{gear_type}:{mode}:{count} correctly."""
 
     def setUp(self):
         for k, v in ALL_TEST_ENV.items():
@@ -3077,7 +3077,7 @@ class TestSacrificeModalSubmit(unittest.IsolatedAsyncioTestCase):
     async def test_modal_submit_calls_sacrifice_and_renders(self):
         from cogs.actions import ActionsCog
 
-        inter = self._make_modal_inter("modal_sacrifice:gathering", "3")
+        inter = self._make_modal_inter("modal_sacrifice:gathering:normal:1", "3")
         sacrifice_result = {"type": "sacrifice", "sacrificed": 3, "gear_type": "gathering", "risky_failed_levels_after": 3}
         with (
             patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
@@ -3094,7 +3094,7 @@ class TestSacrificeModalSubmit(unittest.IsolatedAsyncioTestCase):
     async def test_modal_submit_invalid_input_returns_error_result(self):
         from cogs.actions import ActionsCog
 
-        inter = self._make_modal_inter("modal_sacrifice:gathering", "not_a_number")
+        inter = self._make_modal_inter("modal_sacrifice:gathering:normal:1", "not_a_number")
         with (
             patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
             patch("cogs.actions.gear_manager.sacrifice_material", new=AsyncMock()),
@@ -3110,7 +3110,7 @@ class TestSacrificeModalSubmit(unittest.IsolatedAsyncioTestCase):
     async def test_modal_submit_does_not_dispatch_notification(self):
         from cogs.actions import ActionsCog
 
-        inter = self._make_modal_inter("modal_sacrifice:gathering", "5")
+        inter = self._make_modal_inter("modal_sacrifice:gathering:normal:1", "5")
         sacrifice_result = {"type": "sacrifice", "sacrificed": 5, "gear_type": "gathering", "risky_failed_levels_after": 5}
         with (
             patch("cogs.actions.get_connection", return_value=self._make_db_cm()),
@@ -3122,6 +3122,405 @@ class TestSacrificeModalSubmit(unittest.IsolatedAsyncioTestCase):
             await cog.on_modal_submit(inter)
 
         mock_dispatch.assert_not_awaited()
+
+
+class TestPreserveGearSelectState(DatabaseTestCase):
+    """Changing tool type or sacrificing keeps the selected upgrade mode and count."""
+
+    def _player_gear(self):
+        return {"gathering": 1, "building": 0, "combat": 0, "research": 0}
+
+    def _make_dropdown_inter(self, cid, value):
+        inter = MagicMock()
+        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+        inter.user.id = 12345
+        inter.component.custom_id = cid
+        inter.values = [value]
+        inter.response.defer = AsyncMock()
+        inter.edit_original_response = AsyncMock()
+        return inter
+
+    def _ids(self, components):
+        return {c.custom_id: c for row in components for c in row.children if hasattr(c, "custom_id")}
+
+    def _defaults(self, components):
+        return {
+            row.children[0].custom_id.split(":")[0]: [o.value for o in row.children[0].options if o.default]
+            for row in components[:3]
+        }
+
+    async def _dispatch_dropdown(self, cid, value):
+        from cogs.actions import ActionsCog
+
+        inter = self._make_dropdown_inter(cid, value)
+        await ActionsCog(bot=MagicMock()).on_dropdown(inter)
+        return inter
+
+    def _rendered(self, inter):
+        return inter.edit_original_response.call_args.kwargs["components"]
+
+    def test_renderer_embeds_mode_and_count_in_tool_type_and_sacrifice_ids(self):
+        from cogs.ui_renderer import build_gear_components
+
+        rows = build_gear_components("building", "risky", True, self._player_gear(), 5, materials=3, count="inf")
+        ids = self._ids(rows)
+        self.assertIn("gear_type_select:risky:inf", ids)
+        self.assertIn("sacrifice_material:building:risky:inf", ids)
+
+    def test_renderer_uses_none_sentinels_without_mode_and_count(self):
+        from cogs.ui_renderer import build_gear_components
+
+        rows = build_gear_components(None, None, False, self._player_gear(), 5)
+        self.assertIn("gear_type_select:none:none", self._ids(rows))
+
+    async def test_tool_type_change_keeps_mode_and_count(self):
+        inter = await self._dispatch_dropdown("gear_type_select:risky:inf", "gathering")
+
+        components = self._rendered(inter)
+        defaults = self._defaults(components)
+        self.assertEqual(defaults["upgrade_mode_select"], ["risky"])
+        self.assertEqual(defaults["upgrade_count_select"], ["inf"])
+        self.assertIn("attempt_upgrade:gathering:risky:inf", self._ids(components))
+
+    async def test_tool_type_change_without_mode_and_count_has_no_defaults(self):
+        inter = await self._dispatch_dropdown("gear_type_select:none:none", "gathering")
+
+        defaults = self._defaults(self._rendered(inter))
+        self.assertEqual(defaults["upgrade_mode_select"], [])
+        self.assertEqual(defaults["upgrade_count_select"], [])
+
+    async def test_tool_type_select_with_invalid_state_does_not_render(self):
+        for cid in ("gear_type_select:bogus:inf", "gear_type_select:risky:bogus", "gear_type_select", "gear_type_select:risky"):
+            inter = await self._dispatch_dropdown(cid, "gathering")
+            inter.edit_original_response.assert_not_awaited()
+
+    async def test_mode_chosen_before_tool_type_survives_tool_type_choice(self):
+        inter = await self._dispatch_dropdown("upgrade_mode_select:none:none", "risky")
+
+        components = self._rendered(inter)
+        self.assertEqual(self._defaults(components)["upgrade_mode_select"], ["risky"])
+        self.assertIn("gear_type_select:risky:none", self._ids(components))
+
+        inter = await self._dispatch_dropdown("gear_type_select:risky:none", "building")
+        components = self._rendered(inter)
+        self.assertEqual(self._defaults(components)["upgrade_mode_select"], ["risky"])
+        self.assertIn("attempt_upgrade:building:risky:none", self._ids(components))
+
+    async def test_count_chosen_before_tool_type_survives_tool_type_choice(self):
+        inter = await self._dispatch_dropdown("upgrade_count_select:none:none", "inf")
+
+        components = self._rendered(inter)
+        self.assertEqual(self._defaults(components)["upgrade_count_select"], ["inf"])
+        self.assertIn("gear_type_select:none:inf", self._ids(components))
+
+    async def test_sacrifice_button_opens_modal_carrying_mode_and_count(self):
+        from cogs.actions import ActionsCog
+
+        inter = MagicMock()
+        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+        inter.user.id = 12345
+        inter.component.custom_id = "sacrifice_material:building:risky:inf"
+        inter.response.send_modal = AsyncMock()
+        await ActionsCog(bot=MagicMock()).on_button_click(inter)
+
+        modal = inter.response.send_modal.call_args.args[0]
+        self.assertEqual(modal.custom_id, "modal_sacrifice:building:risky:inf")
+
+    async def test_sacrifice_button_ignores_old_and_invalid_formats(self):
+        from cogs.actions import ActionsCog
+
+        for cid in ("sacrifice_material:building", "sacrifice_material:building:bogus:inf"):
+            inter = MagicMock()
+            inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+            inter.user.id = 12345
+            inter.component.custom_id = cid
+            inter.response.send_modal = AsyncMock()
+            await ActionsCog(bot=MagicMock()).on_button_click(inter)
+            inter.response.send_modal.assert_not_awaited()
+
+    async def test_sacrifice_submit_renders_gear_screen_keeping_mode_and_count(self):
+        from cogs.actions import ActionsCog
+
+        inter = MagicMock()
+        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+        inter.user.id = 12345
+        inter.custom_id = "modal_sacrifice:building:risky:inf"
+        inter.text_values = {"sacrifice_amount": "2"}
+        inter.response.edit_message = AsyncMock()
+        result = {"type": "sacrifice", "sacrificed": 2, "gear_type": "building", "risky_failed_levels_after": 2}
+        with patch("cogs.actions.gear_manager.sacrifice_material", new=AsyncMock(return_value=result)):
+            await ActionsCog(bot=MagicMock()).on_modal_submit(inter)
+
+        components = inter.response.edit_message.call_args.kwargs["components"]
+        defaults = self._defaults(components)
+        self.assertEqual(defaults["upgrade_mode_select"], ["risky"])
+        self.assertEqual(defaults["upgrade_count_select"], ["inf"])
+        self.assertIn("attempt_upgrade:building:risky:inf", self._ids(components))
+
+    async def test_sacrifice_submit_ignores_old_and_invalid_formats(self):
+        from cogs.actions import ActionsCog
+
+        for cid in ("modal_sacrifice:building", "modal_sacrifice:building:bogus:inf"):
+            inter = MagicMock()
+            inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+            inter.user.id = 12345
+            inter.custom_id = cid
+            inter.text_values = {"sacrifice_amount": "2"}
+            inter.response.edit_message = AsyncMock()
+            with patch("cogs.actions.gear_manager.sacrifice_material", new=AsyncMock()) as sacrifice:
+                await ActionsCog(bot=MagicMock()).on_modal_submit(inter)
+            sacrifice.assert_not_awaited()
+            inter.response.edit_message.assert_not_awaited()
+
+
+class TestPreserveAffixState(DatabaseTestCase):
+    """The affix management screen carries the gear screen's upgrade mode and count."""
+
+    def _player_gear(self):
+        return {"gathering": 30, "building": 0, "combat": 0, "research": 0}
+
+    async def _insert_player(self):
+        from database.schema import get_connection
+        from core.utils import dt_str
+        now = dt_str(datetime.now(timezone.utc))
+        async with get_connection() as db:
+            await db.execute(
+                "INSERT INTO players (user_id, created_at, updated_at, ap_full_time, materials_gathering, gear_gathering) VALUES (?, ?, ?, ?, ?, ?)",
+                ("12345", now, now, now, 10, 30),
+            )
+            await db.commit()
+
+    def _inter(self, cid, value=None):
+        inter = MagicMock()
+        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+        inter.user.id = 12345
+        inter.user.display_name = "TestUser"
+        inter.component.custom_id = cid
+        inter.values = [value] if value is not None else []
+        inter.response.defer = AsyncMock()
+        inter.edit_original_response = AsyncMock()
+        return inter
+
+    def _ids(self, components):
+        return {c.custom_id: c for row in components for c in row.children if hasattr(c, "custom_id")}
+
+    def _id_with_prefix(self, components, prefix):
+        return next(cid for cid in self._ids(components) if cid.startswith(prefix))
+
+    def _rendered(self, inter):
+        return inter.edit_original_response.call_args.kwargs["components"]
+
+    async def _click(self, cid):
+        from cogs.actions import ActionsCog
+        inter = self._inter(cid)
+        with patch("cogs.actions.notification.dispatch_events", new=AsyncMock()):
+            await ActionsCog(bot=MagicMock()).on_button_click(inter)
+        return inter
+
+    async def _select(self, cid, value):
+        from cogs.actions import ActionsCog
+        inter = self._inter(cid, value)
+        await ActionsCog(bot=MagicMock()).on_dropdown(inter)
+        return inter
+
+    def test_renderer_appends_mode_and_count_to_every_affix_id(self):
+        from cogs.ui_renderer import build_affix_components
+
+        affixes = [{"slot_index": 0, "affix_type": "efficiency", "value": 3}]
+        rows = build_affix_components(
+            "gathering", self._player_gear(), 10, affixes, 2, selected_group=("efficiency", 3), mode="risky", count="inf",
+        )
+        ids = self._ids(rows)
+        for cid in (
+            "affix_gear_select:risky:inf",
+            "affix_slot_select:gathering:risky:inf",
+            "affix_clear:gathering:efficiency:3:risky:inf",
+            "affix_extract:gathering:risky:inf",
+            "open_auto_affix:gathering:risky:inf",
+            "back_to_gear:gathering:risky:inf",
+        ):
+            self.assertIn(cid, ids)
+        rows = build_affix_components("gathering", self._player_gear(), 10, affixes, 2, mode="risky", count="inf")
+        self.assertIn("affix_clear:gathering:none:none:risky:inf", self._ids(rows))
+
+    async def test_round_trip_from_gear_screen_keeps_mode_and_count(self):
+        from cogs.ui_renderer import build_gear_components
+
+        await self._insert_player()
+        gear_rows = build_gear_components(
+            "building", "risky", True, self._player_gear(), 5, materials=3, max_slots=1, count="inf",
+        )
+        open_id = self._id_with_prefix(gear_rows, "open_affix_mgmt:")
+        self.assertEqual(open_id, "open_affix_mgmt:building:risky:inf")
+
+        inter = await self._click(open_id)
+        gear_select_id = self._id_with_prefix(self._rendered(inter), "affix_gear_select:")
+        self.assertEqual(gear_select_id, "affix_gear_select:risky:inf")
+
+        inter = await self._select(gear_select_id, "gathering")
+        extract_id = self._id_with_prefix(self._rendered(inter), "affix_extract:")
+        self.assertEqual(extract_id, "affix_extract:gathering:risky:inf")
+
+        inter = await self._click(extract_id)
+        back_id = self._id_with_prefix(self._rendered(inter), "back_to_gear:")
+        self.assertEqual(back_id, "back_to_gear:gathering:risky:inf")
+
+        inter = await self._click(back_id)
+        components = self._rendered(inter)
+        defaults = {
+            row.children[0].custom_id.split(":")[0]: [o.value for o in row.children[0].options if o.default]
+            for row in components[:3]
+        }
+        self.assertEqual(defaults["upgrade_mode_select"], ["risky"])
+        self.assertEqual(defaults["upgrade_count_select"], ["inf"])
+        self.assertIn("attempt_upgrade:gathering:risky:inf", self._ids(components))
+
+    async def test_back_to_gear_without_tool_type_keeps_mode_and_count(self):
+        inter = await self._click("back_to_gear:none:risky:inf")
+
+        components = self._rendered(inter)
+        self.assertEqual([o.value for o in components[1].children[0].options if o.default], ["risky"])
+        self.assertEqual([o.value for o in components[2].children[0].options if o.default], ["inf"])
+        self.assertEqual([o.value for o in components[0].children[0].options if o.default], [])
+
+    async def test_clear_flow_keeps_mode_and_count(self):
+        await self._insert_player()
+        from database.schema import get_connection
+        async with get_connection() as db:
+            await db.execute(
+                "INSERT INTO gear_affixes (user_id, gear_type, slot_index, affix_type, value) VALUES (?, ?, ?, ?, ?)",
+                ("12345", "gathering", 0, "efficiency", 3),
+            )
+            await db.execute(
+                "INSERT INTO gear_affixes (user_id, gear_type, slot_index, affix_type, value) VALUES (?, ?, ?, ?, ?)",
+                ("12345", "gathering", 1, "efficiency", 3),
+            )
+            await db.commit()
+
+        inter = await self._select("affix_slot_select:gathering:risky:inf", "efficiency:3")
+        clear_id = self._id_with_prefix(self._rendered(inter), "affix_clear:")
+        self.assertEqual(clear_id, "affix_clear:gathering:efficiency:3:risky:inf")
+
+        inter = await self._click(clear_id)
+        components = self._rendered(inter)
+        self.assertIn("back_to_gear:gathering:risky:inf", self._ids(components))
+        async with get_connection() as db:
+            from managers import affix_manager
+            remaining = [a["slot_index"] for a in await affix_manager.get_affixes(db, "12345", "gathering")]
+        self.assertEqual(remaining, [0])
+
+    async def test_invalid_state_is_ignored_by_every_affix_route(self):
+        from cogs.actions import ActionsCog
+
+        for cid in (
+            "back_to_gear:gathering:bogus:inf",
+            "back_to_gear:gathering",
+            "open_affix_mgmt:building:bogus:inf",
+            "open_affix_mgmt:building",
+            "affix_extract:gathering:risky:bogus",
+            "affix_extract:gathering",
+            "affix_clear:gathering:efficiency:3:bogus:inf",
+            "affix_clear:gathering:efficiency:3",
+            "open_auto_affix:gathering:bogus:inf",
+            "open_auto_affix:gathering",
+        ):
+            with self.subTest(cid=cid):
+                inter = self._inter(cid)
+                with patch("cogs.actions.notification.dispatch_events", new=AsyncMock()):
+                    await ActionsCog(bot=MagicMock()).on_button_click(inter)
+                inter.response.defer.assert_not_awaited()
+                inter.edit_original_response.assert_not_awaited()
+        for cid, value in (
+            ("affix_gear_select:bogus:inf", "gathering"),
+            ("affix_gear_select", "gathering"),
+            ("affix_slot_select:gathering:risky:bogus", "efficiency:3"),
+            ("affix_slot_select:gathering", "efficiency:3"),
+        ):
+            with self.subTest(cid=cid):
+                inter = await self._select(cid, value)
+                inter.edit_original_response.assert_not_awaited()
+
+    async def test_open_auto_affix_accepts_mode_and_count_format(self):
+        from cogs.actions import ActionsCog
+
+        inter = self._inter("open_auto_affix:gathering:risky:inf")
+        with patch.object(ActionsCog, "_render_auto_affix", new=AsyncMock()) as render:
+            await ActionsCog(bot=MagicMock()).on_button_click(inter)
+        render.assert_awaited_once_with(inter, "gathering", mode="risky", count="inf")
+
+    def test_auto_affix_renderer_appends_mode_and_count_to_every_id(self):
+        from cogs.ui_renderer import build_auto_affix_components
+
+        rows = build_auto_affix_components("gathering", 5, 0, 2, [], confirmation_token="abcdefgh", mode="risky", count="inf")
+        ids = list(self._ids(rows))
+        self.assertIn("auto_affix_target:gathering:none:none:none:none:risky:inf", ids)
+        self.assertIn("back_to_affix:gathering:risky:inf", ids)
+        confirm = self._id_with_prefix(rows, "auto_affix_run:")
+        self.assertTrue(confirm.endswith(":0:abcdefgh:risky:inf"))
+        for prefix in ("auto_affix_value", "auto_affix_material", "auto_affix_scope"):
+            self.assertTrue(self._id_with_prefix(rows, prefix + ":").endswith(":risky:inf"))
+        rows = build_auto_affix_components(
+            "gathering", 5, 0, 2, [], "upgrade_material_refund", 5, "universal",
+            confirmation_token="abcdefgh", scope="all", mode="normal", count="none",
+        )
+        self.assertLessEqual(max(len(cid) for cid in self._ids(rows)), 100)
+
+    async def test_auto_affix_round_trip_keeps_mode_and_count(self):
+        await self._insert_player()
+        inter = await self._click("open_auto_affix:gathering:risky:inf")
+        target_id = self._id_with_prefix(self._rendered(inter), "auto_affix_target:")
+        self.assertTrue(target_id.endswith(":risky:inf"))
+        inter = await self._select(target_id, "any")
+        back_affix_id = self._id_with_prefix(self._rendered(inter), "back_to_affix:")
+        self.assertEqual(back_affix_id, "back_to_affix:gathering:risky:inf")
+        inter = await self._click(back_affix_id)
+        back_gear_id = self._id_with_prefix(self._rendered(inter), "back_to_gear:")
+        self.assertEqual(back_gear_id, "back_to_gear:gathering:risky:inf")
+        inter = await self._click(back_gear_id)
+        components = self._rendered(inter)
+        self.assertEqual([o.value for o in components[1].children[0].options if o.default], ["risky"])
+        self.assertEqual([o.value for o in components[2].children[0].options if o.default], ["inf"])
+
+    async def test_completed_auto_affix_run_keeps_mode_and_count(self):
+        from cogs.actions import ActionsCog
+
+        await self._insert_player()
+        cog = ActionsCog(bot=MagicMock())
+        page = self._inter("open_auto_affix:gathering:risky:inf")
+        await cog._render_auto_affix(
+            page, "gathering", target_affix_type="any", min_value=1, material_source="tool",
+            scope="one", mode="risky", count="inf",
+        )
+        run_id = self._id_with_prefix(self._rendered(page), "auto_affix_run:")
+        self.assertTrue(run_id.endswith(":risky:inf"))
+        inter = self._inter(run_id)
+        with patch("cogs.actions.notification.dispatch_events", new=AsyncMock()), patch(
+            "cogs.actions.affix_manager.random.choice", return_value="efficiency"
+        ), patch("cogs.actions.affix_manager.random.randint", return_value=1):
+            await cog.on_button_click(inter)
+        self.assertIn("back_to_gear:gathering:risky:inf", self._ids(self._rendered(inter)))
+
+    async def test_auto_affix_run_extraction_failure_keeps_mode_and_count(self):
+        from cogs.actions import ActionsCog
+
+        await self._insert_player()
+        cog = ActionsCog(bot=MagicMock())
+        page = self._inter("open_auto_affix:gathering:risky:inf")
+        await cog._render_auto_affix(
+            page, "gathering", target_affix_type="any", min_value=1, material_source="tool",
+            scope="one", mode="risky", count="inf",
+        )
+        run_id = self._id_with_prefix(self._rendered(page), "auto_affix_run:")
+        inter = self._inter(run_id)
+        with patch("cogs.actions.affix_manager.auto_extract_affix", new=AsyncMock(side_effect=RuntimeError("boom"))):
+            await cog.on_button_click(inter)
+        self.assertIn("back_to_affix:gathering:risky:inf", self._ids(self._rendered(inter)))
+
+    def test_affix_gear_select_routes_by_prefix(self):
+        from cogs.actions import _is_own_dropdown
+
+        self.assertTrue(_is_own_dropdown("affix_gear_select:risky:inf"))
+        self.assertFalse(_is_own_dropdown("affix_gear_select"))
 
 
 class TestSacrificeButton(unittest.TestCase):
@@ -3138,19 +3537,19 @@ class TestSacrificeButton(unittest.TestCase):
         from cogs.ui_renderer import build_gear_components
         rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, materials=5)
         custom_ids = [c.custom_id for row in rows for c in row.children]
-        self.assertIn("sacrifice_material:gathering", custom_ids)
+        self.assertIn("sacrifice_material:gathering:normal:none", custom_ids)
 
     def test_sacrifice_button_disabled_when_no_materials(self):
         from cogs.ui_renderer import build_gear_components
         rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, materials=0)
         buttons = {c.custom_id: c for row in rows for c in row.children}
-        self.assertTrue(buttons["sacrifice_material:gathering"].disabled)
+        self.assertTrue(buttons["sacrifice_material:gathering:normal:none"].disabled)
 
     def test_sacrifice_button_enabled_when_materials_available(self):
         from cogs.ui_renderer import build_gear_components
         rows = build_gear_components("gathering", "normal", True, self._player_gear(), gear_cap=10, materials=3)
         buttons = {c.custom_id: c for row in rows for c in row.children}
-        self.assertFalse(buttons["sacrifice_material:gathering"].disabled)
+        self.assertFalse(buttons["sacrifice_material:gathering:normal:none"].disabled)
 
     def test_sacrifice_result_shown_in_embed(self):
         from cogs.ui_renderer import build_gear_embed
@@ -3522,7 +3921,7 @@ class AutoToolSubInterface(unittest.TestCase):
             ["building", "combat"],
             [{"tool_type": "gathering", "action_target": None, "expires_at": "2025-01-01T13:00:00+00:00"}],
         )
-        select = next(c for c in self._all(rows) if getattr(c, "custom_id", None) == "auto_tool_type_select")
+        select = next(c for c in self._all(rows) if getattr(c, "custom_id", None) == "auto_tool_type_select:none")
         values = {o.value for o in select.options}
         self.assertEqual(values, {"gathering", "building", "combat"})
 
@@ -3684,6 +4083,81 @@ class TestAutoToolConfirmHandler(DatabaseTestCase):
         self.assertIsNone(await self._active())
         embed = inter.edit_original_response.call_args.kwargs["embed"]
         self.assertIn("操作失敗", embed.description)
+
+
+class TestPreserveAutoToolHours(DatabaseTestCase):
+    """Changing the auto-tool or its build target keeps the selected hours."""
+
+    def _all(self, rows):
+        return [c for row in rows for c in row.children]
+
+    def _ids(self, rows):
+        return {c.custom_id: c for c in self._all(rows) if hasattr(c, "custom_id")}
+
+    async def _dispatch(self, cid, value):
+        from cogs.actions import ActionsCog
+
+        inter = MagicMock()
+        inter.guild_id = int(ALL_TEST_ENV["DISCORD_GUILD_ID"])
+        inter.user.id = 12345
+        inter.component.custom_id = cid
+        inter.values = [value]
+        inter.response.defer = AsyncMock()
+        inter.edit_original_response = AsyncMock()
+        await ActionsCog(bot=MagicMock()).on_dropdown(inter)
+        return inter
+
+    def _hours_defaults(self, rows):
+        select = next(c for c in self._all(rows) if getattr(c, "custom_id", "").startswith("auto_tool_add_select"))
+        return [o.value for o in select.options if o.default]
+
+    def test_renderer_embeds_delta_in_target_select_id(self):
+        from cogs.ui_renderer import build_auto_tool_components
+
+        rows = build_auto_tool_components(["building"], [], selected_tool="building", selected_delta=3, max_add=24)
+        self.assertIn("auto_tool_target_select:building:3", self._ids(rows))
+        rows = build_auto_tool_components(["building"], [], selected_tool="building", max_add=24)
+        self.assertIn("auto_tool_target_select:building:none", self._ids(rows))
+
+    def test_renderer_embeds_delta_in_type_select_id(self):
+        from cogs.ui_renderer import build_auto_tool_components
+
+        rows = build_auto_tool_components(["building"], [], selected_tool="building", selected_delta=3, max_add=24)
+        self.assertIn("auto_tool_type_select:3", self._ids(rows))
+        rows = build_auto_tool_components(["building"], [])
+        self.assertIn("auto_tool_type_select:none", self._ids(rows))
+
+    async def test_target_change_keeps_hours(self):
+        inter = await self._dispatch("auto_tool_target_select:building:3", "workshop")
+
+        rows = inter.edit_original_response.call_args.kwargs["components"]
+        self.assertEqual(self._hours_defaults(rows), ["3"])
+        confirm = self._ids(rows)["auto_tool_confirm:building:3:workshop"]
+        self.assertFalse(confirm.disabled)
+
+    async def test_target_change_without_hours_has_no_default(self):
+        inter = await self._dispatch("auto_tool_target_select:building:none", "workshop")
+
+        rows = inter.edit_original_response.call_args.kwargs["components"]
+        self.assertEqual(self._hours_defaults(rows), [])
+        self.assertTrue(self._ids(rows)["auto_tool_confirm:none"].disabled)
+
+    async def test_target_select_with_invalid_delta_does_not_render(self):
+        for cid in ("auto_tool_target_select:building:abc", "auto_tool_target_select:building"):
+            inter = await self._dispatch(cid, "workshop")
+            inter.edit_original_response.assert_not_awaited()
+
+    async def test_tool_change_keeps_hours(self):
+        inter = await self._dispatch("auto_tool_type_select:3", "combat")
+
+        rows = inter.edit_original_response.call_args.kwargs["components"]
+        self.assertEqual(self._hours_defaults(rows), ["3"])
+        self.assertFalse(self._ids(rows)["auto_tool_confirm:combat:3:none"].disabled)
+
+    async def test_tool_select_with_invalid_delta_does_not_render(self):
+        for cid in ("auto_tool_type_select:abc", "auto_tool_type_select"):
+            inter = await self._dispatch(cid, "combat")
+            inter.edit_original_response.assert_not_awaited()
 
 
 if __name__ == "__main__":
