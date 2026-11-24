@@ -173,7 +173,7 @@ Task 2 (auto-tool target keeps delta)
     - `on_dropdown` with `affix_slot_select:gathering:risky:inf` and value `efficiency:3` renders `affix_clear:gathering:efficiency:3:risky:inf`; dispatching that ID clears the highest slot of that group and renders `back_to_gear:gathering:risky:inf`.
     - `back_to_gear:gathering:bogus:inf` does not render.
     - `uv run python -m pytest` passes.
-- [ ] Task 4: Carry mode and count through the auto-affix screen
+- [x] Task 4: Carry mode and count through the auto-affix screen
   - Files: `src/cogs/ui_renderer.py`, `src/cogs/actions.py`, `tests/test_discord_commands.py`.
   - Depends on: Task 3.
   - Scope: `build_auto_affix_components` (`state_id`, confirm ID, `back_to_affix`), `_render_auto_affix`, routes `open_auto_affix:`, `auto_affix_target/value/material/scope:`, `auto_affix_run:` (every render path), `back_to_affix:`.

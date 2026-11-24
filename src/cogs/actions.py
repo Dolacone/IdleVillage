@@ -65,10 +65,15 @@ def _parse_mode_count(mode: str, count: str) -> tuple[str | None, str | None] | 
     return (None if mode == "none" else mode, None if count == "none" else count)
 
 
-def _parse_auto_affix_state(parts: list[str]) -> tuple[str, str, str, str, str] | None:
-    if len(parts) != 6:
+def _parse_auto_affix_state(
+    parts: list[str],
+) -> tuple[str, str, str, str, str, str | None, str | None] | None:
+    if len(parts) != 8:
         return None
-    gear, target, value, source, scope = parts[1:]
+    gear, target, value, source, scope = parts[1:6]
+    mode_count = _parse_mode_count(parts[6], parts[7])
+    if mode_count is None:
+        return None
     if gear not in (*_VALID_GEAR_TYPES, "none") or scope not in _VALID_AUTO_AFFIX_SCOPES:
         return None
     if target not in ("none", "any") and target not in _VALID_AFFIX_TYPES:
@@ -77,7 +82,7 @@ def _parse_auto_affix_state(parts: list[str]) -> tuple[str, str, str, str, str] 
         return None
     if source not in _VALID_AUTO_AFFIX_SOURCES:
         return None
-    return gear, target, value, source, scope
+    return gear, target, value, source, scope, mode_count[0], mode_count[1]
 
 
 def _is_own_button(cid: str) -> bool:
@@ -300,6 +305,7 @@ class ActionsCog(commands.Cog):
         self, inter, gear_type: str | None, *, target_affix_type: str | None = None,
         min_value: int | None = None, material_source: str | None = None,
         scope: str | None = None, error: str | None = None,
+        mode: str | None = None, count: str | None = None,
     ) -> None:
         user_id = str(inter.user.id)
         materials = universal_materials = max_slots = 0
@@ -319,7 +325,7 @@ class ActionsCog(commands.Cog):
         components = build_auto_affix_components(
             gear_type, materials, universal_materials, max_slots, affixes,
             target_affix_type, min_value, material_source, error,
-            confirmation_token=confirmation_token, scope=scope,
+            confirmation_token=confirmation_token, scope=scope, mode=mode, count=count,
         )
         user_id = str(inter.user.id)
         self._auto_affix_confirmations[user_id] = next(
@@ -674,14 +680,16 @@ class ActionsCog(commands.Cog):
             if len(parts) != 4 or parts[1] not in (*_VALID_GEAR_TYPES, "none") or _parse_mode_count(parts[2], parts[3]) is None:
                 return
             await inter.response.defer()
-            await self._render_auto_affix(inter, None if parts[1] == "none" else parts[1])
+            mode, count = _parse_mode_count(parts[2], parts[3])
+            await self._render_auto_affix(inter, None if parts[1] == "none" else parts[1], mode=mode, count=count)
 
         elif cid.startswith("back_to_affix:"):
             parts = cid.split(":")
-            if len(parts) != 2 or parts[1] not in (*_VALID_GEAR_TYPES, "none"):
+            state = _parse_mode_count(parts[2], parts[3]) if len(parts) == 4 else None
+            if parts[1] not in (*_VALID_GEAR_TYPES, "none") or state is None:
                 return
             await inter.response.defer()
-            await self._render_affix(inter, None if parts[1] == "none" else parts[1])
+            await self._render_affix(inter, None if parts[1] == "none" else parts[1], mode=state[0], count=state[1])
 
         elif cid.startswith("auto_affix_run:"):
             registered_id = self._auto_affix_confirmations.get(user_id)
@@ -690,9 +698,10 @@ class ActionsCog(commands.Cog):
                 return
             self._auto_affix_confirmations.pop(user_id, None)
             parts = cid.split(":")
-            state = _parse_auto_affix_state(parts[:6]) if len(parts) == 8 else None
-            expected_slot_text = parts[6] if len(parts) == 8 else ""
-            token = parts[7] if len(parts) == 8 else ""
+            state = _parse_auto_affix_state([*parts[:6], *parts[8:]]) if len(parts) == 10 else None
+            expected_slot_text = parts[6] if len(parts) == 10 else ""
+            token = parts[7] if len(parts) == 10 else ""
+            mode, count = (_parse_mode_count(parts[8], parts[9]) or (None, None)) if len(parts) == 10 else (None, None)
             valid_token = len(token) == 8 and all(
                 character.isascii() and (character.isalnum() or character in "-_") for character in token
             )
@@ -700,10 +709,10 @@ class ActionsCog(commands.Cog):
                 await inter.response.defer()
                 gear = parts[1] if len(parts) > 1 else "none"
                 gear = gear if gear in _VALID_GEAR_TYPES else None
-                await self._render_auto_affix(inter, gear, error="⚠️ 設定無效，請重新選擇。")
+                await self._render_auto_affix(inter, gear, error="⚠️ 設定無效，請重新選擇。", mode=mode, count=count)
                 return
             expected_slot = int(expected_slot_text)
-            gear, target, value, source, scope = state
+            gear, target, value, source, scope, mode, count = state
             complete = (
                 gear in _VALID_GEAR_TYPES and (target == "any" or target in _VALID_AFFIX_TYPES)
                 and value in _VALID_AUTO_AFFIX_VALUES and source in {"tool", "universal"}
@@ -717,7 +726,7 @@ class ActionsCog(commands.Cog):
                     min_value=int(value) if value != "none" else None,
                     material_source=source if source != "none" else None,
                     scope=scope if scope != "none" else None,
-                    error="⚠️ 設定未完成，請重新選擇。",
+                    error="⚠️ 設定未完成，請重新選擇。", mode=mode, count=count,
                 )
                 return
             await inter.response.defer()
@@ -755,7 +764,7 @@ class ActionsCog(commands.Cog):
             if error:
                 await self._render_auto_affix(
                     inter, gear, target_affix_type=target, min_value=int(value),
-                    material_source=source, scope=scope, error=error,
+                    material_source=source, scope=scope, error=error, mode=mode, count=count,
                 )
                 return
             if committed:
@@ -779,7 +788,7 @@ class ActionsCog(commands.Cog):
                         ],
                     }
                 await notification.dispatch_events(self.bot, [event])
-            await self._render_affix(inter, gear)
+            await self._render_affix(inter, gear, mode=mode, count=count)
 
         elif cid.startswith("affix_extract:"):
             parts = cid.split(":")
@@ -1010,7 +1019,7 @@ class ActionsCog(commands.Cog):
             }
             if state is None or value not in valid_values[prefix]:
                 return
-            gear, target, threshold, source, scope = state
+            gear, target, threshold, source, scope, mode, count = state
             if prefix == "auto_affix_target":
                 target = value
             elif prefix == "auto_affix_value":
@@ -1025,6 +1034,7 @@ class ActionsCog(commands.Cog):
                 min_value=int(threshold) if threshold != "none" else None,
                 material_source=source if source != "none" else None,
                 scope=scope if scope != "none" else None,
+                mode=mode, count=count,
             )
         elif cid == "trial_target_select":
             try:

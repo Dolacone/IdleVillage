@@ -939,18 +939,24 @@ def build_auto_affix_components(
     error: str | None = None,
     confirmation_token: str | None = None,
     scope: str | None = None,
+    mode: str | None = None,
+    count: str | None = None,
 ) -> list:
     gear = gear_type or "none"
     target = target_affix_type or "none"
     value = str(min_value) if min_value is not None else "none"
     source = material_source or "none"
     scope_value = scope or "none"
+    mode_count = f"{mode or 'none'}:{count or 'none'}"
 
     def state_id(prefix: str) -> str:
         return f"{prefix}:{gear}:{target}:{value}:{source}:{scope_value}"
 
+    def state_id_mc(prefix: str) -> str:
+        return f"{state_id(prefix)}:{mode_count}"
+
     rows = [disnake.ui.ActionRow(disnake.ui.StringSelect(
-        custom_id=state_id("auto_affix_target"), placeholder="選擇目標效果...",
+        custom_id=state_id_mc("auto_affix_target"), placeholder="選擇目標效果...",
         options=[
             disnake.SelectOption(label="任意", value="any", default=target_affix_type == "any"),
             *[disnake.SelectOption(label=AFFIX_TYPE_LABELS[t], value=t, default=target_affix_type == t)
@@ -958,18 +964,18 @@ def build_auto_affix_components(
         ],
     ))]
     rows.append(disnake.ui.ActionRow(disnake.ui.StringSelect(
-        custom_id=state_id("auto_affix_value"), placeholder="選擇目標數值...",
+        custom_id=state_id_mc("auto_affix_value"), placeholder="選擇目標數值...",
         options=[disnake.SelectOption(label=(str(n) if n == 5 else f"{n}+"), value=str(n), default=min_value == n) for n in range(1, 6)],
     )))
     rows.append(disnake.ui.ActionRow(disnake.ui.StringSelect(
-        custom_id=state_id("auto_affix_material"), placeholder="選擇花費素材...",
+        custom_id=state_id_mc("auto_affix_material"), placeholder="選擇花費素材...",
         options=[
             disnake.SelectOption(label="工具素材", value="tool", default=material_source == "tool"),
             disnake.SelectOption(label="萬能素材", value="universal", default=material_source == "universal"),
         ],
     )))
     rows.append(disnake.ui.ActionRow(disnake.ui.StringSelect(
-        custom_id=state_id("auto_affix_scope"), placeholder="選擇抽取數量...",
+        custom_id=state_id_mc("auto_affix_scope"), placeholder="選擇抽取數量...",
         options=[
             disnake.SelectOption(label="僅一格", value="one", default=scope == "one"),
             disnake.SelectOption(label="所有空格", value="all", default=scope == "all"),
@@ -989,12 +995,12 @@ def build_auto_affix_components(
         isinstance(confirmation_token, str) and len(confirmation_token) == 8
         and all(character.isascii() and (character.isalnum() or character in "-_") for character in confirmation_token)
     )
-    confirm_id = f"{state_id('auto_affix_run')}:{expected_slot if expected_slot is not None else 'none'}:{confirmation_token or 'none'}"
+    confirm_id = f"{state_id('auto_affix_run')}:{expected_slot if expected_slot is not None else 'none'}:{confirmation_token or 'none'}:{mode_count}"
     rows.append(disnake.ui.ActionRow(
         disnake.ui.Button(label="✅ 開始自動抽取", style=disnake.ButtonStyle.success,
                           custom_id=confirm_id, disabled=not (valid_gear and complete and has_empty_slot and enough_material and valid_token)),
         disnake.ui.Button(label="← 返回詞條管理", style=disnake.ButtonStyle.secondary,
-                          custom_id=f"back_to_affix:{gear}"),
+                          custom_id=f"back_to_affix:{gear}:{mode_count}"),
     ))
     return rows
 

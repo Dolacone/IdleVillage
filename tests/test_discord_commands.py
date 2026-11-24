@@ -1909,9 +1909,9 @@ class TestAutoAffixComponents(unittest.TestCase):
         self.assertTrue(selects[1].options[3].default)
         self.assertTrue(selects[2].options[1].default)
         self.assertTrue(selects[3].options[1].default)
-        suffix = ":research:cycle_time_reduce:4:universal:all"
+        suffix = ":research:cycle_time_reduce:4:universal:all:none:none"
         self.assertTrue(all(c.custom_id.endswith(suffix) for c in selects))
-        self.assertTrue(self._confirm(rows).custom_id.endswith(suffix + ":0:abcdefgh"))
+        self.assertTrue(self._confirm(rows).custom_id.endswith(":research:cycle_time_reduce:4:universal:all:0:abcdefgh:none:none"))
 
     def test_confirm_needs_real_empty_slot_and_valid_gear(self):
         from cogs.ui_renderer import build_auto_affix_components
@@ -1953,7 +1953,7 @@ class TestAutoAffixComponents(unittest.TestCase):
                 for component in row.children:
                     longest = max(longest, len(component.custom_id))
                     self.assertLessEqual(len(component.custom_id), 100)
-        longest_id = "auto_affix_run:research:upgrade_material_refund:5:universal:all:2147483647:abcdefgh"
+        longest_id = "auto_affix_run:research:upgrade_material_refund:5:universal:all:2147483647:abcdefgh:normal:none"
         self.assertLessEqual(len(longest_id), 100)
         self.assertGreater(longest, 0)
 
@@ -1963,12 +1963,12 @@ class TestAutoAffixComponents(unittest.TestCase):
                         scope="all", confirmation_token="abcdefgh")
         rows = build_auto_affix_components("research", 0, 5, 2, [{"slot_index": 0}], **settings)
         confirm = self._confirm(rows)
-        self.assertEqual(confirm.custom_id, "auto_affix_run:research:upgrade_material_refund:5:universal:all:1:abcdefgh")
+        self.assertEqual(confirm.custom_id, "auto_affix_run:research:upgrade_material_refund:5:universal:all:1:abcdefgh:none:none")
         self.assertFalse(confirm.disabled)
         rows = build_auto_affix_components("research", 0, 5, 2, [{"slot_index": 0}, {"slot_index": 1}], **settings)
         confirm = self._confirm(rows)
         self.assertTrue(confirm.disabled)
-        self.assertTrue(confirm.custom_id.endswith(":none:abcdefgh"))
+        self.assertTrue(confirm.custom_id.endswith(":none:abcdefgh:none:none"))
 
 
 class TestAffixRouteRegistration(unittest.TestCase):
@@ -2023,7 +2023,7 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         return inter
 
     async def _select(self, cog, prefix, state, selected):
-        inter = self._inter(f"{prefix}:{state}", selected)
+        inter = self._inter(f"{prefix}:{state}:none:none", selected)
         await cog.on_dropdown(inter)
         return inter
 
@@ -2184,7 +2184,7 @@ class TestAutoAffixHandlerIntegration(DatabaseTestCase):
         cog = ActionsCog(bot)
         first_id, _ = await self._render_confirm(cog)
         self.assertTrue(first_id.startswith("auto_affix_run:research:any:1:tool:one:0:"))
-        token = first_id.rsplit(":", 1)[1]
+        token = first_id.split(":")[7]
         self.assertEqual(len(token), 8)
         self.assertTrue(all(character.isascii() and (character.isalnum() or character in "-_") for character in token))
         with patch("cogs.actions.affix_manager.random.choice", return_value="efficiency"), patch(
@@ -3446,7 +3446,75 @@ class TestPreserveAffixState(DatabaseTestCase):
         inter = self._inter("open_auto_affix:gathering:risky:inf")
         with patch.object(ActionsCog, "_render_auto_affix", new=AsyncMock()) as render:
             await ActionsCog(bot=MagicMock()).on_button_click(inter)
-        render.assert_awaited_once_with(inter, "gathering")
+        render.assert_awaited_once_with(inter, "gathering", mode="risky", count="inf")
+
+    def test_auto_affix_renderer_appends_mode_and_count_to_every_id(self):
+        from cogs.ui_renderer import build_auto_affix_components
+
+        rows = build_auto_affix_components("gathering", 5, 0, 2, [], confirmation_token="abcdefgh", mode="risky", count="inf")
+        ids = list(self._ids(rows))
+        self.assertIn("auto_affix_target:gathering:none:none:none:none:risky:inf", ids)
+        self.assertIn("back_to_affix:gathering:risky:inf", ids)
+        confirm = self._id_with_prefix(rows, "auto_affix_run:")
+        self.assertTrue(confirm.endswith(":0:abcdefgh:risky:inf"))
+        for prefix in ("auto_affix_value", "auto_affix_material", "auto_affix_scope"):
+            self.assertTrue(self._id_with_prefix(rows, prefix + ":").endswith(":risky:inf"))
+        rows = build_auto_affix_components(
+            "gathering", 5, 0, 2, [], "upgrade_material_refund", 5, "universal",
+            confirmation_token="abcdefgh", scope="all", mode="normal", count="none",
+        )
+        self.assertLessEqual(max(len(cid) for cid in self._ids(rows)), 100)
+
+    async def test_auto_affix_round_trip_keeps_mode_and_count(self):
+        await self._insert_player()
+        inter = await self._click("open_auto_affix:gathering:risky:inf")
+        target_id = self._id_with_prefix(self._rendered(inter), "auto_affix_target:")
+        self.assertTrue(target_id.endswith(":risky:inf"))
+        inter = await self._select(target_id, "any")
+        back_affix_id = self._id_with_prefix(self._rendered(inter), "back_to_affix:")
+        self.assertEqual(back_affix_id, "back_to_affix:gathering:risky:inf")
+        inter = await self._click(back_affix_id)
+        back_gear_id = self._id_with_prefix(self._rendered(inter), "back_to_gear:")
+        self.assertEqual(back_gear_id, "back_to_gear:gathering:risky:inf")
+        inter = await self._click(back_gear_id)
+        components = self._rendered(inter)
+        self.assertEqual([o.value for o in components[1].children[0].options if o.default], ["risky"])
+        self.assertEqual([o.value for o in components[2].children[0].options if o.default], ["inf"])
+
+    async def test_completed_auto_affix_run_keeps_mode_and_count(self):
+        from cogs.actions import ActionsCog
+
+        await self._insert_player()
+        cog = ActionsCog(bot=MagicMock())
+        page = self._inter("open_auto_affix:gathering:risky:inf")
+        await cog._render_auto_affix(
+            page, "gathering", target_affix_type="any", min_value=1, material_source="tool",
+            scope="one", mode="risky", count="inf",
+        )
+        run_id = self._id_with_prefix(self._rendered(page), "auto_affix_run:")
+        self.assertTrue(run_id.endswith(":risky:inf"))
+        inter = self._inter(run_id)
+        with patch("cogs.actions.notification.dispatch_events", new=AsyncMock()), patch(
+            "cogs.actions.affix_manager.random.choice", return_value="efficiency"
+        ), patch("cogs.actions.affix_manager.random.randint", return_value=1):
+            await cog.on_button_click(inter)
+        self.assertIn("back_to_gear:gathering:risky:inf", self._ids(self._rendered(inter)))
+
+    async def test_auto_affix_run_extraction_failure_keeps_mode_and_count(self):
+        from cogs.actions import ActionsCog
+
+        await self._insert_player()
+        cog = ActionsCog(bot=MagicMock())
+        page = self._inter("open_auto_affix:gathering:risky:inf")
+        await cog._render_auto_affix(
+            page, "gathering", target_affix_type="any", min_value=1, material_source="tool",
+            scope="one", mode="risky", count="inf",
+        )
+        run_id = self._id_with_prefix(self._rendered(page), "auto_affix_run:")
+        inter = self._inter(run_id)
+        with patch("cogs.actions.affix_manager.auto_extract_affix", new=AsyncMock(side_effect=RuntimeError("boom"))):
+            await cog.on_button_click(inter)
+        self.assertIn("back_to_affix:gathering:risky:inf", self._ids(self._rendered(inter)))
 
     def test_affix_gear_select_routes_by_prefix(self):
         from cogs.actions import _is_own_dropdown
