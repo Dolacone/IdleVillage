@@ -4,7 +4,12 @@ status: Draft
 created: 2026-11-24
 doc_type: change
 last_reviewed: 2026-11-24
-source_paths: []
+source_paths:
+  - "docs/README.md"
+  - "docs/discord/command-handler.md"
+  - "docs/discord/ui-renderer.md"
+  - "src/cogs/ui_renderer.py"
+  - "src/cogs/actions.py"
 scope: "Tracks this change from design through review."
 ---
 
@@ -97,6 +102,77 @@ Not Doing:
 
 ## Architecture Decisions
 
+- 選單狀態放在 custom_id，沿用 `upgrade_mode_select:{gear_type}:{count}` 與 `auto_affix_*` 的慣例。
+- 工具強化的 `{mode}:{count}` 一律接在既有 custom_id 結尾，未選為 `none`。
+  - 新格式：`gear_type_select:{mode}:{count}`、`sacrifice_material:{gear_type}:{mode}:{count}`、`modal_sacrifice:{gear_type}:{mode}:{count}`、`open_affix_mgmt:{gear_type}:{mode}:{count}`。
+  - 詞條管理：`affix_gear_select`、`affix_slot_select:{gear_type}`、`affix_clear:{gear_type}:{affix_type}:{value}`、`affix_extract:{gear_type}`、`open_auto_affix:{gear_type}`、`back_to_gear:{gear_type}` 結尾加 `:{mode}:{count}`。
+  - 自動抽取：`auto_affix_target/value/material/scope:{gear}:{target}:{value}:{source}:{scope}`、`auto_affix_run:{gear}:{target}:{value}:{source}:{scope}:{expected_slot}:{token}`、`back_to_affix:{gear}` 結尾加 `:{mode}:{count}`。
+  - 最長 custom_id 為 `auto_affix_run:gathering:upgrade_material_refund:5:universal:all:24:abcdefgh:normal:none`，88 字元，低於 Discord 上限 100。
+- `actions.py` 新增一個 `{mode}:{count}` 解析函式，所有路由共用。
+  - `mode` 必須在 `_VALID_UPGRADE_MODES | {"none"}`，`count` 必須在 `_VALID_UPGRADE_COUNTS | {"none"}`。
+  - 不合法時忽略該互動，與既有不合法 custom_id 的處理一致。
+- `gear_type_select`、`affix_gear_select` 從 `_OWN_DROPDOWNS` 移到 `_OWN_DROPDOWN_PREFIXES`（`gear_type_select:`、`affix_gear_select:`）。
+- 部署前渲染、仍是舊格式的 custom_id 一律忽略，比照 2026-10-07 `affix_clear` 改格式的處理。
+- `_render_gear` 在 `gear_type is None` 時也把 `mode`、`count` 傳給 `build_gear_components`，讓 `back_to_gear:none:{mode}:{count}` 保留兩者。
+- `_render_affix`、`_render_auto_affix` 新增 `mode`、`count` 參數，原樣傳給 renderer。
+- 自動工具：`auto_tool_target_select:{tool}:{delta}`，`delta` 為已選有號時數或 `none`。
+  - handler 以 `int()` 解析 `delta`，失敗時忽略該互動，與 `auto_tool_add_select` 一致。
+  - 範圍檢查沿用 renderer 既有的確認按鈕 disabled 規則。
+
 ## Tasks
+
+Dependency graph:
+
+```
+Task 1 (gear screen: gear_type_select + sacrifice)
+└── Task 3 (affix screen round trip)
+    └── Task 4 (auto-affix screen round trip)
+Task 2 (auto-tool target keeps delta)
+```
+
+所有 Task 都改 `src/cogs/ui_renderer.py` 與 `src/cogs/actions.py`，依序執行。Task 2 邏輯上與其他 Task 獨立。
+
+- [ ] Task 1: Keep mode and count when changing tool type or sacrificing
+  - Files: `src/cogs/ui_renderer.py`, `src/cogs/actions.py`, `tests/test_discord_commands.py`.
+  - Scope: `build_gear_components` (`gear_type_select`, `sacrifice_material`), `_render_gear` (`gear_type is None` path), `_OWN_DROPDOWNS`/`_OWN_DROPDOWN_PREFIXES`, the `{mode}:{count}` parser, `gear_type_select:` dropdown route, `sacrifice_material:` button route, `modal_sacrifice:` modal route.
+  - Acceptance criteria:
+    - `build_gear_components("building", "risky", ..., count="inf")` renders `gear_type_select:risky:inf` and `sacrifice_material:building:risky:inf`; with no mode and count it renders `gear_type_select:none:none`.
+    - `on_dropdown` with `gear_type_select:risky:inf` and value `gathering` renders the 鐵齒 option and the 無限 option as default and renders `attempt_upgrade:gathering:risky:inf`.
+    - `on_dropdown` with `gear_type_select:none:none` and value `gathering` renders no default mode or count option.
+    - `on_dropdown` with `gear_type_select:bogus:inf` does not render.
+    - Clicking `sacrifice_material:building:risky:inf` opens a modal with custom_id `modal_sacrifice:building:risky:inf`.
+    - Submitting `modal_sacrifice:building:risky:inf` with a valid amount renders `attempt_upgrade:building:risky:inf` and the 鐵齒 and 無限 options as default.
+    - `uv run python -m pytest` passes.
+- [ ] Task 2: Keep the selected hours when changing the auto-tool build target
+  - Files: `src/cogs/ui_renderer.py`, `src/cogs/actions.py`, `tests/test_discord_commands.py`.
+  - Parallel: logically independent of Tasks 1, 3, 4; runs sequentially because the files overlap.
+  - Scope: `build_auto_tool_components` target select custom_id, `auto_tool_target_select:` dropdown route.
+  - Acceptance criteria:
+    - `build_auto_tool_components` for an idle `building` tool with `selected_delta=3` renders `auto_tool_target_select:building:3`; with no delta it renders `auto_tool_target_select:building:none`.
+    - `on_dropdown` with `auto_tool_target_select:building:3` and value `workshop` renders the `3 小時` option as default and renders `auto_tool_confirm:building:3:workshop` enabled.
+    - `on_dropdown` with `auto_tool_target_select:building:none` and value `workshop` renders no default hours option and a disabled `auto_tool_confirm:none`.
+    - `on_dropdown` with `auto_tool_target_select:building:abc` does not render.
+    - `uv run python -m pytest` passes.
+- [ ] Task 3: Carry mode and count through the affix management screen
+  - Files: `src/cogs/ui_renderer.py`, `src/cogs/actions.py`, `tests/test_discord_commands.py`.
+  - Depends on: Task 1.
+  - Scope: `build_gear_components` (`open_affix_mgmt`), `build_affix_components` (all six custom_ids), `_render_affix`, routes `open_affix_mgmt:`, `affix_gear_select:`, `affix_slot_select:`, `affix_extract:`, `affix_clear:`, `back_to_gear:`; route `open_auto_affix:` accepts `open_auto_affix:{gear_type}:{mode}:{count}`.
+  - Acceptance criteria:
+    - `build_affix_components("gathering", ..., mode="risky", count="inf")` renders `affix_gear_select:risky:inf`, `affix_slot_select:gathering:risky:inf` (when affixes exist), `affix_clear:gathering:none:none:risky:inf`, `affix_extract:gathering:risky:inf`, `open_auto_affix:gathering:risky:inf`, `back_to_gear:gathering:risky:inf`.
+    - Round trip: `open_affix_mgmt:building:risky:inf` → `affix_gear_select:risky:inf` value `gathering` → `affix_extract:gathering:risky:inf` → `back_to_gear:gathering:risky:inf`, each step dispatched with the custom_id rendered by the previous step, ends on a gear screen with the 鐵齒 and 無限 options as default and `attempt_upgrade:gathering:risky:inf`.
+    - `back_to_gear:none:risky:inf` renders a gear screen with no tool type selected and the 鐵齒 and 無限 options as default.
+    - `affix_clear:gathering:efficiency:3:risky:inf` clears the highest slot of that group, as before.
+    - `back_to_gear:gathering:bogus:inf` does not render.
+    - `uv run python -m pytest` passes.
+- [ ] Task 4: Carry mode and count through the auto-affix screen
+  - Files: `src/cogs/ui_renderer.py`, `src/cogs/actions.py`, `tests/test_discord_commands.py`.
+  - Depends on: Task 3.
+  - Scope: `build_auto_affix_components` (`state_id`, confirm ID, `back_to_affix`), `_render_auto_affix`, routes `open_auto_affix:`, `auto_affix_target/value/material/scope:`, `auto_affix_run:` (every render path), `back_to_affix:`.
+  - Acceptance criteria:
+    - `build_auto_affix_components` with `mode="risky"`, `count="inf"` renders `auto_affix_target:gathering:none:none:none:none:risky:inf`, `back_to_affix:gathering:risky:inf`, and a confirm ID ending in `:{expected_slot}:{token}:risky:inf`.
+    - Round trip: `open_auto_affix:gathering:risky:inf` → `auto_affix_target:...:risky:inf` value `any` → `back_to_affix:gathering:risky:inf` → `back_to_gear:gathering:risky:inf`, each step dispatched with the custom_id rendered by the previous step, ends on a gear screen with the 鐵齒 and 無限 options as default.
+    - A completed `auto_affix_run` with `:risky:inf` renders an affix screen whose `back_to_gear` is `back_to_gear:gathering:risky:inf`.
+    - The registered confirmation ID still has to match exactly; a run ID with a changed `{mode}` is rejected like any other altered ID.
+    - `uv run python -m pytest` passes.
 
 ## Review Issues

@@ -1,7 +1,7 @@
 ---
 title: IdleVillage v2 Preview SSOT Map
 doc_type: index
-last_reviewed: 2026-11-16
+last_reviewed: 2026-11-24
 source_paths: []
 scope: "Documentation entry point. All repository docs are reachable from this index."
 ---
@@ -42,6 +42,7 @@ This directory is the v2 design preview. v2 is a fresh restart and replaces v1 g
 | Remove stage clear notification change record | [changelogs/2026-11-05-remove-stage-clear-notification.md](changelogs/2026-11-05-remove-stage-clear-notification.md) |
 | Remove building upgrade notification change record | [changelogs/2026-11-05-remove-building-upgrade-notification.md](changelogs/2026-11-05-remove-building-upgrade-notification.md) |
 | Number thousands separator change record | [changelogs/2026-11-16-number-thousands-separator.md](changelogs/2026-11-16-number-thousands-separator.md) |
+| Preserve select state change record | [changelogs/2026-11-24-preserve-select-state.md](changelogs/2026-11-24-preserve-select-state.md) |
 | Village resources | `managers/resource-manager.md` |
 | SQLite schema | `db-schema.md` |
 | Slash command routing | [discord/command-handler.md](discord/command-handler.md) |
