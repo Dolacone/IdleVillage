@@ -144,6 +144,7 @@ Task 2 (auto-tool target keeps delta)
     - `on_dropdown` with `gear_type_select:none:none` and value `gathering` renders no default mode or count option.
     - `on_dropdown` with `gear_type_select:bogus:inf` does not render.
     - Mode before tool type: `on_dropdown` with `upgrade_mode_select:none:none` and value `risky` renders the 鐵齒 option as default and `gear_type_select:risky:none`; dispatching that `gear_type_select:risky:none` with value `building` renders the 鐵齒 option as default and `attempt_upgrade:building:risky:none`.
+    - Count before tool type: `on_dropdown` with `upgrade_count_select:none:none` and value `inf` renders the 無限 option as default and `gear_type_select:none:inf`.
     - Clicking `sacrifice_material:building:risky:inf` opens a modal with custom_id `modal_sacrifice:building:risky:inf`.
     - Submitting `modal_sacrifice:building:risky:inf` with a valid amount renders `attempt_upgrade:building:risky:inf` and the 鐵齒 and 無限 options as default.
     - `uv run python -m pytest` passes.
@@ -168,7 +169,7 @@ Task 2 (auto-tool target keeps delta)
     - `build_affix_components("gathering", ..., mode="risky", count="inf")` renders `affix_gear_select:risky:inf`, `affix_slot_select:gathering:risky:inf` (when affixes exist), `affix_clear:gathering:none:none:risky:inf`, `affix_extract:gathering:risky:inf`, `open_auto_affix:gathering:risky:inf`, `back_to_gear:gathering:risky:inf`.
     - Round trip: `open_affix_mgmt:building:risky:inf` → `affix_gear_select:risky:inf` value `gathering` → `affix_extract:gathering:risky:inf` → `back_to_gear:gathering:risky:inf`, each step dispatched with the custom_id rendered by the previous step, ends on a gear screen with the 鐵齒 and 無限 options as default and `attempt_upgrade:gathering:risky:inf`.
     - `back_to_gear:none:risky:inf` renders a gear screen with no tool type selected and the 鐵齒 and 無限 options as default.
-    - `affix_clear:gathering:efficiency:3:risky:inf` clears the highest slot of that group, as before.
+    - `on_dropdown` with `affix_slot_select:gathering:risky:inf` and value `efficiency:3` renders `affix_clear:gathering:efficiency:3:risky:inf`; dispatching that ID clears the highest slot of that group and renders `back_to_gear:gathering:risky:inf`.
     - `back_to_gear:gathering:bogus:inf` does not render.
     - `uv run python -m pytest` passes.
 - [ ] Task 4: Carry mode and count through the auto-affix screen
@@ -179,6 +180,7 @@ Task 2 (auto-tool target keeps delta)
     - `build_auto_affix_components` with `mode="risky"`, `count="inf"` renders `auto_affix_target:gathering:none:none:none:none:risky:inf`, `back_to_affix:gathering:risky:inf`, and a confirm ID ending in `:{expected_slot}:{token}:risky:inf`.
     - Round trip: `open_auto_affix:gathering:risky:inf` → `auto_affix_target:...:risky:inf` value `any` → `back_to_affix:gathering:risky:inf` → `back_to_gear:gathering:risky:inf`, each step dispatched with the custom_id rendered by the previous step, ends on a gear screen with the 鐵齒 and 無限 options as default.
     - A completed `auto_affix_run` with `:risky:inf` renders an affix screen whose `back_to_gear` is `back_to_gear:gathering:risky:inf`.
+    - An `auto_affix_run` with `:risky:inf` whose first extraction raises renders `back_to_affix:gathering:risky:inf`.
     - `uv run python -m pytest` passes.
 
 ## Plan Review Issues
@@ -213,5 +215,17 @@ Task 2 (auto-tool target keeps delta)
   - 修正：把 `_render_gear` (`gear_type is None` path passes `mode` and `count`) 從 Task 3 Scope 移回 Task 1 Scope。
   - 修正：Task 1 加 AC：`on_dropdown` 以 `upgrade_mode_select:none:none` 選 `risky`，渲染 `gear_type_select:risky:none` 且 鐵齒 為 default；再以該 `gear_type_select:risky:none` 選 `building`，渲染 鐵齒 為 default 與 `attempt_upgrade:building:risky:none`。
   - 修正：`docs/discord/command-handler.md` 的 `upgrade_mode_select`、`upgrade_count_select` 列註明 `{gear_type}` 未選為 `none` 時重繪無工具類型的子選單。
+- [x] Plan Issue 6: 先選執行次數、再選工具類型的路徑沒有 AC，`upgrade_count_select:` 漏改時次數仍被清掉，Task 1 AC 全部通過。
+  - 證據：Task 1 Scope（本檔 :140）列入 `upgrade_count_select:` 接受 `none`，但 AC（:146）只驗證 `upgrade_mode_select:none:none`。
+  - 證據：`src/cogs/actions.py:900-910` 的 `upgrade_count_select:` 要求 `gear_type in _VALID_GEAR_TYPES`，`none` 時不重繪。
+  - 修正：Task 1 加 AC：`on_dropdown` 以 `upgrade_count_select:none:none` 選 `inf`，渲染 無限 為 default 與 `gear_type_select:none:inf`。
+- [x] Plan Issue 7: Task 3 的 `affix_slot_select:`、`affix_clear:` 路由漏傳 `mode`、`count` 時，Task 3 AC 全部通過。
+  - 證據：round trip AC（本檔 :169）不經過這兩個路由；`affix_clear` AC（:171）只驗證清除結果。
+  - 證據：兩路由各自呼叫 `_render_affix`（`src/cogs/actions.py:921`、`:801`），漏傳時「選分組 → 清除 → 返回」清掉模式與次數。
+  - 修正：把 :171 改為：`on_dropdown` 以 `affix_slot_select:gathering:risky:inf` 選 `efficiency:3`，渲染 `affix_clear:gathering:efficiency:3:risky:inf`；dispatch 該 ID 清除該分組槽號最大的一條，並渲染 `back_to_gear:gathering:risky:inf`。
+- [x] Plan Issue 8: Task 4 Scope 列「`auto_affix_run:` (every render path)」，但 AC 只驗證成功路徑；抽取失敗路徑漏傳 `mode`、`count` 時 AC 全部通過。
+  - 證據：AC（本檔 :181）只驗證完成後的詞條管理畫面。
+  - 證據：`src/cogs/actions.py:731-735` 的失敗路徑另行呼叫 `_render_auto_affix`；素材在渲染後被消耗時進入此路徑，之後「返回詞條管理 → ← 返回」清掉模式與次數。
+  - 修正：Task 4 加 AC：`auto_affix_run` 帶 `:risky:inf` 且第一格抽取 raise 時，渲染 `back_to_affix:gathering:risky:inf`。
 
 ## Review Issues
