@@ -34,6 +34,16 @@ from managers import affix_manager, auto_tool_manager, building_manager, gear_ma
 _OWN_BUTTONS = frozenset({"burst_execute", "open_gear_upgrade", "open_trial_start", "open_auto_tool", "back_to_main"})
 _OWN_BUTTON_PREFIXES = ("confirm_action:", "attempt_upgrade:", "clear_affix:", "sacrifice_material:", "open_affix_mgmt:", "affix_extract:", "affix_clear:", "back_to_gear:", "auto_tool_confirm:", "trial_target_page:", "open_auto_affix:", "back_to_affix:", "auto_affix_run:")
 _OWN_DROPDOWNS = frozenset({"action_select", "building_target_select", "trial_target_select"})
+_OWN_DROPDOWN_PREFIXES = ("gear_type_select:", "affix_gear_select:", "upgrade_mode_select:", "upgrade_count_select:", "affix_slot_select:", "auto_tool_type_select:", "auto_tool_target_select:", "auto_tool_add_select:", "auto_tool_sub_select:", "auto_affix_target:", "auto_affix_value:", "auto_affix_material:", "auto_affix_scope:")
+_OWN_MODAL_PREFIXES = ("modal_sacrifice:",)
+_VALID_GEAR_TYPES = frozenset({"gathering", "building", "combat", "research"})
+_VALID_ACTIONS = frozenset({"gathering", "building", "combat", "research"})
+_VALID_UPGRADE_MODES = frozenset(gear_manager.UPGRADE_MODES)
+_VALID_UPGRADE_COUNTS = frozenset({"1", "5", "10", "20", "inf"})
+_VALID_AFFIX_TYPES = frozenset(affix_manager.AFFIX_TYPES)
+_VALID_AUTO_AFFIX_VALUES = frozenset({"1", "2", "3", "4", "5"})
+_VALID_AUTO_AFFIX_SOURCES = frozenset({"none", "tool", "universal"})
+_VALID_AUTO_AFFIX_SCOPES = frozenset({"none", "one", "all"})
 _INVALID_DELTA = object()
 
 
@@ -45,18 +55,6 @@ def _parse_auto_tool_delta(raw: str):
         return int(raw)
     except ValueError:
         return _INVALID_DELTA
-
-
-_OWN_DROPDOWN_PREFIXES = ("gear_type_select:", "affix_gear_select:", "upgrade_mode_select:", "upgrade_count_select:", "affix_slot_select:", "auto_tool_type_select:", "auto_tool_target_select:", "auto_tool_add_select:", "auto_tool_sub_select:", "auto_affix_target:", "auto_affix_value:", "auto_affix_material:", "auto_affix_scope:")
-_OWN_MODAL_PREFIXES = ("modal_sacrifice:",)
-_VALID_GEAR_TYPES = frozenset({"gathering", "building", "combat", "research"})
-_VALID_ACTIONS = frozenset({"gathering", "building", "combat", "research"})
-_VALID_UPGRADE_MODES = frozenset(gear_manager.UPGRADE_MODES)
-_VALID_UPGRADE_COUNTS = frozenset({"1", "5", "10", "20", "inf"})
-_VALID_AFFIX_TYPES = frozenset(affix_manager.AFFIX_TYPES)
-_VALID_AUTO_AFFIX_VALUES = frozenset({"1", "2", "3", "4", "5"})
-_VALID_AUTO_AFFIX_SOURCES = frozenset({"none", "tool", "universal"})
-_VALID_AUTO_AFFIX_SCOPES = frozenset({"none", "one", "all"})
 
 
 def _parse_mode_count(mode: str, count: str) -> tuple[str | None, str | None] | None:
