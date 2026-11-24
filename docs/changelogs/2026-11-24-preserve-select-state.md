@@ -1,6 +1,6 @@
 ---
 title: "選單變動不重設其他選單"
-status: Ready-to-review
+status: Reviewed
 created: 2026-11-24
 doc_type: change
 last_reviewed: 2026-11-24
@@ -235,3 +235,12 @@ Task 2 (auto-tool target keeps delta)
   - 修正：Task 3 round trip AC 的第一步改為「從 `build_gear_components("building", "risky", ..., count="inf")` 渲染出的 `open_affix_mgmt:building:risky:inf` 開始」。
 
 ## Review Issues
+
+- [ ] Issue 1: [Minor] Architecture Decisions 的最長 custom_id 數字錯誤：`expected_slot` 不限於 24。
+  - 證據：本檔 :111 寫最長為 `...:24:abcdefgh:normal:none`，88 字元。
+  - 證據：`src/managers/affix_manager.py:30-33` 的 `slot_count` 為 `floor(gear_level / AFFIX_SLOT_INTERVAL)`，`.env.example:48` 設 `AFFIX_SLOT_INTERVAL=5`，槽數隨等級無上限。
+  - 證據：`tests/test_discord_commands.py:1219` 已用 `expected_slot=2147483647` 的 ID，換成 `gathering` 後為 96 字元，仍低於 100。
+  - 修正：改為以 `tests/test_discord_commands.py:1219` 的最壞情況（96 字元）陳述，結論「低於 Discord 上限 100」不變。
+- [ ] Issue 2: [Minor] Problem Statement 的 `>` 引文不是使用者原文。
+  - 證據：本檔 :20 為「例：改動工具類型的時候，...」；使用者原文為「e.g.」換行「- image#1 改動工具類型的時候，`鐵齒`與`無限`選項應該維持不變」。
+  - 修正：`>` 引文改為使用者原文逐字。
